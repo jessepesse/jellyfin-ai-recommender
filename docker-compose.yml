@@ -2,9 +2,9 @@ version: '3.8'
 
 services:
   jellyfin-recommender:
-    image: ghcr.io/<SINUN_GITHUB_TUNNUS>/jellyfin-recommender:latest
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender:latest
     
-    container_name: jellyfin-recommender-app
+    container_name: jellyfin-ai-recommender
     restart: unless-stopped
     ports:
       - "8501:8501"
