@@ -1,0 +1,60 @@
+# --- Jellyfin AI Recommender Docker Compose File ---
+#
+# Ohjeet:
+# 1. Tallenna tämä tiedosto nimellä 'docker-compose.yml'.
+# 2. Muokkaa alla olevia 'image'- ja 'environment'-osioita omien tietojesi mukaan.
+# 3. Aja komento 'docker-compose up -d' samassa kansiossa.
+#
+version: '3.8'
+
+services:
+  jellyfin-recommender:
+    # --------------------------------------------------------------------------
+    # IMAGEN MÄÄRITYS
+    # Korvaa '<SINUN_GITHUB_TUNNUS>' omalla GitHub-käyttäjätunnuksellasi.
+    # Tämä hakee valmiin sovelluksen suoraan GitHub Container Registrystä.
+    # --------------------------------------------------------------------------
+    image: ghcr.io/<SINUN_GITHUB_TUNNUS>/jellyfin-recommender:latest
+    
+    # Kontin nimi Dockerissa, helpottaa hallintaa.
+    container_name: jellyfin-recommender-app
+    
+    # Varmistaa, että kontti käynnistyy automaattisesti uudelleen,
+    # jos se kaatuu tai jos palvelin käynnistetään uudelleen.
+    restart: unless-stopped
+    
+    # --------------------------------------------------------------------------
+    # PORTTIMÄÄRITYS
+    # Yhdistää isäntäkoneen portin 8501 kontin sisäiseen porttiin 8501.
+    # Voit avata sovelluksen selaimessa osoitteessa http://<palvelimen-ip>:8501
+    # --------------------------------------------------------------------------
+    ports:
+      - "8501:8501"
+      
+    # --------------------------------------------------------------------------
+    # PYSYVÄ TALLENNUSTILA (VOLUMES)
+    # Tämä on kriittinen kohta! Se linkittää kontin sisäisen /app-kansion
+    # isäntäkoneen './data'-kansioon.
+    # './data' luodaan automaattisesti samaan kansioon kuin tämä tiedosto.
+    # Kaikki manuaalisesti lisätyt katselutiedot tallentuvat tänne ja säilyvät.
+    # --------------------------------------------------------------------------
+    volumes:
+      - ./data:/app
+      
+    # --------------------------------------------------------------------------
+    # YMPÄRISTÖMUUTTUJAT (ENVIRONMENT VARIABLES)
+    # TÄYTÄ KAIKKI ALLA OLEVAT TIEDOT OMIA PALVELUITASI VASTAAVIKSI.
+    # Nämä ovat salaisuuksia ja asetuksia, jotka sovellus tarvitsee toimiakseen.
+    # --------------------------------------------------------------------------
+    environment:
+      # Jellyfin-palvelimesi täydellinen osoite.
+      - JELLYFIN_URL=http://<JELLYFIN_PALVELIMEN_IP_OSOITE>:8096
+      
+      # Jellyseerr-palvelimesi täydellinen osoite.
+      - JELLYSEERR_URL=http://<JELLYSEERR_PALVELIMEN_IP_OSOITE>:5055
+      
+      # Jellyseerr API-avaimesi (löytyy Jellyseerrin asetuksista).
+      - JELLYSEERR_API_KEY=<LIITÄ_JELLYSEERR_API_AVAIN_TÄHÄN>
+      
+      # Google AI Studion (Gemini) API-avaimesi.
+      - GEMINI_API_KEY=<LIITÄ_GEMINI_API_AVAIN_TÄHÄN>
