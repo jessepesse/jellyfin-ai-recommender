@@ -6,6 +6,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+if 'jellyfin_session' not in st.session_state:
+    st.session_state.jellyfin_session = None
+if 'recommendations' not in st.session_state:
+    st.session_state.recommendations = None
+
 # Ladataan kaikki salaisuudet ympäristömuuttujista
 JELLYFIN_URL = os.environ.get("JELLYFIN_URL")
 JELLYSEERR_URL = os.environ.get("JELLYSEERR_URL")
