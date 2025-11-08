@@ -132,9 +132,14 @@ def search_jellyseerr(title: str):
     """
     if not JELLYSEERR_API_KEY:
         return None, None
+    # Defensive: ensure base URL is configured before using string methods.
+    if not JELLYSEERR_URL:
+        st.error("JELLYSEERR_URL ei ole asetettu ympäristömuuttujissa.")
+        return None, None
     try:
-        encoded_title = requests.utils.quote(title or "")
-        endpoint = f"{JELLYSEERR_URL.rstrip('/')}/api/v1/search?query={encoded_title}&page=1"
+        encoded_title = quote(title or "")
+        base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+        endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
         resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
         results = resp.json().get("results", [])
