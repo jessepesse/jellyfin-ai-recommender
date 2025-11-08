@@ -4,7 +4,11 @@ Saat henkilökohtaisia elokuva- ja sarjasuosituksia Jellyfin-katseluhistoriasi p
 
 > **Huom:** Tämän projektin lähdekoodi on julkinen, mutta Docker-image itsessään ei sisällä mitään salaisuuksia. Sovellus toimii vain, kun sille annetaan tarvittavat API-avaimet ja osoitteet ajon aikana.
 
+---
 
+<p align="center">
+  <img src="images/screenshot.png" width="750">
+</p>
 
 ---
 
@@ -27,7 +31,7 @@ Helpoin tapa ajaa tätä sovellusta on Docker Composella.
 -   Docker ja Docker Compose asennettuna.
 -   Toimiva Jellyfin-palvelin.
 -   Toimiva Jellyseerr-palvelin.
--   Google Gemini API-avain (Saat omasi Google AI Studiosta (https://aistudio.google.com/app/apikey)).
+-   Google Gemini API-avain. Saat omasi Google AI Studiosta (https://aistudio.google.com/app/apikey).
 
 ### Asennusvaiheet
 
