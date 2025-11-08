@@ -3,6 +3,7 @@ import requests
 import streamlit as st
 import json
 from dotenv import load_dotenv
+from urllib.parse import quote
 
 load_dotenv()
 
