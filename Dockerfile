@@ -7,7 +7,7 @@ WORKDIR /app
 # Kopioi riippuvuustiedosto ja asenna kirjastot
 # Tämä hyödyntää Dockerin välimuistia: asennus ajetaan vain jos tiedosto muuttuu
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Kopioi loput sovelluksen tiedostoista konttiin
 # Tämä sisältää app.py:n

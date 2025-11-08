@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   jellyfin-recommender:
     image: ghcr.io/jessepesse/jellyfin-ai-recommender:latest
