@@ -6,10 +6,10 @@ toolbarMode = "minimal"
 level = "info"
 
 [theme]
-primaryColor = "#FF6B35"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F0F2F6"
-textColor = "#262730"
+primaryColor = "#6366f1"
+backgroundColor = "#0f172a"
+secondaryBackgroundColor = "#1e293b"
+textColor = "#f1f5f9"
 font = "sans serif"
 
 [server]

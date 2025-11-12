@@ -2,10 +2,68 @@ import os
 import requests
 import streamlit as st
 import json
+import logging
+import time
 from dotenv import load_dotenv
 from urllib.parse import quote
+from functools import wraps
 
 load_dotenv()
+
+# --- Logging Configuration ---
+LOG_FILE = "app.log"
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Create handlers
+try:
+    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - [%(funcName)s] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(file_handler)
+    logger.info("=== Application Started ===")
+except Exception as e:
+    print(f"Warning: Could not configure logging to file: {e}")
+
+# --- Retry Decorator with Exponential Backoff ---
+def retry_with_backoff(max_attempts=3, initial_delay=1, backoff_factor=2):
+    """Decorator for retry logic with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            attempt = 0
+            delay = initial_delay
+            last_exception = None
+            
+            while attempt < max_attempts:
+                try:
+                    logger.debug(f"Attempt {attempt + 1}/{max_attempts} for {func.__name__}")
+                    return func(*args, **kwargs)
+                except (requests.exceptions.RequestException, ConnectionError, TimeoutError) as e:
+                    last_exception = e
+                    attempt += 1
+                    if attempt < max_attempts:
+                        logger.warning(f"{func.__name__} failed (attempt {attempt}/{max_attempts}): {str(e)[:100]}. Retrying in {delay}s...")
+                        time.sleep(delay)
+                        delay *= backoff_factor
+                    else:
+                        logger.error(f"{func.__name__} failed after {max_attempts} attempts: {str(e)}")
+                except Exception as e:
+                    logger.error(f"{func.__name__} encountered unexpected error: {str(e)}")
+                    raise
+            
+            if last_exception:
+                raise last_exception
+        return wrapper
+    return decorator
 
 if 'jellyfin_session' not in st.session_state:
     st.session_state.jellyfin_session = None
@@ -26,46 +84,114 @@ def load_manual_db():
     """Lataa manuaalisesti lisätyt nimikkeet JSON-tiedostosta."""
     try:
         with open(DATABASE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            logger.debug(f"Successfully loaded database from {DATABASE_FILE}")
+            return data
     except FileNotFoundError:
-        return {} # Palauta tyhjä, jos tiedostoa ei ole
+        logger.info(f"Database file {DATABASE_FILE} not found. Creating new empty database.")
+        return {}
+    except json.JSONDecodeError as e:
+        logger.error(f"Database JSON decode error: {e}. Returning empty database.")
+        st.error("⚠️ Tietokanta-tiedosto on vioittunut. Palautetaan tyhjä tietokanta. Varmista varmuuskopio!")
+        return {}
+    except Exception as e:
+        logger.error(f"Unexpected error loading database: {e}")
+        st.error(f"❌ Virhe tietokannan lataamisessa: {e}")
+        return {}
 
 def save_manual_db(db):
     """Tallentaa päivitetyt tiedot JSON-tiedostoon."""
-    with open(DATABASE_FILE, "w", encoding="utf-8") as f:
-        json.dump(db, f, ensure_ascii=False, indent=4)
+    try:
+        # Validate database structure before saving
+        if not isinstance(db, dict):
+            raise ValueError("Database must be a dictionary")
+        
+        # Create backup before saving (optional safety measure)
+        import shutil
+        backup_file = f"{DATABASE_FILE}.backup"
+        if os.path.exists(DATABASE_FILE):
+            try:
+                shutil.copy(DATABASE_FILE, backup_file)
+                logger.debug(f"Created backup at {backup_file}")
+            except Exception as e:
+                logger.warning(f"Could not create backup: {e}")
+        
+        with open(DATABASE_FILE, "w", encoding="utf-8") as f:
+            json.dump(db, f, ensure_ascii=False, indent=4)
+        logger.debug(f"Successfully saved database to {DATABASE_FILE}")
+    except IOError as e:
+        logger.error(f"IO Error saving database: {e}")
+        st.error(f"❌ Virhe tietokannan tallentamisessa: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error saving database: {e}")
+        st.error(f"❌ Virhe tietokannan tallentamisessa: {e}")
 
 
+@retry_with_backoff(max_attempts=3, initial_delay=1)
 def jellyfin_login(username, password):
     """Kirjaa käyttäjän sisään Jellyfiniin ja palauttaa session-tiedot."""
+    if not JELLYFIN_URL:
+        logger.error("JELLYFIN_URL not configured")
+        st.error("❌ JELLYFIN_URL ei ole asetettu ympäristömuuttujissa.")
+        return False
+    
     endpoint = f"{JELLYFIN_URL}/Users/AuthenticateByName"
     headers = {"Content-Type": "application/json", "X-Emby-Authorization": 'MediaBrowser Client="Jellyfin Recommender", Device="Streamlit", DeviceId="recommender-app", Version="1.0"'}
     body = {"Username": username, "Pw": password}
+    
     try:
-        response = requests.post(endpoint, json=body, headers=headers)
+        logger.info(f"Attempting Jellyfin login for user: {username}")
+        response = requests.post(endpoint, json=body, headers=headers, timeout=10)
         response.raise_for_status()
         st.session_state.jellyfin_session = response.json()
+        logger.info(f"Jellyfin login successful for user: {username}")
         return True
-    except requests.exceptions.HTTPError:
-        st.error("Kirjautuminen epäonnistui. Tarkista käyttäjänimi ja salasana.")
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Jellyfin login HTTP error: {e.response.status_code}")
+        st.error("❌ Kirjautuminen epäonnistui. Tarkista käyttäjänimi ja salasana.")
+        return False
+    except requests.exceptions.Timeout:
+        logger.error("Jellyfin login timeout")
+        st.error("❌ Jellyfin-palvelin ei vastaa. Yritä uudelleen.")
         return False
     except requests.exceptions.RequestException as e:
-        st.error(f"Yhteys Jellyfin-palvelimeen epäonnistui: {e}")
+        logger.error(f"Jellyfin connection error: {e}")
+        st.error(f"❌ Yhteys Jellyfin-palvelimeen epäonnistui: {str(e)[:100]}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error during Jellyfin login: {e}")
+        st.error(f"❌ Odottamaton virhe kirjautumisessa: {e}")
         return False
 
+@retry_with_backoff(max_attempts=3, initial_delay=1)
 def get_jellyfin_watched_titles():
     """Hakee katsotut nimikkeet käyttäen tallennettua sessiota ja tallentaa ne tietokantaan."""
-    session = st.session_state.jellyfin_session
-    user_id = session["User"]["Id"]
-    access_token = session["AccessToken"]
-    headers = {"X-Emby-Token": access_token}
-    params = {"IncludeItemTypes": "Movie,Series", "Recursive": "true", "Filters": "IsPlayed"}
-    endpoint = f"{JELLYFIN_URL}/Users/{user_id}/Items"
     try:
-        response = requests.get(endpoint, headers=headers, params=params)
+        session = st.session_state.jellyfin_session
+        if not session:
+            logger.error("No active Jellyfin session")
+            st.error("❌ Ei aktiivista Jellyfin-sessiota.")
+            return []
+        
+        user_id = session.get("User", {}).get("Id")
+        access_token = session.get("AccessToken")
+        
+        if not user_id or not access_token:
+            logger.error("Invalid Jellyfin session data")
+            st.error("❌ Virheellinen Jellyfin-sessiotieto.")
+            return []
+        
+        headers = {"X-Emby-Token": access_token}
+        params = {"IncludeItemTypes": "Movie,Series", "Recursive": "true", "Filters": "IsPlayed"}
+        endpoint = f"{JELLYFIN_URL}/Users/{user_id}/Items"
+        
+        logger.debug(f"Fetching watched titles for user {user_id}")
+        response = requests.get(endpoint, headers=headers, params=params, timeout=15)
         response.raise_for_status()
+        
         items = response.json().get("Items", [])
         watched_titles = [item.get("Name") for item in items if item.get("Name")]
+        logger.info(f"Successfully fetched {len(watched_titles)} watched titles from Jellyfin")
         
         # Save to database with separation
         username = st.session_state.jellyfin_session['User']['Name']
@@ -76,8 +202,21 @@ def get_jellyfin_watched_titles():
         save_manual_db(db)
         
         return watched_titles
+    except requests.exceptions.Timeout:
+        logger.error("Jellyfin watch history fetch timeout")
+        st.error("❌ Jellyfin-palvelin ei vastaa katseluhistorian haussa.")
+        return []
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Jellyfin HTTP error fetching watch history: {e.response.status_code}")
+        st.error(f"❌ Jellyfin palautoi virheenumeron {e.response.status_code}.")
+        return []
     except requests.exceptions.RequestException as e:
-        st.error(f"Katseluhistorian haku epäonnistui: {e}")
+        logger.error(f"Jellyfin connection error during watch history fetch: {e}")
+        st.error(f"❌ Katseluhistorian haku epäonnistui: {str(e)[:100]}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error fetching Jellyfin watch history: {e}")
+        st.error(f"❌ Odottamaton virhe: {e}")
         return []
 
 def _save_jellyfin_watched_to_db(watched_titles):
@@ -122,20 +261,39 @@ Esimerkk JSON-muoto:
 """
 	return prompt
 
+@retry_with_backoff(max_attempts=2, initial_delay=2)
 def get_gemini_recommendations(prompt):
     """Hakee suositukset ja varmistaa, että vastaus on JSON."""
     if not GEMINI_API_KEY:
-        st.error("Gemini API-avainta ei ole asetettu palvelimelle.")
+        logger.error("GEMINI_API_KEY not configured")
+        st.error("❌ Gemini API-avainta ei ole asetettu palvelimelle.")
         return None
     try:
         import google.generativeai as genai
+        logger.debug("Configuring Google Generative AI")
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        logger.debug("Sending prompt to Gemini API")
         response = model.generate_content(prompt)
+        
         cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(cleaned_response)
+        recommendations = json.loads(cleaned_response)
+        logger.info(f"Successfully received {len(recommendations) if isinstance(recommendations, list) else 'unknown'} recommendations from Gemini")
+        return recommendations
+    except json.JSONDecodeError as e:
+        logger.error(f"Gemini API JSON decode error: {e}")
+        st.error("❌ Tekoälyn vastaus ei ole kelvollista JSON:ia. Yritä uudelleen.")
+        return None
     except Exception as e:
-        st.error(f"Gemini API-virhe tai JSON-muunnos epäonnistui: {e}")
+        # Check if it's a quota/rate limit error
+        error_msg = str(e)
+        if "quota" in error_msg.lower() or "rate_limit" in error_msg.lower():
+            logger.warning(f"Gemini API quota or rate limit: {e}")
+            st.error("❌ Gemini API:n käyttörajat saavutettu. Yritä myöhemmin uudelleen.")
+        else:
+            logger.error(f"Gemini API error: {e}")
+            st.error(f"❌ Tekoälyltä suosituksia hakiessa virhe: {str(e)[:100]}")
         return None
 
 # ---------- Jellyseerr helpers ----------
@@ -147,39 +305,86 @@ def search_jellyseerr(title: str):
     """
     Etsii nimikettä Jellyseeristä pelkällä nimellä ja palauttaa
     ensimmäisen osuman ID:n ja media-tyypin (tai (None, None) jos ei löydy).
-    Tämä korjaa NameErrorin, kun funktiota kutsutaan fetch_and_show_recommendationsissa.
     """
     if not JELLYSEERR_API_KEY:
+        logger.debug("Jellyseerr API key not configured")
         return None, None
-    # Defensive: ensure base URL is configured before using string methods.
     if not JELLYSEERR_URL:
-        st.error("JELLYSEERR_URL ei ole asetettu ympäristömuuttujissa.")
+        logger.error("JELLYSEERR_URL not configured")
+        st.error("❌ JELLYSEERR_URL ei ole asetettu ympäristömuuttujissa.")
         return None, None
     try:
         encoded_title = quote(title or "")
         base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
         endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
+        
+        logger.debug(f"Searching Jellyseerr for: {title}")
         resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
+        
         results = resp.json().get("results", [])
         if not results:
+            logger.debug(f"No results found in Jellyseerr for: {title}")
             return None, None
+        
         first = results[0]
-        return first.get("id"), first.get("mediaType")
-    except requests.exceptions.RequestException:
+        media_id = first.get("id")
+        media_type = first.get("mediaType")
+        logger.debug(f"Found Jellyseerr match for '{title}': ID={media_id}, type={media_type}")
+        return media_id, media_type
+    except requests.exceptions.Timeout:
+        logger.warning(f"Jellyseerr search timeout for title: {title}")
+        return None, None
+    except requests.exceptions.HTTPError as e:
+        logger.warning(f"Jellyseerr HTTP error during search: {e.response.status_code}")
+        return None, None
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Jellyseerr connection error during search: {e}")
+        return None, None
+    except Exception as e:
+        logger.error(f"Unexpected error searching Jellyseerr: {e}")
         return None, None
 
+@retry_with_backoff(max_attempts=2, initial_delay=1)
 def request_on_jellyseerr(media_id, media_type):
     """Tekee pyynnön Jellyseerriin."""
+    if not JELLYSEERR_API_KEY:
+        logger.error("Jellyseerr API key not configured")
+        st.error("❌ Jellyseerr API-avainta ei ole asetettu.")
+        return False
+    
     headers = {"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"}
     endpoint = f"{JELLYSEERR_URL}/api/v1/request"
     body = {"mediaId": media_id, "mediaType": media_type}
+    
     try:
-        response = requests.post(endpoint, headers=headers, json=body)
+        logger.debug(f"Making request to Jellyseerr for media_id={media_id}, type={media_type}")
+        response = requests.post(endpoint, headers=headers, json=body, timeout=10)
         response.raise_for_status()
+        logger.info(f"Successfully made Jellyseerr request for media_id={media_id}")
         return True
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 400:
+            logger.warning(f"Jellyseerr request rejected (already exists?): {media_id}")
+            st.toast("📌 Nimike on jo olemassa tai pyyntö on jo tehty.", icon="ℹ️")
+        elif e.response.status_code == 401:
+            logger.error("Jellyseerr API authentication failed")
+            st.toast("❌ Jellyseerr-autentikointivirhe. Tarkista API-avain.", icon="🚨")
+        else:
+            logger.error(f"Jellyseerr HTTP error: {e.response.status_code}")
+            st.toast("❌ Jellyseerr palautoi virheenumeron. Yritä uudelleen.", icon="🚨")
+        return False
+    except requests.exceptions.Timeout:
+        logger.warning("Jellyseerr request timeout")
+        st.toast("❌ Jellyseerr-palvelin ei vastaa. Yritä uudelleen.", icon="⏱️")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Jellyseerr connection error: {e}")
+        st.toast("❌ Yhteysvirhe Jellyseerr-palvelimeen.", icon="🚨")
+        return False
     except Exception as e:
-        st.toast("Pyyntö epäonnistui. Onko nimike jo olemassa?", icon="🚨")
+        logger.error(f"Unexpected error making Jellyseerr request: {e}")
+        st.toast("❌ Odottamaton virhe pyynnön teossa.", icon="🚨")
         return False
 
 # --- New UI handlers using callbacks ---
@@ -299,55 +504,69 @@ def export_user_data_as_json(username):
 def import_user_data_from_json(json_string, username):
 	"""Imports user data from JSON string."""
 	try:
+		logger.debug(f"Attempting to import user data for: {username}")
 		import_data = json.loads(json_string)
 		if import_data.get("username") != username:
-			st.error("Tietokanta kuuluu eri käyttäjälle!")
+			logger.warning(f"Import failed: database belongs to different user")
+			st.error("❌ Tietokanta kuuluu eri käyttäjälle!")
 			return False
 		
 		db = load_manual_db()
 		db[username] = import_data.get("data", {})
 		save_manual_db(db)
-		st.success(f"Tietokanta tuotu onnistuneesti käyttäjälle '{username}'")
+		logger.info(f"Successfully imported user data for: {username}")
+		st.success(f"✅ Tietokanta tuotu onnistuneesti käyttäjälle '{username}'")
 		return True
-	except json.JSONDecodeError:
-		st.error("Virheellinen JSON-muoto!")
+	except json.JSONDecodeError as e:
+		logger.error(f"JSON decode error during import: {e}")
+		st.error("❌ Virheellinen JSON-muoto!")
 		return False
 	except Exception as e:
-		st.error(f"Virhe tuodessa tietokantaa: {e}")
+		logger.error(f"Unexpected error importing user data: {e}")
+		st.error(f"❌ Virhe tuodessa tietokantaa: {e}")
 		return False
 
 # --- PÄÄFUNKTIO, JOKA HOITAA SUOSITUSTEN HAUN ---
 def fetch_and_show_recommendations(media_type, genre):
 	"""Fetches recommendations using the watchlist as a strong signal."""
 	username = st.session_state.jellyfin_session['User']['Name']
+	
+	try:
+		with st.spinner("Haetaan katseluhistoriaa ja asetuksia..."):
+			logger.debug(f"Fetching recommendations for user: {username}, media_type: {media_type}, genre: {genre}")
+			jellyfin_watched = get_jellyfin_watched_titles()
+			db = load_manual_db()
+			user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+			manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
+			# Correctly read the simple lists
+			blacklist = user_db_entry.get("do_not_recommend", [])
+			watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
+			# Flatten watchlist from both movies and series for the prompt
+			watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
+			full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
+			
+			logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
 
-	with st.spinner("Haetaan katseluhistoriaa ja asetuksia..."):
-		jellyfin_watched = get_jellyfin_watched_titles()
-		db = load_manual_db()
-		user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
-		manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
-		# Correctly read the simple lists
-		blacklist = user_db_entry.get("do_not_recommend", [])
-		watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
-		# Flatten watchlist from both movies and series for the prompt
-		watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
-		full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
+		with st.spinner("Kysytään suosituksia tekoälyltä..."):
+			prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
+			recommendations = get_gemini_recommendations(prompt)
 
-	with st.spinner("Kysytään suosituksia tekoälyltä..."):
-		prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
-		recommendations = get_gemini_recommendations(prompt)
-
-	if recommendations:
-		enriched_recommendations = []
-		with st.spinner("Tarkistetaan saatavuutta Jellyseeristä..."):
-			for rec in recommendations:
-				media_id, m_type = search_jellyseerr(rec['title'])
-				rec['media_id'] = media_id
-				rec['media_type'] = m_type
-				enriched_recommendations.append(rec)
-		st.session_state.recommendations = enriched_recommendations
-	else:
-		st.session_state.recommendations = None
+		if recommendations:
+			enriched_recommendations = []
+			with st.spinner("Tarkistetaan saatavuutta Jellyseeristä..."):
+				for rec in recommendations:
+					media_id, m_type = search_jellyseerr(rec['title'])
+					rec['media_id'] = media_id
+					rec['media_type'] = m_type
+					enriched_recommendations.append(rec)
+			st.session_state.recommendations = enriched_recommendations
+			logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")
+		else:
+			st.session_state.recommendations = None
+			logger.warning(f"No recommendations generated for user: {username}")
+	except Exception as e:
+		logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}")
+		st.error(f"❌ Virhe suositusten haussa: {str(e)[:150]}")
 
 # --- Streamlit Käyttöliittymä ---
 
@@ -359,6 +578,98 @@ st.set_page_config(
         "About": "Jellyfin AI Recommender - Personalized recommendations powered by Google Gemini AI"
     }
 )
+
+# Dark theme configuration
+st.markdown("""
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --background-color: #0f172a;
+            --secondary-background-color: #1e293b;
+            --text-color: #f1f5f9;
+            --text-secondary: #cbd5e1;
+        }
+        
+        body {
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+        
+        .stApp {
+            background-color: #0f172a;
+        }
+        
+        /* Main container */
+        .main {
+            background-color: #0f172a;
+        }
+        
+        /* Sidebar */
+        .sidebar .sidebar-content {
+            background-color: #1e293b;
+        }
+        
+        /* Text elements */
+        h1, h2, h3, h4, h5, h6 {
+            color: #f1f5f9;
+        }
+        
+        p, span, label {
+            color: #f1f5f9;
+        }
+        
+        /* Input fields */
+        .stTextInput > div > div > input,
+        .stPasswordInput > div > div > input,
+        .stSelectbox > div > div > div {
+            background-color: #1e293b;
+            color: #f1f5f9;
+            border-color: #64748b;
+        }
+        
+        /* Buttons */
+        .stButton > button {
+            background-color: #6366f1;
+            color: white;
+            border: none;
+        }
+        
+        .stButton > button:hover {
+            background-color: #7c3aed;
+        }
+        
+        /* Cards and containers */
+        .stContainer {
+            background-color: #1e293b;
+        }
+        
+        /* Expander */
+        .streamlit-expanderHeader {
+            background-color: #1e293b;
+            color: #f1f5f9;
+        }
+        
+        /* Recommendation cards */
+        .recommendation-card {
+            background-color: #1e293b;
+            border: 1px solid #64748b;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        /* Success/Error messages */
+        .stAlert {
+            background-color: #1e293b;
+            color: #f1f5f9;
+        }
+        
+        /* Section gap */
+        .section-gap {
+            height: 20px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # Hide Streamlit branding
 hide_streamlit_style = """
@@ -385,6 +696,7 @@ if 'jellyfin_session' not in st.session_state:
 
 if not st.session_state.jellyfin_session:
     # Kirjautumisnäkymä
+    logger.debug("Displaying login page")
     st.header("🔑 Kirjaudu sisään Jellyfin käyttäjälläsi")
     with st.form("login_form"):
         username = st.text_input("Käyttäjänimi")
