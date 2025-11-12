@@ -145,6 +145,11 @@ env.bak/
 venv.bak/
 database.json
 
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/cache/
+.streamlit/.cache/
+
 # Spyder project settings
 .spyderproject
 .spyproject

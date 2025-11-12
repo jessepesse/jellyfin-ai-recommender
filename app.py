@@ -18,11 +18,7 @@ JELLYSEERR_URL = os.environ.get("JELLYSEERR_URL")
 JELLYSEERR_API_KEY = os.environ.get("JELLYSEERR_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_FILE = "database.json"
-# Optional image proxy: if set, poster URLs will be routed through this proxy.
-# The proxy URL can contain the literal string '{url}' where the target image URL will be
-# substituted. If '{url}' is not present, the helper will append '?url=<encoded>' to the
-# proxy base.
-# POSTER_PROXY_URL = os.environ.get("POSTER_PROXY_URL", "")
+
 
 # --- Tietokanta-funktiot (JSON) ---
 
@@ -58,7 +54,7 @@ def jellyfin_login(username, password):
         return False
 
 def get_jellyfin_watched_titles():
-    """Hakee katsotut nimikkeet käyttäen tallennettua sessiota."""
+    """Hakee katsotut nimikkeet käyttäen tallennettua sessiota ja tallentaa ne tietokantaan."""
     session = st.session_state.jellyfin_session
     user_id = session["User"]["Id"]
     access_token = session["AccessToken"]
@@ -69,10 +65,30 @@ def get_jellyfin_watched_titles():
         response = requests.get(endpoint, headers=headers, params=params)
         response.raise_for_status()
         items = response.json().get("Items", [])
-        return [item.get("Name") for item in items if item.get("Name")]
+        watched_titles = [item.get("Name") for item in items if item.get("Name")]
+        
+        # Save to database with separation
+        username = st.session_state.jellyfin_session['User']['Name']
+        db = load_manual_db()
+        user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+        user_data["jellyfin_synced_at"] = str(__import__('datetime').datetime.now())
+        user_data["jellyfin_total_watched"] = len(watched_titles)
+        save_manual_db(db)
+        
+        return watched_titles
     except requests.exceptions.RequestException as e:
         st.error(f"Katseluhistorian haku epäonnistui: {e}")
         return []
+
+def _save_jellyfin_watched_to_db(watched_titles):
+    """Tallentaa Jellyfin-katseluhistorian tietokantaan."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    
+    # Update watched titles (overwrite with latest from Jellyfin)
+    user_data["jellyfin_synced"] = watched_titles
+    save_manual_db(db)
 
 
 def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_list):
@@ -198,40 +214,19 @@ def handle_watched_add(title, media_type_from_radio="Elokuva"):
 		st.toast(f"'{title}' on jo listallasi.", icon="✅")
 	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
-def handle_blacklist_add(title):
-	"""Adds a title to the user's 'do not recommend' list and removes from watchlist if present."""
-	username = st.session_state.jellyfin_session['User']['Name']
-	db = load_manual_db()
-
-	# Ensure the user entry and the 'do_not_recommend' key (as a list) exist
-	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": []})
-	user_data.setdefault("do_not_recommend", [])
-	user_data.setdefault("watchlist", [])
-
-	if title not in user_data.get("do_not_recommend", []):
-		user_data["do_not_recommend"].append(title)
-		# Also remove from watchlist if present
-		if title in user_data.get("watchlist", []):
-			user_data["watchlist"].remove(title)
-			st.info(f"'{title}' poistettu myös katselulistalta.")
-		save_manual_db(db)
-		st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
-		st.toast(f"'{title}' lisätty estolistalle.", icon="🚫")
-	else:
-		st.toast(f"'{title}' on jo estolistallasi.", icon="⚠️")
-	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
-
 def handle_watchlist_add(title_to_add):
 	"""Adds a title to the user's watchlist (from recommendations only)."""
 	username = st.session_state.jellyfin_session['User']['Name']
 	db = load_manual_db()
+	media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
-	# Ensure the user entry and the 'watchlist' key exist
-	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": []})
-	user_data.setdefault("watchlist", [])
+	# Ensure the user entry and the 'watchlist' key exist with correct structure
+	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+	user_data.setdefault("watchlist", {"movies": [], "series": []})
 
-	if title_to_add not in user_data.get("watchlist", []):
-		user_data["watchlist"].append(title_to_add)
+	key = "movies" if media_type_from_radio == "Elokuva" else "series"
+	if title_to_add not in user_data["watchlist"].get(key, []):
+		user_data["watchlist"].setdefault(key, []).append(title_to_add)
 		save_manual_db(db)
 		# Remove from current recommendations shown in UI
 		st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title_to_add]
@@ -240,21 +235,86 @@ def handle_watchlist_add(title_to_add):
 		st.toast(f"'{title_to_add}' on jo katselulistallasi.", icon="ℹ️")
 	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
-def handle_watchlist_remove(title_to_remove):
+def handle_watchlist_remove(title_to_remove, media_type_key):
 	"""Removes a title from the user's watchlist."""
 	username = st.session_state.jellyfin_session['User']['Name']
 	db = load_manual_db()
 
 	user_data = db.get(username, {})
-	watchlist = user_data.get("watchlist", [])
+	watchlist = user_data.get("watchlist", {"movies": [], "series": []})
+	watchlist_list = watchlist.get(media_type_key, [])
 
-	if title_to_remove in watchlist:
-		watchlist.remove(title_to_remove)
-		save_manual_db(db)  # Save changes back to database
+	if title_to_remove in watchlist_list:
+		watchlist_list.remove(title_to_remove)
+		save_manual_db(db)
 		st.toast(f"'{title_to_remove}' poistettu katselulistalta.", icon="🗑️")
 	else:
 		st.toast(f"'{title_to_remove}' ei ole katselulistallasi.", icon="ℹ️")
 	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
+
+def handle_blacklist_add(title):
+	"""Adds a title to the user's 'do not recommend' list and removes from watchlist if present."""
+	username = st.session_state.jellyfin_session['User']['Name']
+	db = load_manual_db()
+	media_type_from_radio = st.session_state.get("media_type", "Elokuva")
+
+	# Ensure the user entry and the 'do_not_recommend' key (as a list) exist
+	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+	user_data.setdefault("do_not_recommend", [])
+	user_data.setdefault("watchlist", {"movies": [], "series": []})
+
+	if title not in user_data.get("do_not_recommend", []):
+		user_data["do_not_recommend"].append(title)
+		# Also remove from watchlist if present
+		watchlist = user_data.get("watchlist", {"movies": [], "series": []})
+		for media_key in ["movies", "series"]:
+			if title in watchlist.get(media_key, []):
+				watchlist[media_key].remove(title)
+				st.info(f"'{title}' poistettu myös katselulistalta.")
+				break
+		save_manual_db(db)
+		st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
+		st.toast(f"'{title}' lisätty estolistalle.", icon="🚫")
+	else:
+		st.toast(f"'{title}' on jo estolistallasi.", icon="⚠️")
+	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
+
+# --- Backup & Restore funktiot ---
+
+def export_user_data_as_json(username):
+	"""Exports user data as JSON string for download."""
+	db = load_manual_db()
+	user_data = db.get(username, {})
+	if not user_data:
+		st.error(f"Ei löytynyt tietoja käyttäjälle '{username}'")
+		return None
+	# Add export timestamp
+	export_data = {
+		"username": username,
+		"exported_at": str(__import__('datetime').datetime.now()),
+		"data": user_data
+	}
+	return json.dumps(export_data, ensure_ascii=False, indent=4)
+
+def import_user_data_from_json(json_string, username):
+	"""Imports user data from JSON string."""
+	try:
+		import_data = json.loads(json_string)
+		if import_data.get("username") != username:
+			st.error("Tietokanta kuuluu eri käyttäjälle!")
+			return False
+		
+		db = load_manual_db()
+		db[username] = import_data.get("data", {})
+		save_manual_db(db)
+		st.success(f"Tietokanta tuotu onnistuneesti käyttäjälle '{username}'")
+		return True
+	except json.JSONDecodeError:
+		st.error("Virheellinen JSON-muoto!")
+		return False
+	except Exception as e:
+		st.error(f"Virhe tuodessa tietokantaa: {e}")
+		return False
 
 # --- PÄÄFUNKTIO, JOKA HOITAA SUOSITUSTEN HAUN ---
 def fetch_and_show_recommendations(media_type, genre):
@@ -264,11 +324,13 @@ def fetch_and_show_recommendations(media_type, genre):
 	with st.spinner("Haetaan katseluhistoriaa ja asetuksia..."):
 		jellyfin_watched = get_jellyfin_watched_titles()
 		db = load_manual_db()
-		user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": []})
+		user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
 		manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
 		# Correctly read the simple lists
 		blacklist = user_db_entry.get("do_not_recommend", [])
-		watchlist = user_db_entry.get("watchlist", [])
+		watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
+		# Flatten watchlist from both movies and series for the prompt
+		watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
 		full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
 
 	with st.spinner("Kysytään suosituksia tekoälyltä..."):
@@ -289,8 +351,34 @@ def fetch_and_show_recommendations(media_type, genre):
 
 # --- Streamlit Käyttöliittymä ---
 
-st.set_page_config(page_title="Jellyfin tekoäly suosittelija", layout="wide")
-st.title("🎬 Jellyfin tekoäly suosittelija")
+st.set_page_config(
+    page_title="Jellyfin AI Recommender",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        "About": "Jellyfin AI Recommender - Personalized recommendations powered by Google Gemini AI"
+    }
+)
+
+# Hide Streamlit branding
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# Set page title with logo
+col1, col2 = st.columns([0.1, 0.9])
+with col1:
+    try:
+        st.image("images/logo.png", width=60)
+    except:
+        st.write("🎬")
+with col2:
+    st.title("Jellyfin AI Recommender")
 
 if 'jellyfin_session' not in st.session_state:
     st.session_state.jellyfin_session = None
@@ -373,24 +461,92 @@ else:
 	with st.expander("📝 Oma katselulistani"):
 		db = load_manual_db()
 		user_data = db.get(username, {})
-		watchlist = user_data.get("watchlist", [])
+		watchlist = user_data.get("watchlist", {"movies": [], "series": []})
+		
+		# Handle migration: if watchlist is a list, convert to dict structure
+		if isinstance(watchlist, list):
+			watchlist = {"movies": [], "series": []}
+			user_data["watchlist"] = watchlist
+			save_manual_db(db)
+		
+		watchlist_movies = watchlist.get("movies", [])
+		watchlist_series = watchlist.get("series", [])
 
-		if not watchlist:
+		if not watchlist_movies and not watchlist_series:
 			st.info("Katselulistasi on tyhjä. Lisää nimikkeitä suosituksista!")
 		else:
-			st.write(f"**Katselulistallasi on {len(watchlist)} nimikettä:**")
-			for idx, wl_title in enumerate(watchlist):
-				col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
-				with col1:
-					st.write(f"• {wl_title}")
-				with col2:
-					if st.button("Pyydä Jellyseeristä", key=f"request_watchlist_{idx}",
-								 on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
-						pass  # Callback handles the request
-				with col3:
-					if st.button("Poista listalta", key=f"remove_watchlist_{idx}",
-								 on_click=handle_watchlist_remove, args=(wl_title,), use_container_width=True):
-						pass  # Callback handles the removal
+			# Movies section
+			if watchlist_movies:
+				st.write("**🎬 Elokuvat:**")
+				for idx, wl_title in enumerate(watchlist_movies):
+					col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
+					with col1:
+						st.write(f"• {wl_title}")
+					with col2:
+						if st.button("Pyydä", key=f"request_watchlist_movie_{idx}",
+									 on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
+							pass  # Callback handles the request
+					with col3:
+						if st.button("Poista", key=f"remove_watchlist_movie_{idx}",
+									 on_click=handle_watchlist_remove, args=(wl_title, "movies"), use_container_width=True):
+							pass  # Callback handles the removal
+				st.markdown("")  # spacing
+
+			# Series section
+			if watchlist_series:
+				st.write("**📺 Sarjat:**")
+				for idx, wl_title in enumerate(watchlist_series):
+					col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
+					with col1:
+						st.write(f"• {wl_title}")
+					with col2:
+						if st.button("Pyydä", key=f"request_watchlist_series_{idx}",
+									 on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
+							pass  # Callback handles the request
+					with col3:
+						if st.button("Poista", key=f"remove_watchlist_series_{idx}",
+									 on_click=handle_watchlist_remove, args=(wl_title, "series"), use_container_width=True):
+							pass  # Callback handles the removal
+
+# Backup & Restore Section
+	st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
+	with st.expander("💾 Tietokannan Varmuuskopio"):
+		st.write("**Vie tietokantasi varmuuskopioksi tai jaa sen toiseen paikkaan.**")
+		
+		col1, col2 = st.columns([1, 1])
+		
+		# Export
+		with col1:
+			st.subheader("📥 Vie varmuuskopio")
+			if st.button("⬇️ Lataa varmuuskopio", use_container_width=True):
+				backup_json = export_user_data_as_json(username)
+				if backup_json:
+					st.download_button(
+						label="💾 Lataa JSON-tiedosto",
+						data=backup_json,
+						file_name=f"jellyfin_ai_recommender_backup_{username}_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+						mime="application/json",
+						use_container_width=True
+					)
+		
+		# Import
+		with col2:
+			st.subheader("📤 Palauta varmuuskopio")
+			uploaded_file = st.file_uploader(
+				"Valitse varmuuskopiotiedosto",
+				type=["json"],
+				key="backup_uploader",
+				help="Valitse aiemmin viety .json-tiedosto"
+			)
+			
+			if uploaded_file is not None:
+				try:
+					backup_content = uploaded_file.read().decode("utf-8")
+					if st.button("🔄 Palauta tietokanta", use_container_width=True):
+						if import_user_data_from_json(backup_content, username):
+							st.rerun()
+				except Exception as e:
+					st.error(f"Virhe tiedostoa luettaessa: {e}")
 
 # SUOSITUSTEN NÄYTTÄMINEN (teksti-only)
 if 'recommendations' in st.session_state and st.session_state.recommendations:

@@ -1,0 +1,78 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+Copyright (C) 2025 Jellyfin AI Recommender Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+0. Definitions.
+
+"This License" refers to version 3 of the GNU Affero General Public License.
+
+"The Program" refers to any copyrightable work licensed under this License.
+
+"You" refers to each licensee; "your" refers to you collectively if you are
+acting as a representative of a licensee.
+
+"Free Software" refers to software whose functionality the user can run, copy,
+distribute, study and change.
+
+"Network Server" means a computer system that accepts electronic data from
+client computers, and provides such data to client computers.
+
+"Corresponding Source" for a work means the preferred form of the work for
+making modifications to it, plus any associated interface definition files, plus
+the scripts used to control compilation and installation of an executable version.
+
+1. Source Code.
+
+The "source code" for a work means the preferred form of the work for making
+modifications to it.
+
+2. Basic Permissions.
+
+All rights granted under this License are granted for the term of copyright on
+the Program, and are irrevocable provided the stated conditions are met.
+
+3. Restrictions.
+
+If you modify the Program, your modified version must prominently display this
+fact and include a notice that the modified version is under AGPLv3.
+
+4. Network Interaction; Remote Network Interaction.
+
+Notwithstanding any other provision of this License, if you modify the Program,
+your modified version must offer all users interacting with it remotely through
+a computer network an opportunity to receive the Corresponding Source of your
+version by providing access to the Corresponding Source from a network server.
+
+The source code must be accessible for download without charge. The opportunity
+to receive a copy of the Corresponding Source must remain available for at least
+three years.
+
+5. Additional Terms.
+
+"Additional permissions" are terms that supplement the terms of this License by
+making exceptions from one or more of its conditions. Additional permissions
+that are applicable to the entire Program shall be treated as though they were
+included in this License.
+
+---
+
+FOR THE FULL TEXT OF THE AGPLv3 LICENSE, VISIT:
+https://www.gnu.org/licenses/agpl-3.0.html

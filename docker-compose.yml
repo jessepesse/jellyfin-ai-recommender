@@ -1,22 +1,24 @@
+version: '3.8'
+
 services:
-  jellyfin-recommender:
-    image: ghcr.io/jessepesse/jellyfin-ai-recommender:latest
-    
+  recommender:
+    build: .
     container_name: jellyfin-ai-recommender
-    restart: unless-stopped
     ports:
       - "8501:8501"
-    volumes:
-      - ./data:/app
     environment:
-      # Jellyfin-palvelimesi täydellinen osoite.
-      - JELLYFIN_URL=http://<JELLYFIN_PALVELIMEN_IP_OSOITE>:8096
-      
-      # Jellyseerr-palvelimesi täydellinen osoite.
-      - JELLYSEERR_URL=http://<JELLYSEERR_PALVELIMEN_IP_OSOITE>:5055
-      
-      # Jellyseerr API-avaimesi (löytyy Jellyseerrin asetuksista).
-      - JELLYSEERR_API_KEY=<LIITÄ_JELLYSEERR_API_AVAIN_TÄHÄN>
-      
-      # Google AI Studion (Gemini) API-avaimesi.
-      - GEMINI_API_KEY=<LIITÄ_GEMINI_API_AVAIN_TÄHÄN>
+      - JELLYFIN_URL=${JELLYFIN_URL}
+      - JELLYSEERR_URL=${JELLYSEERR_URL}
+      - JELLYSEERR_API_KEY=${JELLYSEERR_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./database.json:/app/database.json
+      - ./images:/app/images
+      - ./.streamlit:/app/.streamlit
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
