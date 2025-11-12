@@ -31,7 +31,7 @@ Personalized movie and TV show recommendation engine powered by **Google Gemini 
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/jellyfin-ai-recommender.git
+git clone https://github.com/jessepesse/jellyfin-ai-recommender.git
 cd jellyfin-ai-recommender
 
 # Create environment file

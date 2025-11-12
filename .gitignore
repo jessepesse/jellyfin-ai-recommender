@@ -214,3 +214,8 @@ __marimo__/
 .env
 __pycache__/
 venv/
+
+# Local development files
+TODO.md
+*.log
+app.log
