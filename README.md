@@ -21,8 +21,8 @@ Personalized movie and TV show recommendation engine powered by **Google Gemini 
 
 - Docker & Docker Compose (for containerized setup)
 - OR Python 3.9+ (for local development)
-- Jellyfin instance
-- Jellyseerr instance (optional, for media requests)
+- [Jellyfin](https://github.com/jellyfin/jellyfin) instance
+- [Jellyseerr](https://github.com/seerr-team/seerr) instance (optional, for media requests)
 - Google Gemini API key
 
 ### Option 1: Docker (Recommended)
@@ -178,7 +178,9 @@ This is a personal project. Contributions are welcome! Feel free to fork, modify
 
 - **Frontend:** Streamlit (Python)
 - **AI:** Google Generative AI (Gemini)
-- **Media Sources:** Jellyfin, Jellyseerr
+- **Media Sources:** 
+  - [Jellyfin](https://github.com/jellyfin/jellyfin) — Free media system
+  - [Jellyseerr](https://github.com/seerr-team/seerr) — Media request management
 - **Storage:** JSON-based user database
 - **Deployment:** Docker & Docker Compose
 
