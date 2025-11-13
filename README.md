@@ -84,6 +84,7 @@ Access at `http://localhost:8501`
 ## 📖 Documentation
 
 - [Setup Guide](SETUP.md) — Detailed installation & configuration
+- [Database Persistence](DATABASE_PERSISTENCE.md) — Data backup and recovery strategies
 - [API Integration](API_INTEGRATION.md) — External service integration details
 - [Database Schema](DATABASE_SCHEMA.md) — User data structure reference
 - [Copilot Instructions](.github/copilot-instructions.md) — AI agent guidelines

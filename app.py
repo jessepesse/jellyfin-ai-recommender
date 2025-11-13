@@ -1,4 +1,4 @@
-import os
+﻿import os
 import requests
 import streamlit as st
 import json
@@ -71,6 +71,10 @@ if 'jellyfin_session' not in st.session_state:
     st.session_state.jellyfin_session = None
 if 'recommendations' not in st.session_state:
     st.session_state.recommendations = None
+if 'search_results' not in st.session_state:
+    st.session_state.search_results = []
+if 'search_query' not in st.session_state:
+    st.session_state.search_query = ""
 
 # Ladataan kaikki salaisuudet ympäristömuuttujista
 JELLYFIN_URL = os.environ.get("JELLYFIN_URL")
@@ -233,37 +237,29 @@ def _save_jellyfin_watched_to_db(watched_titles):
 
 
 def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_list):
-	"""Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista."""
-	watched_titles_str = ", ".join(watched_list) if watched_list else "ei yhtään"
-	watchlist_str = ", ".join(watchlist) if watchlist else "ei yhtään"
-	do_not_str = ", ".join(do_not_recommend_list) if do_not_recommend_list else "ei yhtään"
+    """Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista."""
+    watched_titles_str = ", ".join(watched_list) if watched_list else "ei yhtään"
+    watchlist_str = ", ".join(watchlist) if watchlist else "ei yhtään"
+    do_not_str = ", ".join(do_not_recommend_list) if do_not_recommend_list else "ei yhtään"
 
-	genre_instruction = f"Kaikkien suositusten tulee kuulua genreen: '{genre}'." if genre != "Kaikki" else "Suosittele monipuolisesti eri genrejä makuni mukaan."
+    genre_instruction = f"Kaikkien suositusten tulee kuulua genreen: '{genre}'." if genre != "Kaikki" else "Suosittele monipuolisesti eri genrejä."
 
-	prompt = f"""
-Olet elokuvien ja TV-sarjojen suosittelun asiantuntija. Tehtäväsi on antaa 5 uutta {media_type}-suositusta katseluprofiilini perusteella.
+    prompt = f"""Anna 5 uutta {media_type}-suositusta seuraavan profiilin perusteella:
+KATSOTTU: {watched_titles_str}
+KIINNOSTUS (katselulista): {watchlist_str}
+ÄLÄ SUOSITTELE: {do_not_str}
+GENRE: {genre_instruction}
 
-**Katseluprofiilini:**
-1.  **Katsottu historia:** Nimikkeet, jotka olen jo nähnyt: {watched_titles_str}
-2.  **Katselulista (Korkea kiinnostus):** Nimikkeet, joita olen kiinnostunut katsomaan. Käytä näitä vahvana signaalina sen *tyypin* sisällöstä, jota etsin juuri nyt: {watchlist_str}
-3.  **Estolista (Alhainen kiinnostus):** Näistä nimikkeistä en ole kiinnostunut. Käytä näitä negatiivisena signaalina välttääksesi samanlaisia teemoja tai genrejä: {do_not_str}
+VAATIMUKSET:
+- Älä suosittele mitään katsotusta listalta tai älä-suosittele-listalta
+- Tittelit täytyy olla englanninkielisiä
+- Jokainen suositus max 80 merkkiä "reason"-kentässä
+- Palauta vastauksesi minimoituna JSON-listana ilman rivinvaihtoja tai ylimääräisiä välilyöntejä
+- Ainoastaan JSON-lista, ei muuta tekstiä
 
-**Tehtäväsi:**
-- Anna 5 uutta {media_type} suositusta.
-- **ÄLÄ** suosittele mitään katsotusta historiastani, katselulistaltani tai estolistaltani.
-- {genre_instruction}
-- Kaikkien `title`-arvojen **täytyy** olla alkuperäisessä englanninkielisessä muodossaan API-yhteensopivuutta varten.
-- Palauta vastauksesi **VAIN** voimassa olevan JSON-listan objekteista, joissa on avaimet: "title", "year" ja "reason".
+Vastausmuoto: [{{ "title": "...", "year": 2024, "reason": "..." }}, ...]"""
+    return prompt
 
-Esimerkk JSON-muoto:
-[
-	{{"title": "Dune: Part Two", "year": 2024, "reason": "Koska lisäsit Blade Runner 2049:n katselulistallesi, tämän elokuvan upea visuaalinen maailma ja syvällinen scifi-kerronta vastaavat todennäköisesti nykyisiä kiinnostuksen kohteitasi."}},
-	{{"title": "Severance", "year": 2022, "reason": "Katselulistasi viittaa kiinnostukseen ajatuksia herättäviä mysteerejä kohtaan; tämä sarja tarjoaa samankaltaista kiehtovuutta ainutlaatuisella premissillä."}}
-]
-"""
-	return prompt
-
-@retry_with_backoff(max_attempts=2, initial_delay=2)
 def get_gemini_recommendations(prompt):
     """Hakee suositukset ja varmistaa, että vastaus on JSON."""
     if not GEMINI_API_KEY:
@@ -278,6 +274,10 @@ def get_gemini_recommendations(prompt):
         
         logger.debug("Sending prompt to Gemini API")
         response = model.generate_content(prompt)
+        
+        if not response or not response.text:
+            logger.warning("Gemini returned empty response")
+            return None
         
         cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
         recommendations = json.loads(cleaned_response)
@@ -303,17 +303,18 @@ def get_gemini_recommendations(prompt):
 JELLYSEERR_HEADERS = {"X-Api-Key": JELLYSEERR_API_KEY} if JELLYSEERR_API_KEY else {}
 
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+@st.cache_data(ttl=6*60*60, show_spinner=False)
 def search_jellyseerr(title: str):
     """
     Etsii nimikettä Jellyseeristä pelkällä nimellä ja palauttaa
     ensimmäisen osuman ID:n ja media-tyypin (tai (None, None) jos ei löydy).
+    Välimuistissa 6 tunnin ajan.
     """
     if not JELLYSEERR_API_KEY:
         logger.debug("Jellyseerr API key not configured")
         return None, None
     if not JELLYSEERR_URL:
         logger.error("JELLYSEERR_URL not configured")
-        st.error("❌ JELLYSEERR_URL ei ole asetettu ympäristömuuttujissa.")
         return None, None
     try:
         encoded_title = quote(title or "")
@@ -347,8 +348,42 @@ def search_jellyseerr(title: str):
         logger.error(f"Unexpected error searching Jellyseerr: {e}")
         return None, None
 
+@st.cache_data(ttl=6*60*60)
+def search_jellyseerr_advanced(query: str):
+    """
+    Tekee yksityiskohtaisen haun Jellyseerristä.
+    Palauttaa listan tuloksia, joissa on poster, rating, vuosi, kuvaus jne.
+    Välimuistissa 6 tunnin ajan.
+    """
+    if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
+        logger.debug("Jellyseerr not configured for advanced search")
+        return []
+    
+    try:
+        encoded_query = quote(query or "")
+        base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+        endpoint = f"{base}/api/v1/search?query={encoded_query}&page=1"
+        
+        logger.debug(f"Advanced Jellyseerr search for: {query}")
+        resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        resp.raise_for_status()
+        
+        results = resp.json().get("results", [])
+        logger.debug(f"Found {len(results)} results for '{query}'")
+        
+        # Lisää debug-loggaus ensimmäisestä tuloksesta
+        if results:
+            logger.debug(f"First result keys: {list(results[0].keys())}")
+            logger.debug(f"First result: {json.dumps(results[0], indent=2, default=str)[:500]}")
+        
+        return results
+    except Exception as e:
+        logger.warning(f"Advanced Jellyseerr search failed for '{query}': {e}")
+        return []
+
+@st.cache_data(ttl=6*60*60, show_spinner=False)
 def get_jellyseerr_details(title: str):
-    """Hakee Jellyseerr:stä yksityiskohtaiset tiedot elokuvasta/sarjasta."""
+    """Hakee Jellyseerr:stä yksityiskohtaiset tiedot elokuvasta/sarjasta. Välimuistissa 6 tunnin ajan."""
     if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
         return None
     
@@ -366,7 +401,7 @@ def get_jellyseerr_details(title: str):
             return None
         
         result = results[0]
-        logger.debug(f"Full Jellyseerr response for '{title}': {json.dumps(result, indent=2)[:200]}")
+        logger.debug(f"Full Jellyseerr response for '{title}': {json.dumps(result, indent=2, default=str)[:200]}")
         return result
     except Exception as e:
         logger.warning(f"Error fetching Jellyseerr details for '{title}': {e}")
@@ -416,184 +451,291 @@ def request_on_jellyseerr(media_id, media_type):
 
 # --- New UI handlers using callbacks ---
 def handle_jellyseerr_request(recommendation):
-	"""Handles a request to Jellyseerr."""
-	media_id = recommendation.get("media_id")
-	media_type = recommendation.get("media_type")
-	title = recommendation.get("title")
-	if media_id and media_type:
-		if request_on_jellyseerr(media_id, media_type):
-			st.toast(f"Pyyntö nimikkeelle '{title}' tehty!", icon="✅")
-		# request_on_jellyseerr already shows error toast on failure
-	else:
-		st.toast(f"Ei löytynyt nimikkeelle '{title}' Jellyseeristä.", icon="⚠️")
+    """Handles a request to Jellyseerr."""
+    media_id = recommendation.get("media_id")
+    media_type = recommendation.get("media_type")
+    title = recommendation.get("title")
+    if media_id and media_type:
+        if request_on_jellyseerr(media_id, media_type):
+            st.toast(f"Pyyntö nimikkeelle '{title}' tehty!", icon="✅")
+        # request_on_jellyseerr already shows error toast on failure
+    else:
+        st.toast(f"Ei löytynyt nimikkeelle '{title}' Jellyseeristä.", icon="⚠️")
+
+def handle_search_result_add_watched(title, media_type):
+    """Adds title from search results to watched list."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    
+    type_key = "movies" if media_type.lower() == "movie" else "series"
+    if title not in user_data.get(type_key, []):
+        user_data.setdefault(type_key, []).append(title)
+        save_manual_db(db)
+        st.toast(f"✅ '{title}' lisätty katsottuihin!", icon="👁️")
+    else:
+        st.toast(f"ℹ️ '{title}' on jo listallasi.", icon="✅")
+
+def handle_search_result_request(media_id, media_type):
+    """Requests title from Jellyseerr."""
+    if request_on_jellyseerr(media_id, media_type):
+        st.toast(f"📥 Pyyntö lähetetty Jellyseerriin!", icon="✅")
+    else:
+        st.toast(f"❌ Pyynnön lähettäminen epäonnistui.", icon="🚨")
+
+def handle_search_result_watchlist(title, media_type):
+    """Adds title from search results to watchlist."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data.setdefault("watchlist", {"movies": [], "series": []})
+    
+    type_key = "movies" if media_type.lower() == "movie" else "series"
+    if title not in user_data["watchlist"].get(type_key, []):
+        user_data["watchlist"].setdefault(type_key, []).append(title)
+        save_manual_db(db)
+        st.toast(f"📋 '{title}' lisätty katselulistalle!", icon="🔖")
+    else:
+        st.toast(f"ℹ️ '{title}' on jo katselulistallasi.", icon="ℹ️")
+
+def handle_search_result_blacklist(title):
+    """Adds title from search results to 'do not recommend' list."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    
+    if title not in user_data.get("do_not_recommend", []):
+        user_data.setdefault("do_not_recommend", []).append(title)
+        save_manual_db(db)
+        st.toast(f"🚫 '{title}' lisätty älä-suosittele listalle!", icon="🚫")
+    else:
+        st.toast(f"ℹ️ '{title}' on jo älä-suosittele listalla.", icon="ℹ️")
 
 def handle_watched_add(title, media_type_from_radio="Elokuva"):
-	"""Marks a title as watched in the local DB."""
-	username = st.session_state.jellyfin_session['User']['Name']
-	db = load_manual_db()
-	# Ensure the user entry and all necessary keys exist with the correct type (list)
-	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": []})
-	user_data.setdefault("do_not_recommend", [])
+    """Marks a title as watched in the local DB."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    # Ensure the user entry and all necessary keys exist with the correct type (list)
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": []})
+    user_data.setdefault("do_not_recommend", [])
 
-	key = "movies" if media_type_from_radio == "Elokuva" else "series"
-	if title not in user_data.get(key, []):
-		user_data.setdefault(key, []).append(title)
-		save_manual_db(db)
-		# Remove from current recommendations shown in UI
-		st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
-		st.toast(f"'{title}' lisätty katsottuihin!", icon="👁️")
-	else:
-		st.toast(f"'{title}' on jo listallasi.", icon="✅")
-	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
+    key = "movies" if media_type_from_radio == "Elokuva" else "series"
+    if title not in user_data.get(key, []):
+        user_data.setdefault(key, []).append(title)
+        save_manual_db(db)
+        # Remove from current recommendations shown in UI
+        st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
+        st.toast(f"'{title}' lisätty katsottuihin!", icon="👁️")
+    else:
+        st.toast(f"'{title}' on jo listallasi.", icon="✅")
+    # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_watchlist_add(title_to_add):
-	"""Adds a title to the user's watchlist (from recommendations only)."""
-	username = st.session_state.jellyfin_session['User']['Name']
-	db = load_manual_db()
-	media_type_from_radio = st.session_state.get("media_type", "Elokuva")
+    """Adds a title to the user's watchlist (from recommendations only)."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
-	# Ensure the user entry and the 'watchlist' key exist with correct structure
-	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
-	user_data.setdefault("watchlist", {"movies": [], "series": []})
+    # Ensure the user entry and the 'watchlist' key exist with correct structure
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data.setdefault("watchlist", {"movies": [], "series": []})
 
-	key = "movies" if media_type_from_radio == "Elokuva" else "series"
-	if title_to_add not in user_data["watchlist"].get(key, []):
-		user_data["watchlist"].setdefault(key, []).append(title_to_add)
-		save_manual_db(db)
-		# Remove from current recommendations shown in UI
-		st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title_to_add]
-		st.toast(f"'{title_to_add}' lisätty katselulistalle!", icon="🔖")
-	else:
-		st.toast(f"'{title_to_add}' on jo katselulistallasi.", icon="ℹ️")
-	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
+    key = "movies" if media_type_from_radio == "Elokuva" else "series"
+    if title_to_add not in user_data["watchlist"].get(key, []):
+        user_data["watchlist"].setdefault(key, []).append(title_to_add)
+        save_manual_db(db)
+        # Remove from current recommendations shown in UI
+        st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title_to_add]
+        st.toast(f"'{title_to_add}' lisätty katselulistalle!", icon="🔖")
+    else:
+        st.toast(f"'{title_to_add}' on jo katselulistallasi.", icon="ℹ️")
+    # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_watchlist_remove(title_to_remove, media_type_key):
-	"""Removes a title from the user's watchlist."""
-	username = st.session_state.jellyfin_session['User']['Name']
-	db = load_manual_db()
+    """Removes a title from the user's watchlist."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
 
-	user_data = db.get(username, {})
-	watchlist = user_data.get("watchlist", {"movies": [], "series": []})
-	watchlist_list = watchlist.get(media_type_key, [])
+    user_data = db.get(username, {})
+    watchlist = user_data.get("watchlist", {"movies": [], "series": []})
+    watchlist_list = watchlist.get(media_type_key, [])
 
-	if title_to_remove in watchlist_list:
-		watchlist_list.remove(title_to_remove)
-		save_manual_db(db)
-		st.toast(f"'{title_to_remove}' poistettu katselulistalta.", icon="🗑️")
-	else:
-		st.toast(f"'{title_to_remove}' ei ole katselulistallasi.", icon="ℹ️")
-	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
+    if title_to_remove in watchlist_list:
+        watchlist_list.remove(title_to_remove)
+        save_manual_db(db)
+        st.toast(f"'{title_to_remove}' poistettu katselulistalta.", icon="🗑️")
+    else:
+        st.toast(f"'{title_to_remove}' ei ole katselulistallasi.", icon="ℹ️")
+    # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_blacklist_add(title):
-	"""Adds a title to the user's 'do not recommend' list and removes from watchlist if present."""
-	username = st.session_state.jellyfin_session['User']['Name']
-	db = load_manual_db()
-	media_type_from_radio = st.session_state.get("media_type", "Elokuva")
+    """Adds a title to the user's 'do not recommend' list and removes from watchlist if present."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    db = load_manual_db()
+    media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
-	# Ensure the user entry and the 'do_not_recommend' key (as a list) exist
-	user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
-	user_data.setdefault("do_not_recommend", [])
-	user_data.setdefault("watchlist", {"movies": [], "series": []})
+    # Ensure the user entry and the 'do_not_recommend' key (as a list) exist
+    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data.setdefault("do_not_recommend", [])
+    user_data.setdefault("watchlist", {"movies": [], "series": []})
 
-	if title not in user_data.get("do_not_recommend", []):
-		user_data["do_not_recommend"].append(title)
-		# Also remove from watchlist if present
-		watchlist = user_data.get("watchlist", {"movies": [], "series": []})
-		for media_key in ["movies", "series"]:
-			if title in watchlist.get(media_key, []):
-				watchlist[media_key].remove(title)
-				st.info(f"'{title}' poistettu myös katselulistalta.")
-				break
-		save_manual_db(db)
-		st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
-		st.toast(f"'{title}' lisätty estolistalle.", icon="🚫")
-	else:
-		st.toast(f"'{title}' on jo estolistallasi.", icon="⚠️")
-	# Note: no explicit st.rerun() — Streamlit reruns after callback automatically
+    if title not in user_data.get("do_not_recommend", []):
+        user_data["do_not_recommend"].append(title)
+        # Also remove from watchlist if present
+        watchlist = user_data.get("watchlist", {"movies": [], "series": []})
+        for media_key in ["movies", "series"]:
+            if title in watchlist.get(media_key, []):
+                watchlist[media_key].remove(title)
+                st.info(f"'{title}' poistettu myös katselulistalta.")
+                break
+        save_manual_db(db)
+        st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
+        st.toast(f"'{title}' lisätty estolistalle.", icon="🚫")
+    else:
+        st.toast(f"'{title}' on jo estolistallasi.", icon="⚠️")
+    # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 # --- Backup & Restore funktiot ---
 
 def export_user_data_as_json(username):
-	"""Exports user data as JSON string for download."""
-	db = load_manual_db()
-	user_data = db.get(username, {})
-	if not user_data:
-		st.error(f"Ei löytynyt tietoja käyttäjälle '{username}'")
-		return None
-	# Add export timestamp
-	export_data = {
-		"username": username,
-		"exported_at": str(__import__('datetime').datetime.now()),
-		"data": user_data
-	}
-	return json.dumps(export_data, ensure_ascii=False, indent=4)
+    """Exports user data as JSON string for download."""
+    db = load_manual_db()
+    user_data = db.get(username, {})
+    if not user_data:
+        st.error(f"Ei löytynyt tietoja käyttäjälle '{username}'")
+        return None
+    # Add export timestamp
+    export_data = {
+        "username": username,
+        "exported_at": str(__import__('datetime').datetime.now()),
+        "data": user_data
+    }
+    return json.dumps(export_data, ensure_ascii=False, indent=4)
+
+def merge_user_data_from_json(json_string, username):
+    """Merges imported user data with existing data."""
+    try:
+        logger.debug(f"Attempting to merge user data for: {username}")
+        import_data = json.loads(json_string)
+        if import_data.get("username") != username:
+            logger.warning(f"Merge failed: database belongs to different user")
+            st.error("❌ Tietokanta kuuluu eri käyttäjälle!")
+            return False
+        
+        db = load_manual_db()
+        current_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+        imported_data = import_data.get("data", {})
+        
+        # Merge movies (combine lists, remove duplicates)
+        merged_movies = list(set(current_data.get("movies", []) + imported_data.get("movies", [])))
+        # Merge series (combine lists, remove duplicates)
+        merged_series = list(set(current_data.get("series", []) + imported_data.get("series", [])))
+        # Merge do_not_recommend (combine lists, remove duplicates)
+        merged_blacklist = list(set(current_data.get("do_not_recommend", []) + imported_data.get("do_not_recommend", [])))
+        
+        # Merge watchlist (combine movies and series separately)
+        current_watchlist = current_data.get("watchlist", {"movies": [], "series": []})
+        imported_watchlist = imported_data.get("watchlist", {"movies": [], "series": []})
+        merged_watchlist = {
+            "movies": list(set(current_watchlist.get("movies", []) + imported_watchlist.get("movies", []))),
+            "series": list(set(current_watchlist.get("series", []) + imported_watchlist.get("series", [])))
+        }
+        
+        # Update database with merged data
+        db[username] = {
+            "movies": merged_movies,
+            "series": merged_series,
+            "do_not_recommend": merged_blacklist,
+            "watchlist": merged_watchlist,
+            "jellyfin_synced_at": current_data.get("jellyfin_synced_at"),
+            "jellyfin_total_watched": current_data.get("jellyfin_total_watched")
+        }
+        
+        save_manual_db(db)
+        logger.info(f"Successfully merged user data for: {username}")
+        st.success(f"✅ Tietokanta yhdistetty onnistuneesti käyttäjälle '{username}'")
+        st.info(f"📊 Yhdistetty: {len(merged_movies)} elokuvaa, {len(merged_series)} sarjaa")
+        return True
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error during merge: {e}")
+        st.error("❌ Virheellinen JSON-muoto!")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error merging user data: {e}")
+        st.error(f"❌ Virhe yhdistäessä tietokantaa: {e}")
+        return False
 
 def import_user_data_from_json(json_string, username):
-	"""Imports user data from JSON string."""
-	try:
-		logger.debug(f"Attempting to import user data for: {username}")
-		import_data = json.loads(json_string)
-		if import_data.get("username") != username:
-			logger.warning(f"Import failed: database belongs to different user")
-			st.error("❌ Tietokanta kuuluu eri käyttäjälle!")
-			return False
-		
-		db = load_manual_db()
-		db[username] = import_data.get("data", {})
-		save_manual_db(db)
-		logger.info(f"Successfully imported user data for: {username}")
-		st.success(f"✅ Tietokanta tuotu onnistuneesti käyttäjälle '{username}'")
-		return True
-	except json.JSONDecodeError as e:
-		logger.error(f"JSON decode error during import: {e}")
-		st.error("❌ Virheellinen JSON-muoto!")
-		return False
-	except Exception as e:
-		logger.error(f"Unexpected error importing user data: {e}")
-		st.error(f"❌ Virhe tuodessa tietokantaa: {e}")
-		return False
+    """Imports user data from JSON string (replaces existing data)."""
+    try:
+        logger.debug(f"Attempting to import user data for: {username}")
+        import_data = json.loads(json_string)
+        if import_data.get("username") != username:
+            logger.warning(f"Import failed: database belongs to different user")
+            st.error("❌ Tietokanta kuuluu eri käyttäjälle!")
+            return False
+        
+        db = load_manual_db()
+        db[username] = import_data.get("data", {})
+        save_manual_db(db)
+        logger.info(f"Successfully imported user data for: {username}")
+        st.success(f"✅ Tietokanta tuotu onnistuneesti käyttäjälle '{username}'")
+        return True
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error during import: {e}")
+        st.error("❌ Virheellinen JSON-muoto!")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error importing user data: {e}")
+        st.error(f"❌ Virhe tuodessa tietokantaa: {e}")
+        return False
 
 # --- PÄÄFUNKTIO, JOKA HOITAA SUOSITUSTEN HAUN ---
 def fetch_and_show_recommendations(media_type, genre):
-	"""Fetches recommendations using the watchlist as a strong signal."""
-	username = st.session_state.jellyfin_session['User']['Name']
-	
-	try:
-		with st.spinner("Haetaan katseluhistoriaa ja asetuksia..."):
-			logger.debug(f"Fetching recommendations for user: {username}, media_type: {media_type}, genre: {genre}")
-			jellyfin_watched = get_jellyfin_watched_titles()
-			db = load_manual_db()
-			user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
-			manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
-			# Correctly read the simple lists
-			blacklist = user_db_entry.get("do_not_recommend", [])
-			watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
-			# Flatten watchlist from both movies and series for the prompt
-			watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
-			full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
-			
-			logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
+    """Fetches recommendations using the watchlist as a strong signal."""
+    username = st.session_state.jellyfin_session['User']['Name']
+    
+    try:
+        with st.spinner("Haetaan katseluhistoriaa ja asetuksia..."):
+            logger.debug(f"Fetching recommendations for user: {username}, media_type: {media_type}, genre: {genre}")
+            jellyfin_watched = get_jellyfin_watched_titles()
+            db = load_manual_db()
+            user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+            manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
+            # Correctly read the simple lists
+            blacklist = user_db_entry.get("do_not_recommend", [])
+            watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
+            # Flatten watchlist from both movies and series for the prompt
+            watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
+            full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
+            
+            logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
 
-		with st.spinner("Kysytään suosituksia tekoälyltä..."):
-			prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
-			recommendations = get_gemini_recommendations(prompt)
+        with st.spinner("Kysytään suosituksia tekoälyltä..."):
+            logger.debug(f"Building prompt with: media_type={media_type}, genre={genre}, watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
+            prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
+            logger.debug(f"Prompt built, calling Gemini...")
+            recommendations = get_gemini_recommendations(prompt)
+            logger.debug(f"Gemini returned: {type(recommendations)} - {recommendations if recommendations else 'None/Empty'}")
 
-		if recommendations:
-			enriched_recommendations = []
-			with st.spinner("Tarkistetaan saatavuutta Jellyseeristä..."):
-				for rec in recommendations:
-					media_id, m_type = search_jellyseerr(rec['title'])
-					rec['media_id'] = media_id
-					rec['media_type'] = m_type
-					enriched_recommendations.append(rec)
-			st.session_state.recommendations = enriched_recommendations
-			logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")
-		else:
-			st.session_state.recommendations = None
-			logger.warning(f"No recommendations generated for user: {username}")
-	except Exception as e:
-		logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}")
-		st.error(f"❌ Virhe suositusten haussa: {str(e)[:150]}")
+        if recommendations:
+            enriched_recommendations = []
+            with st.spinner("Tarkistetaan saatavuutta Jellyseeristä..."):
+                for rec in recommendations:
+                    media_id, m_type = search_jellyseerr(rec['title'])
+                    rec['media_id'] = media_id
+                    rec['media_type'] = m_type
+                    enriched_recommendations.append(rec)
+            st.session_state.recommendations = enriched_recommendations
+            st.success(f"✅ {len(enriched_recommendations)} suositusta haettu onnistuneesti!")
+            logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")
+        else:
+            st.session_state.recommendations = []
+            st.warning("⚠️ Gemini ei palauttanut suosituksia. Yritä uudelleen.")
+            logger.warning(f"No recommendations generated for user: {username} - Gemini returned None or empty")
+    except Exception as e:
+        logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}")
+        st.error(f"❌ Virhe suositusten haussa: {str(e)[:150]}")
 
 # --- Streamlit Käyttöliittymä ---
 
@@ -732,281 +874,405 @@ if not st.session_state.jellyfin_session:
             if jellyfin_login(username, password):
                 st.rerun() # Päivittää sivun näyttääkseen päänäkymän
 else:
-	# Päänäkymä kirjautuneelle käyttäjälle
-	username = st.session_state.jellyfin_session['User']['Name']
+    # Päänäkymä kirjautuneelle käyttäjälle
+    username = st.session_state.jellyfin_session['User']['Name']
 
-	# Compact welcome + logout
-	col1, col2 = st.columns([0.8, 0.2])
-	with col1:
-		st.markdown(f"#### Tervetuloa, **{username}**! 👋")
-	with col2:
-		if st.button("Kirjaudu ulos", use_container_width=True, type="secondary"):
-			for key in list(st.session_state.keys()):
-				del st.session_state[key]
-			# Removed st.rerun() here — state change triggers rerun automatically
-	st.markdown("---")
+    # Compact welcome + logout
+    col1, col2 = st.columns([0.8, 0.2])
+    with col1:
+        st.markdown(f"#### Tervetuloa, **{username}**! 👋")
+    with col2:
+        if st.button("Kirjaudu ulos", use_container_width=True, type="secondary"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            # Removed st.rerun() here — state change triggers rerun automatically
+    st.markdown("---")
 
-	st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
-	
-	# Create tabs
-	tab1, tab2, tab3, tab4 = st.tabs(["🔍 Suositukset", "📝 Katselulista", "✏️ Merkitse", "💾 Tiedot"])
-	
-	# ===== TAB 1: SUOSITUKSET =====
-	with tab1:
-		st.header("🔎 Hae suosituksia")
-		media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type")
+    st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
+    
+    # Create tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["🔍 Suositukset", "📝 Katselulista", "✏️ Merkitse", "💾 Tiedot"])
 
-		# Genre-näkymässä näytetään emoji-ikoni käyttäen format_funcia (vakaampi kuin näyttötunnisteet)
-		genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
-		genre_emoji = {
-			"Kaikki": "🌐 Kaikki",
-			"Toiminta": "🔫 Toiminta",
-			"Komedia": "😂 Komedia",
-			"Draama": "🎭 Draama",
-			"Scifi": "🪐 Scifi",
-			"Fantasia": "🧙 Fantasia",
-			"Kauhu": "👻 Kauhu",
-			"Jännitys": "🔪 Jännitys",
-			"Romantiikka": "❤️ Romantiikka",
-		}
-		# Näytetään emojeilla rikastetut vaihtoehdot radiossa ja kartoitetaan takaisin sisäiseen arvoon
-		display_options = [genre_emoji[g] for g in genre_options]
-		# Käytetään pystyradiota, se käyttäytyy luotettavasti eri selaimissa ja ei riko valituksi näkyvyyttä
-		selected_display = st.radio("Valitse genre", display_options, index=0, key="genre_display_radio")
-		# Käännetään valinta takaisin sisäiseksi avaimeksi
-		reverse_map = {v: k for k, v in genre_emoji.items()}
-		genre = reverse_map.get(selected_display, "Kaikki")
+    # ===== TAB 1: SUOSITUKSET =====
+    with tab1:
+        st.header("🔎 Hae suosituksia")
+        media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type")
 
-		# Pääpainike: täysleveä, violetilla korostuksella (CSS-tyylit yllä)
-		if st.button("🎬 Hae suositukset", use_container_width=True):
-			fetch_and_show_recommendations(media_type, genre)
-		
-		st.divider()
-		
-		# SUOSITUSTEN NÄYTTÄMINEN (paremmat tiedot Jellyseerr:stä)
-		if 'recommendations' in st.session_state and st.session_state.recommendations:
-			st.subheader("✨ Tässä sinulle suosituksia:")
-			
-			for rec in st.session_state.recommendations[:]:
-				title = rec.get('title', 'N/A')
-				year = rec.get('year', 'N/A')
-				reason = rec.get('reason', 'N/A')
+        # Genre-näkymässä näytetään emoji-ikoni käyttäen format_funcia (vakaampi kuin näyttötunnisteet)
+        genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
+        genre_emoji = {
+            "Kaikki": "🌐 Kaikki",
+            "Toiminta": "🔫 Toiminta",
+            "Komedia": "😂 Komedia",
+            "Draama": "🎭 Draama",
+            "Scifi": "🪐 Scifi",
+            "Fantasia": "🧙 Fantasia",
+            "Kauhu": "👻 Kauhu",
+            "Jännitys": "🔪 Jännitys",
+            "Romantiikka": "❤️ Romantiikka",
+        }
+        # Näytetään emojeilla rikastetut vaihtoehdot radiossa ja kartoitetaan takaisin sisäiseen arvoon
+        display_options = [genre_emoji[g] for g in genre_options]
+        # Käytetään pystyradiota, se käyttäytyy luotettavasti eri selaimissa ja ei riko valituksi näkyvyyttä
+        selected_display = st.radio("Valitse genre", display_options, index=0, key="genre_display_radio")
+        # Käännetään valinta takaisin sisäiseksi avaimeksi
+        reverse_map = {v: k for k, v in genre_emoji.items()}
+        genre = reverse_map.get(selected_display, "Kaikki")
 
-				safe_key = f"{title}_{year}".replace(" ", "_")
+        # Pääpainike: täysleveä, violetilla korostuksella (CSS-tyylit yllä)
+        if st.button("🎬 Hae suositukset", use_container_width=True):
+            fetch_and_show_recommendations(media_type, genre)
+        
+        st.divider()
+        
+        # SUOSITUSTEN NÄYTTÄMINEN (paremmat tiedot Jellyseerr:stä)
+        if 'recommendations' in st.session_state and st.session_state.recommendations:
+            st.subheader("✨ Tässä sinulle suosituksia:")
+            
+            for idx, rec in enumerate(st.session_state.recommendations[:]):
+                title = rec.get('title', 'N/A')
+                year = rec.get('year', 'N/A')
+                reason = rec.get('reason', 'N/A')
+                media_id = rec.get('media_id')
+                media_type = rec.get('media_type', 'unknown')
+                media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
-				st.markdown(f"<div class='recommendation-card' id='rec_{safe_key}'>", unsafe_allow_html=True)
+                # Hae yksityiskohtaiset tiedot Jellyseerr:stä
+                jellyseerr_details = get_jellyseerr_details(title)
+                
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([1, 3, 1])
+                    
+                    # Juliste
+                    with col1:
+                        poster_path = jellyseerr_details.get("posterPath") if jellyseerr_details else None
+                        if poster_path and JELLYSEERR_URL:
+                            base_url = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+                            poster_url = f"{base_url}/imageproxy/tmdb/t/p/w300_and_h450_face{poster_path}"
+                            logger.debug(f"Poster URL: {poster_url}")
+                            
+                            try:
+                                poster_response = requests.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
+                                logger.debug(f"Response status: {poster_response.status_code}, content type: {poster_response.headers.get('content-type')}")
+                                if poster_response.status_code == 200:
+                                    image = Image.open(BytesIO(poster_response.content))
+                                    st.image(image, use_container_width=True)
+                                else:
+                                    st.write("📷 Ei julistetta")
+                            except Exception as e:
+                                logger.debug(f"Could not load poster: {e}")
+                                st.write("📷 Ei julistetta")
+                        else:
+                            st.write("📷 Ei julistetta")
+                    
+                    # Tiedot
+                    with col2:
+                        st.markdown(f"**{title}** ({year})")
+                        if jellyseerr_details:
+                            rating = jellyseerr_details.get("voteAverage", "N/A")
+                            overview = jellyseerr_details.get("overview", "")
+                            
+                            if rating != "N/A":
+                                st.caption(f"⭐ {rating}/10")
+                            if overview:
+                                st.write(overview[:300] + "..." if len(overview) > 300 else overview)
+                        else:
+                            st.caption(f"📅 Vuosi: {year}")
+                        
+                        st.caption(f"💡 {reason[:300]}..." if len(reason) > 300 else f"💡 {reason}")
+                    
+                    # Painikkeet (4 vaihtoehtoa)
+                    with col3:
+                        st.write("**Toiminnot:**")
+                        
+                        # Hae nykyisen käyttäjän tiedot
+                        username = st.session_state.jellyfin_session['User']['Name']
+                        db = load_manual_db()
+                        user_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+                        type_key = "movies" if media_type and media_type.lower() == "movie" else "series"
+                        
+                        # Tarkista statukset
+                        is_watched = title in user_data.get(type_key, [])
+                        is_in_watchlist = title in user_data.get("watchlist", {}).get(type_key, [])
+                        is_blacklisted = title in user_data.get("do_not_recommend", [])
+                        
+                        # Row 1: Lisää katsottuihin
+                        watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
+                        watched_disabled = is_watched
+                        if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", use_container_width=True,
+                                      disabled=watched_disabled,
+                                      help="Lisää katsottuihin elokuviin/sarjoihin" if not watched_disabled else "Tämä on jo katsottu"):
+                            handle_search_result_add_watched(title, media_type if media_type else media_type_from_radio)
+                            st.session_state.recommendations = [r for r in st.session_state.recommendations if r.get('title') != title]
+                            st.rerun()
+                        
+                        # Row 2: Pyydä Jellyseerristä
+                        if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", use_container_width=True,
+                                      help="Pyydä Jellyseerristä ladattavaksi"):
+                            handle_search_result_request(media_id, media_type if media_type else media_type_from_radio)
+                            st.session_state.recommendations = [r for r in st.session_state.recommendations if r.get('title') != title]
+                            st.rerun()
+                        
+                        # Row 3: Lisää katselulistalle
+                        watchlist_label = "✅ Katselulista" if is_in_watchlist else "📋 Katselulista"
+                        watchlist_disabled = is_in_watchlist
+                        if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", use_container_width=True,
+                                      disabled=watchlist_disabled,
+                                      help="Lisää katselulistalle" if not watchlist_disabled else "Tämä on jo katselulistallasi"):
+                            handle_search_result_watchlist(title, media_type if media_type else media_type_from_radio)
+                            st.session_state.recommendations = [r for r in st.session_state.recommendations if r.get('title') != title]
+                            st.rerun()
+                        
+                        # Row 4: Älä suosittele
+                        blacklist_label = "✅ Estetty" if is_blacklisted else "🚫 Älä suosittele"
+                        blacklist_disabled = is_blacklisted
+                        if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", use_container_width=True,
+                                      disabled=blacklist_disabled,
+                                      help="Lisää älä-suosittele listalle" if not blacklist_disabled else "Tämä on jo estolistalla"):
+                            handle_search_result_blacklist(title)
+                            st.session_state.recommendations = [r for r in st.session_state.recommendations if r.get('title') != title]
+                            st.rerun()
 
-				# Hae yksityiskohtaiset tiedot Jellyseerr:stä
-				jellyseerr_details = get_jellyseerr_details(title)
-				
-				# Responsive layout: pieni ruutu (mobiilit) vs iso ruutu (desktop)
-				col_poster, col_info = st.columns([0.8, 2.2])
-				
-				# Poster
-				with col_poster:
-					if jellyseerr_details and "posterPath" in jellyseerr_details and jellyseerr_details["posterPath"] and JELLYSEERR_URL:
-						poster_path = jellyseerr_details["posterPath"]
-						base_url = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
-						poster_url = f"{base_url}/imageproxy/tmdb/t/p/w300_and_h450_face{poster_path}"
-						
-						try:
-							poster_response = requests.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
-							if poster_response.status_code == 200:
-								image = Image.open(BytesIO(poster_response.content))
-								st.image(image, width=130)
-							else:
-								st.info("📷")
-						except:
-							st.info("📷")
-					else:
-						st.info("📷")
-				
-				# Tiedot
-				with col_info:
-					# Otsikko
-					st.subheader(title)
-					
-					# Kompakti rivittäin: vuosi ja rating
-					info_cols = st.columns([1, 1])
-					
-					with info_cols[0]:
-						if jellyseerr_details:
-							release_date = jellyseerr_details.get("releaseDate") or jellyseerr_details.get("firstAirDate") or "N/A"
-							display_year = release_date[:4] if release_date != "N/A" else year
-						else:
-							display_year = year
-						st.caption(f"📅 **{display_year}**")
-					
-					with info_cols[1]:
-						if jellyseerr_details and jellyseerr_details.get("voteAverage"):
-							rating = jellyseerr_details.get("voteAverage")
-							st.caption(f"⭐ **{rating:.1f}/10**")
-					
-					# Kuvaus
-					if jellyseerr_details:
-						overview = jellyseerr_details.get("overview", "")
-						if overview:
-							st.caption(f"_{overview[:120]}..._" if len(overview) > 120 else f"_{overview}_")
-					
-					# Perustelu AI:lta (pienellä koolla)
-					st.caption(f"💡 {reason[:150]}..." if len(reason) > 150 else f"💡 {reason}")
-				
-				st.markdown("</div>", unsafe_allow_html=True)
-				
-				# Toimintonapit - kompaktit
-				b1, b2, b3, b4 = st.columns([1, 1, 1, 1])
+    # ===== TAB 2: KATSELULISTA =====
+    with tab2:
+        st.header("📝 Oma katselulistani")
+        db = load_manual_db()
+        user_data = db.get(username, {})
+        watchlist = user_data.get("watchlist", {"movies": [], "series": []})
+        
+        # Handle migration: if watchlist is a list, convert to dict structure
+        if isinstance(watchlist, list):
+            watchlist = {"movies": [], "series": []}
+            user_data["watchlist"] = watchlist
+            save_manual_db(db)
+        
+        watchlist_movies = watchlist.get("movies", [])
+        watchlist_series = watchlist.get("series", [])
 
-				with b1:
-					b1.button("Pyydä Jellyseerristä", key=f"request_{safe_key}",
-								  on_click=handle_jellyseerr_request, args=(rec,), use_container_width=True)
+        if not watchlist_movies and not watchlist_series:
+            st.info("Katselulistasi on tyhjä. Lisää nimikkeitä suosituksista!")
+        else:
+            # Movies section
+            if watchlist_movies:
+                st.write("**🎬 Elokuvat:**")
+                for idx, wl_title in enumerate(watchlist_movies):
+                    col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
+                    with col1:
+                        st.write(f"• {wl_title}")
+                    with col2:
+                        if st.button("Pyydä", key=f"request_watchlist_movie_{idx}",
+                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
+                            pass  # Callback handles the request
+                    with col3:
+                        if st.button("Poista", key=f"remove_watchlist_movie_{idx}",
+                                     on_click=handle_watchlist_remove, args=(wl_title, "movies"), use_container_width=True):
+                            pass  # Callback handles the removal
+                st.markdown("")  # spacing
 
-				media_type_from_radio = st.session_state.get("media_type", "Elokuva")
-				with b2:
-					b2.button("👁️ Katsottu", key=f"watched_{safe_key}",
-								  on_click=handle_watched_add, args=(title, media_type_from_radio), use_container_width=True)
+            # Series section
+            if watchlist_series:
+                st.write("**📺 Sarjat:**")
+                for idx, wl_title in enumerate(watchlist_series):
+                    col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
+                    with col1:
+                        st.write(f"• {wl_title}")
+                    with col2:
+                        if st.button("Pyydä", key=f"request_watchlist_series_{idx}",
+                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
+                            pass  # Callback handles the request
+                    with col3:
+                        if st.button("Poista", key=f"remove_watchlist_series_{idx}",
+                                     on_click=handle_watchlist_remove, args=(wl_title, "series"), use_container_width=True):
+                            pass  # Callback handles the removal
 
-				with b3:
-					b3.button("🚫 Älä suosittele", key=f"block_{safe_key}",
-								  on_click=handle_blacklist_add, args=(title,), use_container_width=True)
+    # ===== TAB 3: MERKITSE =====
+    with tab3:
+        if not st.session_state.jellyfin_session:
+            st.warning("⚠️ Kirjaudu sisään jatkaaksesi.")
+        else:
+            st.header("✏️ Merkitse nimike katsottuksi manuaalisesti")
+            st.write("Hae Jellyseerrista tai lisää nimikkeitä, joita et ole katsellut Jellyfinissä.")
+            
+            # Jellyseerr-hakuosio
+            st.subheader("🔍 Hae Jellyseerrista")
+            search_col1, search_col2 = st.columns([3, 1])
+            with search_col1:
+                search_query = st.text_input("Elokuvan tai sarjan nimi", key="jellyseerr_search_input", placeholder="Kirjoita nimike...")
+            with search_col2:
+                search_button = st.button("🔎 Hae", use_container_width=True)
+            
+            if search_button and search_query:
+                with st.spinner("🔍 Etsitään Jellyseerrista..."):
+                    results = search_jellyseerr_advanced(search_query)
+                    if results:
+                        st.session_state.search_results = results
+                        st.success(f"✅ Löytyi {len(results)} tulosta!")
+                    else:
+                        st.warning(f"❌ Ei löytynyt tuloksia haulle: '{search_query}'")
+            
+            # Näytä hakutulokset
+            if st.session_state.search_results:
+                st.divider()
+                st.subheader("📺 Hakutulokset")
+                
+                for idx, result in enumerate(st.session_state.search_results):
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([1, 3, 1])
+                        
+                        # Juliste
+                        with col1:
+                            poster_path = result.get("posterPath")
+                            if poster_path and JELLYSEERR_URL:
+                                base_url = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+                                poster_url = f"{base_url}/imageproxy/tmdb/t/p/w300_and_h450_face{poster_path}"
+                                logger.debug(f"Poster URL: {poster_url}")
+                                
+                                try:
+                                    poster_response = requests.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
+                                    logger.debug(f"Response status: {poster_response.status_code}, content type: {poster_response.headers.get('content-type')}")
+                                    if poster_response.status_code == 200:
+                                        image = Image.open(BytesIO(poster_response.content))
+                                        st.image(image, use_container_width=True)
+                                    else:
+                                        st.write("📷 Ei julistetta")
+                                except Exception as e:
+                                    logger.debug(f"Could not load poster: {e}")
+                                    st.write("📷 Ei julistetta")
+                            else:
+                                st.write("📷 Ei julistetta")
+                        
+                        # Tiedot
+                        with col2:
+                            # API palauttaa 'name' eikä 'title', 'firstAirDate' eikä 'releaseDate'
+                            title = result.get("name") or result.get("title", "N/A")
+                            media_type = result.get("mediaType", "unknown")
+                            release_date = result.get("firstAirDate") or result.get("releaseDate", "")
+                            year = release_date[:4] if release_date else "N/A"
+                            overview = result.get("overview", "")
+                            vote_average = result.get("voteAverage", "N/A")
+                            
+                            st.markdown(f"**{title}** ({year})")
+                            if media_type:
+                                type_badge = "🎬 Elokuva" if media_type.lower() == "movie" else "📺 Sarja"
+                                st.caption(f"{type_badge} • ⭐ {vote_average}/10")
+                            if overview:
+                                st.write(overview[:300] + "..." if len(overview) > 300 else overview)
+                        
+                        # Painikkeet (4 vaihtoehtoa)
+                        with col3:
+                            media_id = result.get("id")
+                            st.write("**Toiminnot:**")
+                            
+                            # Hae nykyisen käyttäjän tiedot
+                            username = st.session_state.jellyfin_session['User']['Name']
+                            db = load_manual_db()
+                            user_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+                            type_key = "movies" if media_type.lower() == "movie" else "series"
+                            
+                            # Tarkista statukset
+                            is_watched = title in user_data.get(type_key, [])
+                            is_in_watchlist = title in user_data.get("watchlist", {}).get(type_key, [])
+                            is_blacklisted = title in user_data.get("do_not_recommend", [])
+                            
+                            # Row 1: Lisää katsottuihin
+                            watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
+                            watched_disabled = is_watched
+                            if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", use_container_width=True,
+                                          disabled=watched_disabled,
+                                          help="Lisää katsottuihin elokuviin/sarjoihin" if not watched_disabled else "Tämä on jo katsottu"):
+                                handle_search_result_add_watched(title, media_type)
+                                st.rerun()
+                            
+                            # Row 2: Pyydä Jellyseerristä
+                            if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", use_container_width=True,
+                                          help="Pyydä Jellyseerristä ladattavaksi"):
+                                handle_search_result_request(media_id, media_type)
+                            
+                            # Row 3: Lisää katselulistalle
+                            watchlist_label = "✅ Katselulista" if is_in_watchlist else "📋 Katselulista"
+                            watchlist_disabled = is_in_watchlist
+                            if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", use_container_width=True,
+                                          disabled=watchlist_disabled,
+                                          help="Lisää katselulistalle" if not watchlist_disabled else "Tämä on jo katselulistallasi"):
+                                handle_search_result_watchlist(title, media_type)
+                                st.rerun()
+                            
+                            # Row 4: Älä suosittele
+                            blacklist_label = "✅ Estetty" if is_blacklisted else "🚫 Älä suosittele"
+                            blacklist_disabled = is_blacklisted
+                            if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", use_container_width=True,
+                                          disabled=blacklist_disabled,
+                                          help="Lisää älä-suosittele listalle" if not blacklist_disabled else "Tämä on jo estolistalla"):
+                                handle_search_result_blacklist(title)
+                                st.rerun()
 
-				with b4:
-					b4.button("🔖 Lisää katselulistalle", key=f"watchlist_{safe_key}",
-								  on_click=handle_watchlist_add, args=(title,), use_container_width=True)
-
-				st.divider()
-	
-	# ===== TAB 2: KATSELULISTA =====
-	with tab2:
-		st.header("📝 Oma katselulistani")
-		db = load_manual_db()
-		user_data = db.get(username, {})
-		watchlist = user_data.get("watchlist", {"movies": [], "series": []})
-		
-		# Handle migration: if watchlist is a list, convert to dict structure
-		if isinstance(watchlist, list):
-			watchlist = {"movies": [], "series": []}
-			user_data["watchlist"] = watchlist
-			save_manual_db(db)
-		
-		watchlist_movies = watchlist.get("movies", [])
-		watchlist_series = watchlist.get("series", [])
-
-		if not watchlist_movies and not watchlist_series:
-			st.info("Katselulistasi on tyhjä. Lisää nimikkeitä suosituksista!")
-		else:
-			# Movies section
-			if watchlist_movies:
-				st.write("**🎬 Elokuvat:**")
-				for idx, wl_title in enumerate(watchlist_movies):
-					col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
-					with col1:
-						st.write(f"• {wl_title}")
-					with col2:
-						if st.button("Pyydä", key=f"request_watchlist_movie_{idx}",
-									 on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
-							pass  # Callback handles the request
-					with col3:
-						if st.button("Poista", key=f"remove_watchlist_movie_{idx}",
-									 on_click=handle_watchlist_remove, args=(wl_title, "movies"), use_container_width=True):
-							pass  # Callback handles the removal
-				st.markdown("")  # spacing
-
-			# Series section
-			if watchlist_series:
-				st.write("**📺 Sarjat:**")
-				for idx, wl_title in enumerate(watchlist_series):
-					col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
-					with col1:
-						st.write(f"• {wl_title}")
-					with col2:
-						if st.button("Pyydä", key=f"request_watchlist_series_{idx}",
-									 on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
-							pass  # Callback handles the request
-					with col3:
-						if st.button("Poista", key=f"remove_watchlist_series_{idx}",
-									 on_click=handle_watchlist_remove, args=(wl_title, "series"), use_container_width=True):
-							pass  # Callback handles the removal
-	
-	# ===== TAB 3: MERKITSE =====
-	with tab3:
-		st.header("✏️ Merkitse nimike katsottuksi manuaalisesti")
-		st.write("Lisää nimikkeitä, joita et ole katsellut Jellyfinissä.")
-		
-		with st.form("manual_add_form", clear_on_submit=True):
-			manual_title = st.text_input("Elokuvan tai sarjan nimi")
-			manual_type = st.radio("Tyyppi", ["Elokuva", "Sarja"], key="manual_type", horizontal=True)
-			if st.form_submit_button("Lisää katsottuihin"):
-				if manual_title:
-					db = load_manual_db()
-					# Varmistetaan, että käyttäjällä on oma osio tietokannassa
-					if username not in db:
-						db[username] = {"movies": [], "series": []}
-					
-					# Lisätään nimike oikeaan listaan
-					type_key = "movies" if manual_type == "Elokuva" else "series"
-					if manual_title not in db[username][type_key]:
-						db[username][type_key].append(manual_title)
-						save_manual_db(db)
-						st.toast(f"'{manual_title}' lisätty katsottuihin!")
-					else:
-						st.toast(f"'{manual_title}' on jo listallasi.")
-	
-	# ===== TAB 4: TIEDOT =====
-	with tab4:
-		st.header("💾 Tietokannan Varmuuskopio & Tiedot")
-		st.write("Vie ja palauta tietokantasi tai tarkastele tilastoja.")
-		
-		st.subheader("📊 Tilastot")
-		db = load_manual_db()
-		user_data = db.get(username, {})
-		
-		stat_col1, stat_col2, stat_col3 = st.columns(3)
-		with stat_col1:
-			movies_count = len(user_data.get("movies", []))
-			st.metric("🎬 Elokuvat", movies_count)
-		with stat_col2:
-			series_count = len(user_data.get("series", []))
-			st.metric("📺 Sarjat", series_count)
-		with stat_col3:
-			blacklist_count = len(user_data.get("do_not_recommend", []))
-			st.metric("🚫 Estetyt", blacklist_count)
-		
-		st.divider()
-		st.subheader("📥/📤 Varmuuskopio")
-		st.write("Vie tietokantasi varmuuskopioksi tai palauta aiemmin viety varmuuskopio.")
-		
-		col1, col2 = st.columns([1, 1])
-		
-		# Export
-		with col1:
-			st.write("**📥 Vie varmuuskopio**")
-			if st.button("⬇️ Lataa varmuuskopio", use_container_width=True):
-				backup_json = export_user_data_as_json(username)
-				if backup_json:
-					st.download_button(
-						label="💾 Lataa JSON-tiedosto",
-						data=backup_json,
-						file_name=f"jellyfin_ai_recommender_backup_{username}_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-						mime="application/json",
-						use_container_width=True
-					)
-		
-		# Import
-		with col2:
-			st.write("**📤 Palauta varmuuskopio**")
-			uploaded_file = st.file_uploader(
-				"Valitse varmuuskopiotiedosto",
-				type=["json"],
-				key="backup_uploader",
-				help="Valitse aiemmin viety .json-tiedosto"
-			)
-			
-			if uploaded_file is not None:
-				try:
-					backup_content = uploaded_file.read().decode("utf-8")
-					if st.button("🔄 Palauta tietokanta", use_container_width=True):
-						if import_user_data_from_json(backup_content, username):
-							st.rerun()
-				except Exception as e:
-					st.error(f"Virhe tiedostoa luettaessa: {e}")
+    # ===== TAB 4: TIEDOT =====
+    with tab4:
+        st.header("💾 Tietokannan Varmuuskopio & Tiedot")
+        st.write("Vie ja palauta tietokantasi tai tarkastele tilastoja.")
+        
+        st.subheader("📊 Tilastot")
+        db = load_manual_db()
+        user_data = db.get(username, {})
+        
+        stat_col1, stat_col2, stat_col3 = st.columns(3)
+        with stat_col1:
+            movies_count = len(user_data.get("movies", []))
+            st.metric("🎬 Elokuvat", movies_count)
+        with stat_col2:
+            series_count = len(user_data.get("series", []))
+            st.metric("📺 Sarjat", series_count)
+        with stat_col3:
+            blacklist_count = len(user_data.get("do_not_recommend", []))
+            st.metric("🚫 Estetyt", blacklist_count)
+        
+        st.divider()
+        st.subheader("📥/📤 Varmuuskopio")
+        st.write("Vie tietokantasi varmuuskopioksi tai palauta aiemmin viety varmuuskopio.")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        # Export
+        with col1:
+            st.write("**📥 Vie varmuuskopio**")
+            if st.button("⬇️ Lataa varmuuskopio", use_container_width=True):
+                backup_json = export_user_data_as_json(username)
+                if backup_json:
+                    st.download_button(
+                        label="💾 Lataa JSON-tiedosto",
+                        data=backup_json,
+                        file_name=f"jellyfin_ai_recommender_backup_{username}_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+        
+        # Import
+        with col2:
+            st.write("**📤 Palauta varmuuskopio**")
+            uploaded_file = st.file_uploader(
+                "Valitse varmuuskopiotiedosto",
+                type=["json"],
+                key="backup_uploader",
+                help="Valitse aiemmin viety .json-tiedosto"
+            )
+            
+            if uploaded_file is not None:
+                try:
+                    backup_content = uploaded_file.read().decode("utf-8")
+                    
+                    # Ask user whether to merge or replace
+                    st.write("**Valitse toiminto:**")
+                    col_replace, col_merge = st.columns(2)
+                    
+                    with col_replace:
+                        if st.button("🔄 Korvaa tietokanta", use_container_width=True, key="btn_replace"):
+                            if import_user_data_from_json(backup_content, username):
+                                st.rerun()
+                    
+                    with col_merge:
+                        if st.button("🔗 Yhdistä tietokannat", use_container_width=True, key="btn_merge"):
+                            if merge_user_data_from_json(backup_content, username):
+                                st.rerun()
+                except Exception as e:
+                    st.error(f"Virhe tiedostoa luettaessa: {e}")
 

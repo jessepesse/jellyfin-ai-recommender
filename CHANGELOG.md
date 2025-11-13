@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2-alpha] - 2025-11-13
+
+### Added
+- **Jellyseerr Search Integration for Manual Media Tracking** (Tab 3 - Merkitse)
+  - Search functionality to query Jellyseerr by movie/series name
+  - Display search results with poster images, ratings, descriptions, and media type
+  - Responsive 3-column layout: poster (col1), details (col2), actions (col3)
+  - One-click add to watched/tracked when selecting from search results
+  - One-click request to Jellyseerr for downloading media
+  - One-click add to watchlist from search results
+  - One-click add to "do not recommend" list from search results
+  - Status-aware buttons that show current state (e.g., "✅ Katsottu" if already watched)
+  - Search result caching with 6-hour TTL for improved performance
+  - Automatic result count feedback and "no results" warning
+
+- **Recommendation Card Improvements** (Tab 1 - Suositukset)
+  - Enhanced card layout matching Tab 3 search results structure
+  - Automatic card removal when marked as watched, added to watchlist, or blocked
+  - Consistent button labeling and behavior across all recommendation displays
+  - Proper result filtering after user actions
+  - Seamless UI updates without page refresh delays
+
+### Fixed
+- Recommendation cards now properly display and update without UI layout breaking
+- Button click handlers now properly remove cards from display after action
+- Search results styling now consistent with recommendation card styling
+- Poster image error handling with proper logging and fallback display
+
+### Changed
+- Tab 3 (Merkitse) now primary interface for manual media tracking with visual search
+- Unified button layout across Tab 1 (recommendations) and Tab 3 (search results)
+- Improved user feedback through result counts and status indicators
+- Enhanced logging for search operations and result processing
+
+## [Unreleased]
+
+### Planned
+- **Localization (i18n)**
+  - Extract all UI strings to translation files
+  - Implement language selection in settings
+  - Add Finnish (FI) translations
+  - Add English (EN) translations
+  - Add support for additional languages
+  - Localize AI prompt templates for different languages
+  - Use `streamlit-i18n` or similar library for dynamic translation
+
+- **Caching Recommendations**
+  - Implement recommendation caching to reduce API calls
+  - Add cache expiry logic (24-hour default)
+  - Force refresh option for users
+
+- **Improved UI/UX**
+  - Add recommendation history tracking
+  - Create wishlist feature
+  - Better visualization of recommendation reasons
+
 ## [0.2.1-alpha] - 2025-11-13
 
 ### Added
@@ -47,6 +103,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - One-click selection and add to watched list from search results
   - Improved manual tracking workflow with visual media selection
   - Search result caching for better performance
+
+- **Database Persistence During Updates**
+  - Volume mounting strategy for Docker container persistence (via bind mount in docker-compose.yml)
+  - Automatic backup procedures (database.json.backup created before each write)
+  - Comprehensive persistence guide (DATABASE_PERSISTENCE.md)
+  - Data recovery and migration procedures
+  - Troubleshooting guide for database issues
+  - Best practices for backup and disaster recovery
+
+- **Backup Merge Functionality**
+  - Two import options in Tab 4 (Tiedot):
+    * 🔄 Replace: Overwrite current database with backup
+    * 🔗 Merge: Combine backup with current database (removes duplicates)
+  - Consolidate multiple backups into single database
+  - Recover lost data while preserving recent additions
+  - Automatic deduplication when merging
 
 ## [0.2.0-alpha] - 2025-11-12
 

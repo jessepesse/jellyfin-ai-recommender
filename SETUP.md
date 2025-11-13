@@ -65,6 +65,8 @@ services:
     restart: unless-stopped
 ```
 
+**Important:** The `./database.json:/app/database.json` volume mount ensures your data persists across container updates. See [DATABASE_PERSISTENCE.md](DATABASE_PERSISTENCE.md) for detailed information about data persistence and backup strategies.
+
 ## Step 4: Start Application
 
 ```bash
