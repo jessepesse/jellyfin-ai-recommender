@@ -143,7 +143,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-database.json
 
 # Streamlit
 .streamlit/secrets.toml

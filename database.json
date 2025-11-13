@@ -1,0 +1,58 @@
+{
+    "jesse": {
+        "movies": [
+            "Dune",
+            "Interstellar",
+            "Arrival"
+        ],
+        "series": [
+            "Dark",
+            "Severance",
+            "Andor"
+        ],
+        "do_not_recommend": [
+            "Arcane",
+            "Altered Carbon"
+        ],
+        "watchlist": {
+            "movies": [
+                "Your Name.",
+                "Ghost in the Shell"
+            ],
+            "series": [
+                "The Expanse",
+                "Detectorists"
+            ]
+        },
+        "jellyfin_synced_at": "2025-11-13 18:50:43.982920",
+        "jellyfin_total_watched": 15
+    },
+    "testuser": {
+        "movies": [
+            "The Matrix",
+            "Inception",
+            "Blade Runner 2049"
+        ],
+        "series": [
+            "Stranger Things",
+            "The Crown",
+            "Breaking Bad"
+        ],
+        "do_not_recommend": [
+            "Twilight",
+            "The Room"
+        ],
+        "watchlist": {
+            "movies": [
+                "Oppenheimer",
+                "Barbie"
+            ],
+            "series": [
+                "Westworld",
+                "Chernobyl"
+            ]
+        },
+        "jellyfin_synced_at": "2025-11-13 19:00:00.000000",
+        "jellyfin_total_watched": 20
+    }
+}

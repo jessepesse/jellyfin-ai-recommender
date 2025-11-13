@@ -23,7 +23,11 @@ services:
     # - images/: caches poster images from Jellyseerr
     # - .streamlit/: configuration files for Streamlit
     volumes:
-      - ./database.json:/app/database.json
+      - type: bind
+        source: ./database.json
+        target: /app/database.json
+        bind:
+          create_host_path: true
       - ./images:/app/images
       - ./.streamlit:/app/.streamlit
     
