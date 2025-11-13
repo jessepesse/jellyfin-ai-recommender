@@ -7,6 +7,8 @@ import time
 from dotenv import load_dotenv
 from urllib.parse import quote
 from functools import wraps
+from PIL import Image
+from io import BytesIO
 
 load_dotenv()
 
@@ -344,6 +346,31 @@ def search_jellyseerr(title: str):
     except Exception as e:
         logger.error(f"Unexpected error searching Jellyseerr: {e}")
         return None, None
+
+def get_jellyseerr_details(title: str):
+    """Hakee Jellyseerr:stä yksityiskohtaiset tiedot elokuvasta/sarjasta."""
+    if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
+        return None
+    
+    try:
+        encoded_title = quote(title or "")
+        base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+        endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
+        
+        logger.debug(f"Fetching details from Jellyseerr for: {title}")
+        resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        resp.raise_for_status()
+        
+        results = resp.json().get("results", [])
+        if not results:
+            return None
+        
+        result = results[0]
+        logger.debug(f"Full Jellyseerr response for '{title}': {json.dumps(result, indent=2)[:200]}")
+        return result
+    except Exception as e:
+        logger.warning(f"Error fetching Jellyseerr details for '{title}': {e}")
+        return None
 
 @retry_with_backoff(max_attempts=2, initial_delay=1)
 def request_on_jellyseerr(media_id, media_type):
@@ -719,58 +746,138 @@ else:
 			# Removed st.rerun() here — state change triggers rerun automatically
 	st.markdown("---")
 
-	with st.expander("📖 Merkitse nimike katsottuksi manuaalisesti"):
-		with st.form("manual_add_form", clear_on_submit=True):
-			manual_title = st.text_input("Elokuvan tai sarjan nimi")
-			manual_type = st.radio("Tyyppi", ["Elokuva", "Sarja"], key="manual_type", horizontal=True)
-			if st.form_submit_button("Lisää katsottuihin"):
-				if manual_title:
-					db = load_manual_db()
-					# Varmistetaan, että käyttäjällä on oma osio tietokannassa
-					if username not in db:
-						db[username] = {"movies": [], "series": []}
-					
-					# Lisätään nimike oikeaan listaan
-					type_key = "movies" if manual_type == "Elokuva" else "series"
-					if manual_title not in db[username][type_key]:
-						db[username][type_key].append(manual_title)
-						save_manual_db(db)
-						st.toast(f"'{manual_title}' lisätty katsottuihin!")
+	st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
+	
+	# Create tabs
+	tab1, tab2, tab3, tab4 = st.tabs(["🔍 Suositukset", "📝 Katselulista", "✏️ Merkitse", "💾 Tiedot"])
+	
+	# ===== TAB 1: SUOSITUKSET =====
+	with tab1:
+		st.header("🔎 Hae suosituksia")
+		media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type")
+
+		# Genre-näkymässä näytetään emoji-ikoni käyttäen format_funcia (vakaampi kuin näyttötunnisteet)
+		genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
+		genre_emoji = {
+			"Kaikki": "🌐 Kaikki",
+			"Toiminta": "🔫 Toiminta",
+			"Komedia": "😂 Komedia",
+			"Draama": "🎭 Draama",
+			"Scifi": "🪐 Scifi",
+			"Fantasia": "🧙 Fantasia",
+			"Kauhu": "👻 Kauhu",
+			"Jännitys": "🔪 Jännitys",
+			"Romantiikka": "❤️ Romantiikka",
+		}
+		# Näytetään emojeilla rikastetut vaihtoehdot radiossa ja kartoitetaan takaisin sisäiseen arvoon
+		display_options = [genre_emoji[g] for g in genre_options]
+		# Käytetään pystyradiota, se käyttäytyy luotettavasti eri selaimissa ja ei riko valituksi näkyvyyttä
+		selected_display = st.radio("Valitse genre", display_options, index=0, key="genre_display_radio")
+		# Käännetään valinta takaisin sisäiseksi avaimeksi
+		reverse_map = {v: k for k, v in genre_emoji.items()}
+		genre = reverse_map.get(selected_display, "Kaikki")
+
+		# Pääpainike: täysleveä, violetilla korostuksella (CSS-tyylit yllä)
+		if st.button("🎬 Hae suositukset", use_container_width=True):
+			fetch_and_show_recommendations(media_type, genre)
+		
+		st.divider()
+		
+		# SUOSITUSTEN NÄYTTÄMINEN (paremmat tiedot Jellyseerr:stä)
+		if 'recommendations' in st.session_state and st.session_state.recommendations:
+			st.subheader("✨ Tässä sinulle suosituksia:")
+			
+			for rec in st.session_state.recommendations[:]:
+				title = rec.get('title', 'N/A')
+				year = rec.get('year', 'N/A')
+				reason = rec.get('reason', 'N/A')
+
+				safe_key = f"{title}_{year}".replace(" ", "_")
+
+				st.markdown(f"<div class='recommendation-card' id='rec_{safe_key}'>", unsafe_allow_html=True)
+
+				# Hae yksityiskohtaiset tiedot Jellyseerr:stä
+				jellyseerr_details = get_jellyseerr_details(title)
+				
+				# Responsive layout: pieni ruutu (mobiilit) vs iso ruutu (desktop)
+				col_poster, col_info = st.columns([0.8, 2.2])
+				
+				# Poster
+				with col_poster:
+					if jellyseerr_details and "posterPath" in jellyseerr_details and jellyseerr_details["posterPath"] and JELLYSEERR_URL:
+						poster_path = jellyseerr_details["posterPath"]
+						base_url = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+						poster_url = f"{base_url}/imageproxy/tmdb/t/p/w300_and_h450_face{poster_path}"
+						
+						try:
+							poster_response = requests.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
+							if poster_response.status_code == 200:
+								image = Image.open(BytesIO(poster_response.content))
+								st.image(image, width=130)
+							else:
+								st.info("📷")
+						except:
+							st.info("📷")
 					else:
-						st.toast(f"'{manual_title}' on jo listallasi.")
+						st.info("📷")
+				
+				# Tiedot
+				with col_info:
+					# Otsikko
+					st.subheader(title)
+					
+					# Kompakti rivittäin: vuosi ja rating
+					info_cols = st.columns([1, 1])
+					
+					with info_cols[0]:
+						if jellyseerr_details:
+							release_date = jellyseerr_details.get("releaseDate") or jellyseerr_details.get("firstAirDate") or "N/A"
+							display_year = release_date[:4] if release_date != "N/A" else year
+						else:
+							display_year = year
+						st.caption(f"📅 **{display_year}**")
+					
+					with info_cols[1]:
+						if jellyseerr_details and jellyseerr_details.get("voteAverage"):
+							rating = jellyseerr_details.get("voteAverage")
+							st.caption(f"⭐ **{rating:.1f}/10**")
+					
+					# Kuvaus
+					if jellyseerr_details:
+						overview = jellyseerr_details.get("overview", "")
+						if overview:
+							st.caption(f"_{overview[:120]}..._" if len(overview) > 120 else f"_{overview}_")
+					
+					# Perustelu AI:lta (pienellä koolla)
+					st.caption(f"💡 {reason[:150]}..." if len(reason) > 150 else f"💡 {reason}")
+				
+				st.markdown("</div>", unsafe_allow_html=True)
+				
+				# Toimintonapit - kompaktit
+				b1, b2, b3, b4 = st.columns([1, 1, 1, 1])
 
-	st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
-	st.header("🔎 Hae suosituksia")
-	media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type")
+				with b1:
+					b1.button("Pyydä Jellyseerristä", key=f"request_{safe_key}",
+								  on_click=handle_jellyseerr_request, args=(rec,), use_container_width=True)
 
-	# Genre-näkymässä näytetään emoji-ikoni käyttäen format_funcia (vakaampi kuin näyttötunnisteet)
-	genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
-	genre_emoji = {
-		"Kaikki": "🌐 Kaikki",
-		"Toiminta": "🔫 Toiminta",
-		"Komedia": "😂 Komedia",
-		"Draama": "🎭 Draama",
-		"Scifi": "🪐 Scifi",
-		"Fantasia": "🧙 Fantasia",
-		"Kauhu": "👻 Kauhu",
-		"Jännitys": "🔪 Jännitys",
-		"Romantiikka": "❤️ Romantiikka",
-	}
-	# Näytetään emojeilla rikastetut vaihtoehdot radiossa ja kartoitetaan takaisin sisäiseen arvoon
-	display_options = [genre_emoji[g] for g in genre_options]
-	# Käytetään pystyradiota, se käyttäytyy luotettavasti eri selaimissa ja ei riko valituksi näkyvyyttä
-	selected_display = st.radio("Valitse genre", display_options, index=0, key="genre_display_radio")
-	# Käännetään valinta takaisin sisäiseksi avaimeksi
-	reverse_map = {v: k for k, v in genre_emoji.items()}
-	genre = reverse_map.get(selected_display, "Kaikki")
+				media_type_from_radio = st.session_state.get("media_type", "Elokuva")
+				with b2:
+					b2.button("👁️ Katsottu", key=f"watched_{safe_key}",
+								  on_click=handle_watched_add, args=(title, media_type_from_radio), use_container_width=True)
 
-	# Pääpainike: täysleveä, violetilla korostuksella (CSS-tyylit yllä)
-	if st.button("🎬 Hae suositukset", use_container_width=True):
-		fetch_and_show_recommendations(media_type, genre)
+				with b3:
+					b3.button("🚫 Älä suosittele", key=f"block_{safe_key}",
+								  on_click=handle_blacklist_add, args=(title,), use_container_width=True)
 
-	# Watchlist Management Section
-	st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
-	with st.expander("📝 Oma katselulistani"):
+				with b4:
+					b4.button("🔖 Lisää katselulistalle", key=f"watchlist_{safe_key}",
+								  on_click=handle_watchlist_add, args=(title,), use_container_width=True)
+
+				st.divider()
+	
+	# ===== TAB 2: KATSELULISTA =====
+	with tab2:
+		st.header("📝 Oma katselulistani")
 		db = load_manual_db()
 		user_data = db.get(username, {})
 		watchlist = user_data.get("watchlist", {"movies": [], "series": []})
@@ -819,17 +926,60 @@ else:
 						if st.button("Poista", key=f"remove_watchlist_series_{idx}",
 									 on_click=handle_watchlist_remove, args=(wl_title, "series"), use_container_width=True):
 							pass  # Callback handles the removal
-
-# Backup & Restore Section
-	st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
-	with st.expander("💾 Tietokannan Varmuuskopio"):
-		st.write("**Vie tietokantasi varmuuskopioksi tai jaa sen toiseen paikkaan.**")
+	
+	# ===== TAB 3: MERKITSE =====
+	with tab3:
+		st.header("✏️ Merkitse nimike katsottuksi manuaalisesti")
+		st.write("Lisää nimikkeitä, joita et ole katsellut Jellyfinissä.")
+		
+		with st.form("manual_add_form", clear_on_submit=True):
+			manual_title = st.text_input("Elokuvan tai sarjan nimi")
+			manual_type = st.radio("Tyyppi", ["Elokuva", "Sarja"], key="manual_type", horizontal=True)
+			if st.form_submit_button("Lisää katsottuihin"):
+				if manual_title:
+					db = load_manual_db()
+					# Varmistetaan, että käyttäjällä on oma osio tietokannassa
+					if username not in db:
+						db[username] = {"movies": [], "series": []}
+					
+					# Lisätään nimike oikeaan listaan
+					type_key = "movies" if manual_type == "Elokuva" else "series"
+					if manual_title not in db[username][type_key]:
+						db[username][type_key].append(manual_title)
+						save_manual_db(db)
+						st.toast(f"'{manual_title}' lisätty katsottuihin!")
+					else:
+						st.toast(f"'{manual_title}' on jo listallasi.")
+	
+	# ===== TAB 4: TIEDOT =====
+	with tab4:
+		st.header("💾 Tietokannan Varmuuskopio & Tiedot")
+		st.write("Vie ja palauta tietokantasi tai tarkastele tilastoja.")
+		
+		st.subheader("📊 Tilastot")
+		db = load_manual_db()
+		user_data = db.get(username, {})
+		
+		stat_col1, stat_col2, stat_col3 = st.columns(3)
+		with stat_col1:
+			movies_count = len(user_data.get("movies", []))
+			st.metric("🎬 Elokuvat", movies_count)
+		with stat_col2:
+			series_count = len(user_data.get("series", []))
+			st.metric("📺 Sarjat", series_count)
+		with stat_col3:
+			blacklist_count = len(user_data.get("do_not_recommend", []))
+			st.metric("🚫 Estetyt", blacklist_count)
+		
+		st.divider()
+		st.subheader("📥/📤 Varmuuskopio")
+		st.write("Vie tietokantasi varmuuskopioksi tai palauta aiemmin viety varmuuskopio.")
 		
 		col1, col2 = st.columns([1, 1])
 		
 		# Export
 		with col1:
-			st.subheader("📥 Vie varmuuskopio")
+			st.write("**📥 Vie varmuuskopio**")
 			if st.button("⬇️ Lataa varmuuskopio", use_container_width=True):
 				backup_json = export_user_data_as_json(username)
 				if backup_json:
@@ -843,7 +993,7 @@ else:
 		
 		# Import
 		with col2:
-			st.subheader("📤 Palauta varmuuskopio")
+			st.write("**📤 Palauta varmuuskopio**")
 			uploaded_file = st.file_uploader(
 				"Valitse varmuuskopiotiedosto",
 				type=["json"],
@@ -859,43 +1009,4 @@ else:
 							st.rerun()
 				except Exception as e:
 					st.error(f"Virhe tiedostoa luettaessa: {e}")
-
-# SUOSITUSTEN NÄYTTÄMINEN (teksti-only)
-if 'recommendations' in st.session_state and st.session_state.recommendations:
-    st.header("✨ Tässä sinulle suosituksia:")
-    
-    for rec in st.session_state.recommendations[:]:
-        title = rec.get('title', 'N/A')
-        year = rec.get('year', 'N/A')
-        reason = rec.get('reason', 'N/A')
-
-        safe_key = f"{title}_{year}".replace(" ", "_")
-
-        st.markdown(f"<div class='recommendation-card' id='rec_{safe_key}'>", unsafe_allow_html=True)
-
-        # Text-only layout: otsikko + vuosiluku + perustelu
-        st.subheader(f"{title} ({year})")
-        st.caption(reason)
-
-        # Toimintonapit vaakasuoraan — now with 4 buttons in 2 rows
-        b1, b2 = st.columns([1, 1])
-        b3, b4 = st.columns([1, 1])
-
-        # Row 1
-        b1.button("Pyydä Jellyseeristä", key=f"request_{safe_key}",
-                  on_click=handle_jellyseerr_request, args=(rec,), help=f"Pyydä nimike {title}")
-
-        media_type_from_radio = st.session_state.get("media_type", "Elokuva")
-        b2.button("👁️ Merkitse katsotuksi", key=f"watched_{safe_key}",
-                  on_click=handle_watched_add, args=(title, media_type_from_radio), help="Merkitse tämä nimike katsotuksi")
-
-        # Row 2
-        b3.button("🚫 Älä suosittele", key=f"block_{safe_key}",
-                  on_click=handle_blacklist_add, args=(title,), help="Lisää tämä nimike 'älä suosittele' -listalle")
-
-        b4.button("🔖 Lisää katselulistalle", key=f"watchlist_{safe_key}",
-                  on_click=handle_watchlist_add, args=(title,), help="Lisää tämä nimike katselulistalle")
-
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("<div style='height:20px;'></div><hr style='margin:8px 0'/>", unsafe_allow_html=True)
 
