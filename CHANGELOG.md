@@ -7,27 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.2.3-alpha-hotfix] - 2025-11-13
 
-### Fixed
-- **Watchlist Media Type Mismatch**
-  - Fixed movies being incorrectly added to series watchlist and vice versa
-  - Root cause: media_type from Jellyseerr (movie/tv) not properly normalized for database operations
-  - Added media_type normalization in Tab 1 recommendation loop (lines 1150-1152)
+### 🎯 Overview
+Critical hotfix addressing media type handling bugs in recommendations and watchlist operations discovered after v0.2.3-alpha release. Ensures movies and TV series are correctly categorized in database and recommendations.
+
+### ✨ What's New
+- **Media Type Normalization in Recommendations**
+  - Automatic conversion of Jellyseerr media types (movie/tv) for all database operations
+  - Fallback normalization when Jellyseerr enrichment unavailable
+  - Consistent media type handling across all UI operations (watchlist, watched, requests)
+
+- **Improved Gemini Prompt Structure**
+  - Explicit TÄRKEÄ (IMPORTANT) instruction in recommendation prompts
+  - Clear media type specification to prevent AI confusion
+  - Enhanced VAATIMUKSET section emphasizing type requirements
+
+### 🐛 Bug Fixes
+- **Watchlist Media Type Mismatch** - Fixed movies being incorrectly added to series watchlist and vice versa
+  - Root cause: media_type from Jellyseerr not properly normalized for database operations
+  - Solution: Added media_type normalization in Tab 1 recommendation loop (lines 1150-1152)
   - Ensures media_type is always 'movie' or 'tv' format before database operations
   - Converts UI values ('Elokuva'/'TV-sarja') to correct Jellyseerr format when needed
-  - All watchlist, watched, and request operations now use correctly normalized media type
   - Verified: Jellyseerr 'movie' → stored in 'movies' key, 'tv' → stored in 'series' key
 
-- **Gemini Recommendation Type Filtering**
-  - Fixed Gemini API mixing movies and TV series in recommendations despite UI selection
-  - Added explicit TÄRKEÄ (IMPORTANT) section in Gemini prompt
-  - Clarifies that ONLY the requested media type should be recommended
-  - Specifies: elokuva (movies) → movies only, TV-sarja (series) → series only
-  - Added emphasis in VAATIMUKSET section to prevent type confusion
+- **Gemini Recommendation Type Filtering** - Fixed Gemini mixing movies and TV series in recommendations
+  - Added explicit TÄRKEÄ section clarifying only requested type should be recommended
+  - Specifies: elokuva → movies only, TV-sarja → series only
+  - Added emphasis in VAATIMUKSET to prevent type confusion
 
-### Changed
-- Enhanced media type handling in Tab 1 recommendation display logic
-- Improved Gemini API prompt structure for better type adherence
-- All code comments now in English for international developer accessibility
+### 📚 Documentation
+- 📖 README.md - Feature overview
+- 🚀 SETUP.md - Deployment instructions
+- 🔗 API_INTEGRATION.md - Integration details
+- 🗄️ DATABASE_SCHEMA.md - Database structure
+
+### ⚠️ Known Issues & Limitations
+- None at this time. All critical bugs from v0.2.3-alpha have been addressed.
+
+### 🚀 Installation & Upgrade
+From v0.2.3-alpha:
+```bash
+git pull origin main
+docker-compose up -d --build  # For Docker deployment
+# or
+streamlit run app.py  # For local development
+```
+
+### 📊 Monitoring
+- Check `app.log` for media type normalization debug messages
+- Verify watchlist additions in database.json (movies/series keys)
+- Monitor Gemini API logs for prompt adherence
+
+### ⚠️ Disclaimer
+This is a pre-release version (alpha) with ongoing development and bug fixes. While all identified issues have been resolved, further improvements may follow.
+
+**Tag:** v0.2.3-alpha-hotfix | **Date:** 2025-11-13 | **Type:** Pre-release (Alpha Hotfix)
 
 ## [0.2.3-alpha] - 2025-11-13
 
