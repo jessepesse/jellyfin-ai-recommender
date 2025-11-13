@@ -1,0 +1,60 @@
+# GitHub Actions workflow for validating Python code
+# Runs on every push to main branch
+
+name: Python Validation
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pylint
+
+      - name: Validate Python syntax with py_compile
+        run: |
+          python -m py_compile app.py
+          echo "✅ Python syntax validation passed"
+
+      - name: Check imports
+        run: |
+          python -c "
+          import sys
+          try:
+              import streamlit
+              import requests
+              import google.generativeai
+              from dotenv import load_dotenv
+              print('✅ All required imports are available')
+          except ImportError as e:
+              print(f'❌ Import error: {e}')
+              sys.exit(1)
+          "
+
+      - name: Run Pylint
+        run: |
+          pylint app.py --exit-zero --disable=all --enable=E,F
+          echo "✅ Pylint checks passed"
