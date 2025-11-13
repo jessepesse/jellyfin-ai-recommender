@@ -281,19 +281,34 @@ def _save_jellyfin_watched_to_db(watched_titles):
 # If the app is localized to other languages in the future, these prompts should be localized accordingly.
 def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_list):
     """Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista."""
+    # Normalize media_type for Gemini API to ensure consistent recommendations
+    # UI uses "Elokuva"/"TV-sarja", but normalize to lowercase for clarity in prompt
+    if media_type.lower() in ["elokuva", "movie"]:
+        media_type_normalized = "elokuva"
+    elif media_type.lower() in ["tv-sarja", "series", "tv-series"]:
+        media_type_normalized = "TV-sarja"
+    else:
+        media_type_normalized = media_type.lower()
+    
     watched_titles_str = ", ".join(watched_list) if watched_list else "ei yhtään"
     watchlist_str = ", ".join(watchlist) if watchlist else "ei yhtään"
     do_not_str = ", ".join(do_not_recommend_list) if do_not_recommend_list else "ei yhtään"
 
     genre_instruction = f"Kaikkien suositusten tulee kuulua genreen: '{genre}'." if genre != "Kaikki" else "Suosittele monipuolisesti eri genrejä."
 
-    prompt = f"""Anna 5 uutta {media_type}-suositusta seuraavan profiilin perusteella:
+    prompt = f"""Anna 5 uutta {media_type_normalized}-suositusta seuraavan profiilin perusteella:
+
+TÄRKEÄ: Sinun tulee suositella AINOASTAAN {media_type_normalized.upper()}, ei muita tyyppejä!
+- Jos {media_type_normalized} = "elokuva", suosittele vain elokuvia
+- Jos {media_type_normalized} = "TV-sarja", suosittele vain TV-sarjoja
+
 KATSOTTU: {watched_titles_str}
 KIINNOSTUS (katselulista): {watchlist_str}
 ÄLÄ SUOSITTELE: {do_not_str}
 GENRE: {genre_instruction}
 
 VAATIMUKSET:
+- TULEE suositella VAIN {media_type_normalized} -tyyppisiä nimikkeitä
 - Älä suosittele mitään katsotusta listalta tai älä-suosittele-listalta
 - Tittelit täytyy olla englanninkielisiä
 - Jokainen suositus max 80 merkkiä "reason"-kentässä
