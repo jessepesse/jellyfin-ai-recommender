@@ -861,6 +861,7 @@ def fetch_and_show_recommendations(media_type, genre):
 
 st.set_page_config(
     page_title="Jellyfin AI Recommender",
+    page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
