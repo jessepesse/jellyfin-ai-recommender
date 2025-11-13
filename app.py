@@ -1142,7 +1142,13 @@ else:
                 reason = rec.get('reason', 'N/A')
                 media_id = rec.get('media_id')
                 media_type = rec.get('media_type', 'unknown')
+                # Normalize media_type to Jellyseerr format (movie/tv) for API calls
+                # If media_type is from Jellyseerr (movie/tv), keep as-is
+                # If not available, use normalized version of radio selection
                 media_type_from_radio = st.session_state.get("media_type", "Elokuva")
+                if media_type not in ["movie", "tv"]:
+                    # Convert UI values (Elokuva/TV-sarja) to Jellyseerr format
+                    media_type = "movie" if media_type_from_radio.lower() in ["elokuva", "movie"] else "tv"
 
                 # Fetch Jellyseerr details (must be on main thread for @st.cache_data to work)
                 jellyseerr_details = None
