@@ -105,6 +105,15 @@ Jellyfin AI Recommender is a web application that provides personalized movie an
 - **Jellyseerr**: Handle media requests via `/api/v1/request` endpoint. Use `X-Api-Key` header.
 - **Google Gemini**: Generate recommendations using `gemini-2.5-flash` model. Prompt should return valid JSON only.
 
+### Code Documentation and Comments:
+- **Language**: All code comments must be written in **English** for international developer accessibility and maintainability
+- **Rationale**: English comments ensure clarity for future contributors, open-source collaboration, and professional standards
+- **UI Text**: User-facing UI text remains in Finnish (application creator's language and primary user base)
+- **Examples**: 
+  - ✅ Good: `# Enrich recommendations with poster images and metadata from Jellyseerr`
+  - ❌ Avoid: `# Rikasta suosituksia julistekuvilla ja metadatalla Jellyserrista`
+- **Exception**: Documentation files (README, SETUP, etc.) can be in Finnish if targeting Finnish-speaking users, but English versions are preferred for broader accessibility
+
 ---
 
 ## Key Files and Examples
