@@ -39,6 +39,9 @@ try:
 except Exception as e:
     print(f"Warning: Could not configure logging to file: {e}")
 
+# --- Application Version ---
+APP_VERSION = "0.2.3-alpha-hotfix"
+
 # --- Retry Decorator with Exponential Backoff ---
 def retry_with_backoff(max_attempts=3, initial_delay=1, backoff_factor=2):
     """Decorator for retry logic with exponential backoff."""
@@ -971,14 +974,15 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # Set page title with logo
-col1, col2 = st.columns([0.1, 0.9])
-with col1:
-    try:
-        st.image("images/logo.png", width=60)
-    except:
-        st.write("🎬")
-with col2:
-    st.title("Jellyfin AI Recommender")
+st.markdown(
+    """
+    <div style='display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px;'>
+        <div style='font-size: 60px;'>🎬</div>
+        <h1 style='margin: 0; text-align: center;'>Jellyfin AI Recommender</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 if 'jellyfin_session' not in st.session_state:
     st.session_state.jellyfin_session = None
@@ -1502,4 +1506,21 @@ else:
                                 st.rerun()
                 except Exception as e:
                     st.error(f"Virhe tiedostoa luettaessa: {e}")
+
+# --- Application Footer ---
+st.divider()
+footer_col1, footer_col2, footer_col3 = st.columns([1, 2, 1])
+with footer_col2:
+    st.markdown(
+        f"""
+        <div style='text-align: center; padding: 10px 0; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0;'>
+            <span style='font-size: 11px; color: #666;'>
+            🔖 <b style='color: #0066cc;'>v{APP_VERSION}</b> • 
+            <a href='https://github.com/jessepesse/jellyfin-ai-recommender' target='_blank' style='color: #0066cc; text-decoration: none; font-weight: bold; transition: color 0.3s;'>💻 Jellyfin AI Recommender</a> • 
+            🚀 <b style='color: #27ae60;'>Open Source</b>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
