@@ -1,58 +1,53 @@
 {
     "jesse": {
         "movies": [
-            "Dune",
-            "Interstellar",
-            "Arrival"
+            "Shaun of the Dead",
+            "Annihilation",
+            "Dune"
         ],
         "series": [
-            "Dark",
-            "Severance",
-            "Andor"
+            "The Book of Boba Fett",
+            "Andor",
+            "The Bear"
         ],
         "do_not_recommend": [
-            "Arcane",
-            "Altered Carbon"
+            "Weathering with You",
+            "Disenchantment"
         ],
         "watchlist": {
             "movies": [
-                "Your Name.",
-                "Ghost in the Shell"
+                "Primer",
+                "Gattaca"
             ],
             "series": [
-                "The Expanse",
-                "Detectorists"
+                "Mindhunter",
+                "Station Eleven"
             ]
         },
-        "jellyfin_synced_at": "2025-11-13 18:50:43.982920",
-        "jellyfin_total_watched": 15
+        "jellyfin_synced_at": "2025-11-13 21:21:19",
+        "jellyfin_total_watched": 10
     },
     "testuser": {
         "movies": [
             "The Matrix",
-            "Inception",
-            "Blade Runner 2049"
+            "Inception"
         ],
         "series": [
             "Stranger Things",
-            "The Crown",
             "Breaking Bad"
         ],
         "do_not_recommend": [
-            "Twilight",
-            "The Room"
+            "Twilight"
         ],
         "watchlist": {
             "movies": [
-                "Oppenheimer",
-                "Barbie"
+                "Oppenheimer"
             ],
             "series": [
-                "Westworld",
-                "Chernobyl"
+                "Westworld"
             ]
         },
-        "jellyfin_synced_at": "2025-11-13 19:00:00.000000",
-        "jellyfin_total_watched": 20
+        "jellyfin_synced_at": "2025-11-13 19:00:00",
+        "jellyfin_total_watched": 5
     }
 }
