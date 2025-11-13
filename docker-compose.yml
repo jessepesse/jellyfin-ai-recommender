@@ -2,20 +2,35 @@ version: '3.8'
 
 services:
   recommender:
+    # Build image from Dockerfile in current directory
     build: .
     container_name: jellyfin-ai-recommender
+    
+    # Port mapping: expose Streamlit on port 8501
     ports:
       - "8501:8501"
+    
+    # Environment variables required by the application
+    # These should be set in .env file
     environment:
       - JELLYFIN_URL=${JELLYFIN_URL}
       - JELLYSEERR_URL=${JELLYSEERR_URL}
       - JELLYSEERR_API_KEY=${JELLYSEERR_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+    
+    # Volume mounts for persistent data and configuration
+    # - database.json: stores user-specific data (watched lists, watchlist, etc.)
+    # - images/: caches poster images from Jellyseerr
+    # - .streamlit/: configuration files for Streamlit
     volumes:
       - ./database.json:/app/database.json
       - ./images:/app/images
       - ./.streamlit:/app/.streamlit
+    
+    # Restart policy: restart container unless explicitly stopped
     restart: unless-stopped
+    
+    # Health check to ensure the application is running
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
