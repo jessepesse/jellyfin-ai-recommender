@@ -80,6 +80,26 @@ docker-compose logs -f recommender
 docker-compose down
 ```
 
+## CI/CD Pipeline
+
+The project includes automated GitHub Actions workflows:
+
+### Python Validation (python-validate.yml)
+- **Triggers**: On every push to `main` and pull requests
+- **Validation**:
+  - Python syntax checking with `py_compile`
+  - Import availability verification
+  - Pylint error and warning checks
+  - Tests on Python 3.9, 3.10, 3.11
+- **View results**: GitHub Actions tab in repository
+
+### Docker Build (docker-build-and-push.yml)
+- **Triggers**: On every push to `main`
+- **Actions**:
+  - Builds Docker image
+  - Pushes to GitHub Container Registry (ghcr.io)
+  - Tags with `latest`
+
 ## Step 5: First Login
 
 1. Access `http://localhost:8501`
