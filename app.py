@@ -9,6 +9,7 @@ from urllib.parse import quote
 from functools import wraps
 from PIL import Image
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 load_dotenv()
 
@@ -16,6 +17,9 @@ load_dotenv()
 LOG_FILE = "app.log"
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+# Suppress Streamlit's ScriptRunContext warnings from threaded code
+logging.getLogger("streamlit.runtime.scriptrunner").setLevel(logging.ERROR)
 
 # Create handlers
 try:
@@ -75,6 +79,20 @@ if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 if 'search_query' not in st.session_state:
     st.session_state.search_query = ""
+if 'is_loading' not in st.session_state:
+    st.session_state.is_loading = False
+if 'recommendations_fetched' not in st.session_state:
+    st.session_state.recommendations_fetched = False
+if 'last_error' not in st.session_state:
+    st.session_state.last_error = None
+if 'should_fetch_recommendations' not in st.session_state:
+    st.session_state.should_fetch_recommendations = False
+
+# Initialize requests.Session() for connection reuse
+if 'jellyfin_requests_session' not in st.session_state:
+    st.session_state.jellyfin_requests_session = requests.Session()
+if 'jellyseerr_requests_session' not in st.session_state:
+    st.session_state.jellyseerr_requests_session = requests.Session()
 
 # Ladataan kaikki salaisuudet ympäristömuuttujista
 JELLYFIN_URL = os.environ.get("JELLYFIN_URL")
@@ -147,7 +165,7 @@ def jellyfin_login(username, password):
     
     try:
         logger.info(f"Attempting Jellyfin login for user: {username}")
-        response = requests.post(endpoint, json=body, headers=headers, timeout=10)
+        response = st.session_state.jellyfin_requests_session.post(endpoint, json=body, headers=headers, timeout=10)
         response.raise_for_status()
         st.session_state.jellyfin_session = response.json()
         logger.info(f"Jellyfin login successful for user: {username}")
@@ -169,9 +187,10 @@ def jellyfin_login(username, password):
         st.error(f"❌ Odottamaton virhe kirjautumisessa: {e}")
         return False
 
+@st.cache_data(ttl=2*60*60, show_spinner=False)
 @retry_with_backoff(max_attempts=3, initial_delay=1)
 def get_jellyfin_watched_titles():
-    """Hakee katsotut nimikkeet käyttäen tallennettua sessiota ja tallentaa ne tietokantaan."""
+    """Hakee katsotut nimikkeet käyttäen tallennettua sessiota ja tallentaa ne tietokantaan. Välimuistissa 2 tunnin ajan."""
     try:
         session = st.session_state.jellyfin_session
         if not session:
@@ -192,7 +211,7 @@ def get_jellyfin_watched_titles():
         endpoint = f"{JELLYFIN_URL}/Users/{user_id}/Items"
         
         logger.debug(f"Fetching watched titles for user {user_id}")
-        response = requests.get(endpoint, headers=headers, params=params, timeout=15)
+        response = st.session_state.jellyfin_requests_session.get(endpoint, headers=headers, params=params, timeout=15)
         response.raise_for_status()
         
         items = response.json().get("Items", [])
@@ -302,7 +321,6 @@ def get_gemini_recommendations(prompt):
 # Headers convenience
 JELLYSEERR_HEADERS = {"X-Api-Key": JELLYSEERR_API_KEY} if JELLYSEERR_API_KEY else {}
 
-@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
 @st.cache_data(ttl=6*60*60, show_spinner=False)
 def search_jellyseerr(title: str):
     """
@@ -322,7 +340,7 @@ def search_jellyseerr(title: str):
         endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
         
         logger.debug(f"Searching Jellyseerr for: {title}")
-        resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        resp = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
         
         results = resp.json().get("results", [])
@@ -365,7 +383,7 @@ def search_jellyseerr_advanced(query: str):
         endpoint = f"{base}/api/v1/search?query={encoded_query}&page=1"
         
         logger.debug(f"Advanced Jellyseerr search for: {query}")
-        resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        resp = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
         
         results = resp.json().get("results", [])
@@ -393,7 +411,7 @@ def get_jellyseerr_details(title: str):
         endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
         
         logger.debug(f"Fetching details from Jellyseerr for: {title}")
-        resp = requests.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        resp = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
         
         results = resp.json().get("results", [])
@@ -421,7 +439,7 @@ def request_on_jellyseerr(media_id, media_type):
     
     try:
         logger.debug(f"Making request to Jellyseerr for media_id={media_id}, type={media_type}")
-        response = requests.post(endpoint, headers=headers, json=body, timeout=10)
+        response = st.session_state.jellyseerr_requests_session.post(endpoint, headers=headers, json=body, timeout=10)
         response.raise_for_status()
         logger.info(f"Successfully made Jellyseerr request for media_id={media_id}")
         return True
@@ -595,6 +613,10 @@ def handle_blacklist_add(title):
         st.toast(f"'{title}' on jo estolistallasi.", icon="⚠️")
     # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
+def fetch_recommendations_callback():
+    """Callback function for fetching recommendations with loading state."""
+    st.session_state.should_fetch_recommendations = True
+
 # --- Backup & Restore funktiot ---
 
 def export_user_data_as_json(username):
@@ -690,6 +712,15 @@ def import_user_data_from_json(json_string, username):
         st.error(f"❌ Virhe tuodessa tietokantaa: {e}")
         return False
 
+def _enrich_recommendation_with_jellyseerr(title: str):
+    """Helper function for parallel enrichment - no Streamlit calls here."""
+    try:
+        media_id, m_type = search_jellyseerr(title)
+        return {"title": title, "media_id": media_id, "media_type": m_type, "success": True}
+    except Exception as e:
+        logger.warning(f"Failed to enrich recommendation '{title}': {e}")
+        return {"title": title, "media_id": None, "media_type": None, "success": False, "error": str(e)}
+
 # --- PÄÄFUNKTIO, JOKA HOITAA SUOSITUSTEN HAUN ---
 def fetch_and_show_recommendations(media_type, genre):
     """Fetches recommendations using the watchlist as a strong signal."""
@@ -721,21 +752,48 @@ def fetch_and_show_recommendations(media_type, genre):
         if recommendations:
             enriched_recommendations = []
             with st.spinner("Tarkistetaan saatavuutta Jellyseeristä..."):
-                for rec in recommendations:
-                    media_id, m_type = search_jellyseerr(rec['title'])
-                    rec['media_id'] = media_id
-                    rec['media_type'] = m_type
-                    enriched_recommendations.append(rec)
+                logger.debug(f"Starting parallel Jellyseerr search for {len(recommendations)} recommendations")
+                # Use ThreadPoolExecutor for parallel API calls to Jellyseerr
+                # Important: Only pure Python functions in threads, no Streamlit calls
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    # Submit all enrichment tasks
+                    futures = {
+                        executor.submit(_enrich_recommendation_with_jellyseerr, rec['title']): rec 
+                        for rec in recommendations
+                    }
+                    
+                    # Process completed tasks as they finish
+                    for future in as_completed(futures):
+                        rec = futures[future]
+                        try:
+                            enrichment_result = future.result()
+                            if enrichment_result["success"]:
+                                rec['media_id'] = enrichment_result["media_id"]
+                                rec['media_type'] = enrichment_result["media_type"]
+                                logger.debug(f"Enriched recommendation: {rec['title']} (ID: {enrichment_result['media_id']})")
+                            else:
+                                rec['media_id'] = None
+                                rec['media_type'] = None
+                                logger.warning(f"Could not enrich '{rec['title']}': {enrichment_result.get('error', 'Unknown error')}")
+                            enriched_recommendations.append(rec)
+                        except Exception as e:
+                            logger.warning(f"Exception processing recommendation '{rec['title']}': {e}")
+                            rec['media_id'] = None
+                            rec['media_type'] = None
+                            enriched_recommendations.append(rec)
+                
+                logger.info(f"Parallel enrichment completed for {len(enriched_recommendations)} recommendations")
+            
             st.session_state.recommendations = enriched_recommendations
-            st.success(f"✅ {len(enriched_recommendations)} suositusta haettu onnistuneesti!")
+            st.session_state.recommendations_fetched = True
             logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")
         else:
             st.session_state.recommendations = []
-            st.warning("⚠️ Gemini ei palauttanut suosituksia. Yritä uudelleen.")
+            st.session_state.recommendations_fetched = False
             logger.warning(f"No recommendations generated for user: {username} - Gemini returned None or empty")
     except Exception as e:
         logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}")
-        st.error(f"❌ Virhe suositusten haussa: {str(e)[:150]}")
+        st.session_state.recommendations_fetched = False
 
 # --- Streamlit Käyttöliittymä ---
 
@@ -918,16 +976,103 @@ else:
         # Käännetään valinta takaisin sisäiseksi avaimeksi
         reverse_map = {v: k for k, v in genre_emoji.items()}
         genre = reverse_map.get(selected_display, "Kaikki")
+        # Store the genre in session state for the callback to access
+        st.session_state.selected_genre = genre
 
         # Pääpainike: täysleveä, violetilla korostuksella (CSS-tyylit yllä)
-        if st.button("🎬 Hae suositukset", use_container_width=True):
-            fetch_and_show_recommendations(media_type, genre)
+        if st.button("🎬 Hae suositukset", use_container_width=True, disabled=st.session_state.should_fetch_recommendations):
+            st.session_state.should_fetch_recommendations = True
+        
+        # Show loading container with steps
+        if st.session_state.should_fetch_recommendations:
+            with st.spinner("🔄 Haetaan suosituksia..."):
+                media_type = st.session_state.get("media_type", "Elokuva")
+                genre = st.session_state.get("selected_genre", "Kaikki")
+                
+                username = st.session_state.jellyfin_session['User']['Name']
+                
+                try:
+                    jellyfin_watched = get_jellyfin_watched_titles()
+                    db = load_manual_db()
+                    user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+                    manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
+                    blacklist = user_db_entry.get("do_not_recommend", [])
+                    watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
+                    watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
+                    full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
+                    
+                    logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
+                    
+                    logger.debug(f"Building prompt with: media_type={media_type}, genre={genre}, watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
+                    prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
+                    logger.debug(f"Prompt built, calling Gemini...")
+                    recommendations = get_gemini_recommendations(prompt)
+                    logger.debug(f"Gemini returned: {type(recommendations)} - {recommendations if recommendations else 'None/Empty'}")
+                    
+                    if recommendations:
+                        enriched_recommendations = []
+                        logger.debug(f"Starting parallel Jellyseerr search for {len(recommendations)} recommendations")
+                        with ThreadPoolExecutor(max_workers=5) as executor:
+                            futures = {
+                                executor.submit(_enrich_recommendation_with_jellyseerr, rec['title']): rec 
+                                for rec in recommendations
+                            }
+                            
+                            for future in as_completed(futures):
+                                rec = futures[future]
+                                try:
+                                    enrichment_result = future.result()
+                                    if enrichment_result["success"]:
+                                        rec['media_id'] = enrichment_result["media_id"]
+                                        rec['media_type'] = enrichment_result["media_type"]
+                                        logger.debug(f"Enriched recommendation: {rec['title']} (ID: {enrichment_result['media_id']})")
+                                    else:
+                                        rec['media_id'] = None
+                                        rec['media_type'] = None
+                                        logger.warning(f"Could not enrich '{rec['title']}': {enrichment_result.get('error', 'Unknown error')}")
+                                    enriched_recommendations.append(rec)
+                                except Exception as e:
+                                    logger.warning(f"Exception processing recommendation '{rec['title']}': {e}")
+                                    rec['media_id'] = None
+                                    rec['media_type'] = None
+                                    enriched_recommendations.append(rec)
+                        
+                        logger.info(f"Parallel enrichment completed for {len(enriched_recommendations)} recommendations")
+                        st.session_state.recommendations = enriched_recommendations
+                        st.session_state.recommendations_fetched = True
+                        logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")
+                    else:
+                        st.session_state.recommendations = []
+                        st.session_state.recommendations_fetched = False
+                        logger.warning(f"No recommendations generated for user: {username} - Gemini returned None or empty")
+                except Exception as e:
+                    logger.error(f"Unexpected error in recommendations fetch: {e}")
+                    st.session_state.recommendations_fetched = False
+                    st.session_state.last_error = str(e)
+                finally:
+                    st.session_state.should_fetch_recommendations = False
+        
+        # Show success/error/warning messages after the button
+        if st.session_state.recommendations_fetched and st.session_state.recommendations:
+            st.success(f"✅ {len(st.session_state.recommendations)} suositusta haettu onnistuneesti!")
+        elif st.session_state.recommendations_fetched and not st.session_state.recommendations:
+            st.warning("⚠️ Gemini ei palauttanut suosituksia. Yritä uudelleen.")
+        
+        if st.session_state.last_error:
+            st.error(f"❌ Virhe suositusten haussa: {st.session_state.last_error[:150]}")
+            st.session_state.last_error = None
         
         st.divider()
         
         # SUOSITUSTEN NÄYTTÄMINEN (paremmat tiedot Jellyseerr:stä)
         if 'recommendations' in st.session_state and st.session_state.recommendations:
             st.subheader("✨ Tässä sinulle suosituksia:")
+            
+            # Load database once before the loop
+            username = st.session_state.jellyfin_session['User']['Name']
+            db = load_manual_db()
+            user_data_default = {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}}
+            user_data = db.get(username, user_data_default)
             
             for idx, rec in enumerate(st.session_state.recommendations[:]):
                 title = rec.get('title', 'N/A')
@@ -937,22 +1082,27 @@ else:
                 media_type = rec.get('media_type', 'unknown')
                 media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
-                # Hae yksityiskohtaiset tiedot Jellyseerr:stä
-                jellyseerr_details = get_jellyseerr_details(title)
+                # Fetch Jellyseerr details (must be on main thread for @st.cache_data to work)
+                jellyseerr_details = None
+                if JELLYSEERR_API_KEY and JELLYSEERR_URL:
+                    jellyseerr_details = get_jellyseerr_details(title)
                 
                 with st.container(border=True):
                     col1, col2, col3 = st.columns([1, 3, 1])
                     
                     # Juliste
                     with col1:
-                        poster_path = jellyseerr_details.get("posterPath") if jellyseerr_details else None
+                        poster_path = None
+                        if jellyseerr_details and isinstance(jellyseerr_details, dict):
+                            poster_path = jellyseerr_details.get("posterPath")
+                        
                         if poster_path and JELLYSEERR_URL:
                             base_url = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
                             poster_url = f"{base_url}/imageproxy/tmdb/t/p/w300_and_h450_face{poster_path}"
                             logger.debug(f"Poster URL: {poster_url}")
                             
                             try:
-                                poster_response = requests.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
+                                poster_response = st.session_state.jellyseerr_requests_session.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
                                 logger.debug(f"Response status: {poster_response.status_code}, content type: {poster_response.headers.get('content-type')}")
                                 if poster_response.status_code == 200:
                                     image = Image.open(BytesIO(poster_response.content))
@@ -968,7 +1118,8 @@ else:
                     # Tiedot
                     with col2:
                         st.markdown(f"**{title}** ({year})")
-                        if jellyseerr_details:
+                        
+                        if jellyseerr_details and isinstance(jellyseerr_details, dict):
                             rating = jellyseerr_details.get("voteAverage", "N/A")
                             overview = jellyseerr_details.get("overview", "")
                             
@@ -985,10 +1136,7 @@ else:
                     with col3:
                         st.write("**Toiminnot:**")
                         
-                        # Hae nykyisen käyttäjän tiedot
-                        username = st.session_state.jellyfin_session['User']['Name']
-                        db = load_manual_db()
-                        user_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+                        # Use pre-loaded user data from outside the loop
                         type_key = "movies" if media_type and media_type.lower() == "movie" else "series"
                         
                         # Tarkista statukset
@@ -1128,7 +1276,7 @@ else:
                                 logger.debug(f"Poster URL: {poster_url}")
                                 
                                 try:
-                                    poster_response = requests.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
+                                    poster_response = st.session_state.jellyseerr_requests_session.get(poster_url, headers=JELLYSEERR_HEADERS, timeout=5)
                                     logger.debug(f"Response status: {poster_response.status_code}, content type: {poster_response.headers.get('content-type')}")
                                     if poster_response.status_code == 200:
                                         image = Image.open(BytesIO(poster_response.content))

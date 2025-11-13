@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3-alpha] - 2025-11-13
+
+### Added
+- **Session State Management for Recommendation Fetching**
+  - Added `should_fetch_recommendations` session state to track fetch status
+  - Added `recommendations_fetched` session state to indicate successful/failed fetch
+  - Added `last_error` session state for error message display
+  - Added `is_loading` session state for loading status tracking
+
+- **Parallel Jellyseerr Enrichment with ThreadPoolExecutor**
+  - Implemented `ThreadPoolExecutor` with 5 concurrent workers for parallel API calls
+  - `_enrich_recommendation_with_jellyseerr()` helper function for thread-safe enrichment
+  - Processes completed tasks as they finish using `as_completed()` pattern
+  - Graceful error handling for individual enrichment failures
+  - Improved performance for Jellyseerr lookups on multiple recommendations
+
+- **Improved Recommendation Fetch UI Flow**
+  - Moved recommendation fetch logic into main render cycle using `st.spinner()` context
+  - Inline fetch processing directly in Tab 1 for cleaner code organization
+  - Success and error messages now display in correct location below button
+
+### Changed
+- Recommendation fetch now executes within `if st.session_state.should_fetch_recommendations:` block
+- All spinners consolidated to show only main fetch spinner "🔄 Haetaan suosituksia..."
+- Database loading optimized to occur once before recommendation display loop
+- Error handling improved with dedicated `last_error` state for better error reporting
+- Jellyseerr enrichment now uses concurrent processing instead of sequential lookups
+
+### Fixed
+- **Recommendation Fetch UI/UX Improvements**
+  - Fixed UI responsiveness during long-running API calls
+  - Error messages now display properly when recommendation fetch fails
+
 ## [0.2.2-alpha] - 2025-11-13
 
 ### Added
@@ -38,28 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Unified button layout across Tab 1 (recommendations) and Tab 3 (search results)
 - Improved user feedback through result counts and status indicators
 - Enhanced logging for search operations and result processing
-
-## [Unreleased]
-
-### Planned
-- **Localization (i18n)**
-  - Extract all UI strings to translation files
-  - Implement language selection in settings
-  - Add Finnish (FI) translations
-  - Add English (EN) translations
-  - Add support for additional languages
-  - Localize AI prompt templates for different languages
-  - Use `streamlit-i18n` or similar library for dynamic translation
-
-- **Caching Recommendations**
-  - Implement recommendation caching to reduce API calls
-  - Add cache expiry logic (24-hour default)
-  - Force refresh option for users
-
-- **Improved UI/UX**
-  - Add recommendation history tracking
-  - Create wishlist feature
-  - Better visualization of recommendation reasons
 
 ## [0.2.1-alpha] - 2025-11-13
 
