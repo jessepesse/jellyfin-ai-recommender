@@ -26,17 +26,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Inline fetch processing directly in Tab 1 for cleaner code organization
   - Success and error messages now display in correct location below button
 
+- **Watchlist "Katsottu" (Watched) Functionality**
+  - Added "Katsottu" button to watchlist items (both movies and series in Tab 2)
+  - Marks item as watched and automatically removes it from watchlist
+  - Updates database with watched status
+  - Displays confirmation toast with appropriate icon
+
 ### Changed
-- Recommendation fetch now executes within `if st.session_state.should_fetch_recommendations:` block
+- Recommendation fetch now executes within `if st.session_state.get("should_fetch_recommendations", False):` block
 - All spinners consolidated to show only main fetch spinner "🔄 Haetaan suosituksia..."
 - Database loading optimized to occur once before recommendation display loop
 - Error handling improved with dedicated `last_error` state for better error reporting
 - Jellyseerr enrichment now uses concurrent processing instead of sequential lookups
+- Watchlist layout now displays 4 columns: Title | Request | Watched | Delete
+- Session state access now uses `.get()` method for safer attribute retrieval
 
 ### Fixed
 - **Recommendation Fetch UI/UX Improvements**
   - Fixed UI responsiveness during long-running API calls
   - Error messages now display properly when recommendation fetch fails
+- **Session State Error on Logout**
+  - Fixed AttributeError when accessing session state after logout by using safe `.get()` method
+  - Session state now properly handles missing keys without crashing
+  - All session state attribute accesses now use `.get()` method with default values for robustness
+  - Fixed `jellyfin_session` attribute access to use safe `.get()` chain method
+  - Fixed logout button to display login page by adding explicit `st.rerun()` after session clear
+- **Code Documentation**
+  - Added explanatory comment for `build_prompt()` function clarifying Finnish localization
+  - Documented that prompts are in Finnish because the application creator is Finnish
+  - Added guidance for future localization efforts when extending to other languages
 
 ## [0.2.2-alpha] - 2025-11-13
 
