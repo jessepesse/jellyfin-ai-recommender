@@ -1,31 +1,31 @@
-# Käytä virallista Python 3.11 slim -pohjaista imagea
+# Use official Python 3.11 slim base image
 FROM python:3.11-slim
 
-# Aseta työskentelykansio kontin sisällä
+# Set working directory inside the container
 WORKDIR /app
 
-# Kopioi riippuvuustiedosto ja asenna kirjastot
-# Tämä hyödyntää Dockerin välimuistia: asennus ajetaan vain jos tiedosto muuttuu
+# Copy requirements file and install dependencies
+# This leverages Docker's cache: installation is only run if the file changes
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Kopioi sovelluksen tiedostot
+# Copy application files
 COPY app.py .
 COPY images/ images/
 COPY .streamlit/ .streamlit/
 
-# Luo .streamlit asetuskansio, jos sitä ei ole
+# Create .streamlit configuration directory if it doesn't exist
 RUN mkdir -p .streamlit
 
-# Kopioi .streamlit/config.toml tiedosto
+# Copy .streamlit/config.toml file
 COPY .streamlit/config.toml .streamlit/config.toml
 
-# Kerro Dockerille, että kontti kuuntelee porttia 8501
+# Tell Docker that the container listens on port 8501
 EXPOSE 8501
 
-# Terveys tarkistus
+# Health check - ensures container is running properly
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
-# Komento, joka ajetaan kontin käynnistyessä
-# --server.address=0.0.0.0 on tärkeä, jotta palveluun pääsee käsiksi kontin ulkopuolelta
+# Command executed when the container starts
+# --server.address=0.0.0.0 is important to make the service accessible from outside the container
 CMD ["streamlit", "run", "app.py", "--client.showErrorDetails=false", "--client.toolbarMode=minimal"]
