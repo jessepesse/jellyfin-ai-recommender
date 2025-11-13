@@ -94,7 +94,7 @@ if 'jellyfin_requests_session' not in st.session_state:
 if 'jellyseerr_requests_session' not in st.session_state:
     st.session_state.jellyseerr_requests_session = requests.Session()
 
-# Ladataan kaikki salaisuudet ympäristömuuttujista
+# Load all secrets from environment variables
 JELLYFIN_URL = os.environ.get("JELLYFIN_URL")
 JELLYSEERR_URL = os.environ.get("JELLYSEERR_URL")
 JELLYSEERR_API_KEY = os.environ.get("JELLYSEERR_API_KEY")
@@ -102,7 +102,28 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_FILE = "database.json"
 
 
-# --- Tietokanta-funktiot (JSON) ---
+# --- Database Initialization ---
+
+def initialize_database():
+    """
+    Initialize database.json on first application run.
+    Creates an empty database if the file doesn't exist.
+    This ensures the file exists before Docker volume mounts try to access it.
+    """
+    try:
+        if not os.path.exists(DATABASE_FILE):
+            logger.info(f"Database file {DATABASE_FILE} not found. Creating new empty database...")
+            with open(DATABASE_FILE, 'w', encoding='utf-8') as f:
+                json.dump({}, f, ensure_ascii=False, indent=2)
+            logger.info(f"Successfully created new empty database at {DATABASE_FILE}")
+        else:
+            logger.debug(f"Database file {DATABASE_FILE} already exists")
+    except IOError as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise RuntimeError(f"Cannot create database file: {e}")
+
+
+# --- Database Functions (JSON) ---
 
 def load_manual_db():
     """Lataa manuaalisesti lisätyt nimikkeet JSON-tiedostosta."""
@@ -392,7 +413,7 @@ def search_jellyseerr_advanced(query: str):
         results = resp.json().get("results", [])
         logger.debug(f"Found {len(results)} results for '{query}'")
         
-        # Lisää debug-loggaus ensimmäisestä tuloksesta
+        
         if results:
             logger.debug(f"First result keys: {list(results[0].keys())}")
             logger.debug(f"First result: {json.dumps(results[0], indent=2, default=str)[:500]}")
@@ -744,7 +765,7 @@ def _enrich_recommendation_with_jellyseerr(title: str):
         logger.warning(f"Failed to enrich recommendation '{title}': {e}")
         return {"title": title, "media_id": None, "media_type": None, "success": False, "error": str(e)}
 
-# --- PÄÄFUNKTIO, JOKA HOITAA SUOSITUSTEN HAUN ---
+# --- MAIN FUNCTION THAT HANDLES RECOMMENDATIONS FETCHING ---
 def fetch_and_show_recommendations(media_type, genre):
     """Fetches recommendations using the watchlist as a strong signal."""
     username = st.session_state.jellyfin_session['User']['Name']
@@ -818,7 +839,7 @@ def fetch_and_show_recommendations(media_type, genre):
         logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}")
         st.session_state.recommendations_fetched = False
 
-# --- Streamlit Käyttöliittymä ---
+# --- Streamlit User Interface ---
 
 st.set_page_config(
     page_title="Jellyfin AI Recommender",
@@ -828,6 +849,9 @@ st.set_page_config(
         "About": "Jellyfin AI Recommender - Personalized recommendations powered by Google Gemini AI"
     }
 )
+
+# Initialize database on first application run
+initialize_database()
 
 # Dark theme configuration
 st.markdown("""
@@ -945,7 +969,7 @@ if 'jellyfin_session' not in st.session_state:
     st.session_state.jellyfin_session = None
 
 if not st.session_state.get("jellyfin_session"):
-    # Kirjautumisnäkymä
+    # Login view
     logger.debug("Displaying login page")
     st.header("🔑 Kirjaudu sisään Jellyfin käyttäjälläsi")
     with st.form("login_form"):
@@ -953,9 +977,9 @@ if not st.session_state.get("jellyfin_session"):
         password = st.text_input("Salasana", type="password")
         if st.form_submit_button("Kirjaudu"):
             if jellyfin_login(username, password):
-                st.rerun() # Päivittää sivun näyttääkseen päänäkymän
+                st.rerun()
 else:
-    # Päänäkymä kirjautuneelle käyttäjälle
+    # Main view for logged-in user
     username = st.session_state.get("jellyfin_session", {}).get('User', {}).get('Name', 'Unknown')
 
     # Compact welcome + logout
@@ -979,7 +1003,7 @@ else:
         st.header("🔎 Hae suosituksia")
         media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type")
 
-        # Genre-näkymässä näytetään emoji-ikoni käyttäen format_funcia (vakaampi kuin näyttötunnisteet)
+        # Genre view displays emoji icon using format function (more stable than display labels)
         genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
         genre_emoji = {
             "Kaikki": "🌐 Kaikki",
@@ -992,17 +1016,17 @@ else:
             "Jännitys": "🔪 Jännitys",
             "Romantiikka": "❤️ Romantiikka",
         }
-        # Näytetään emojeilla rikastetut vaihtoehdot radiossa ja kartoitetaan takaisin sisäiseen arvoon
+        # Display emoji-enriched options in radio and map back to internal value
         display_options = [genre_emoji[g] for g in genre_options]
-        # Käytetään pystyradiota, se käyttäytyy luotettavasti eri selaimissa ja ei riko valituksi näkyvyyttä
+        # Use vertical radio, it behaves reliably across different browsers and doesn't break visibility when selected
         selected_display = st.radio("Valitse genre", display_options, index=0, key="genre_display_radio")
-        # Käännetään valinta takaisin sisäiseksi avaimeksi
+        # Map the selection back to the internal key
         reverse_map = {v: k for k, v in genre_emoji.items()}
         genre = reverse_map.get(selected_display, "Kaikki")
         # Store the genre in session state for the callback to access
         st.session_state.selected_genre = genre
 
-        # Pääpainike: täysleveä, violetilla korostuksella (CSS-tyylit yllä)
+        # Main button: full width, with purple highlight (CSS styles above)
         if st.button("🎬 Hae suositukset", use_container_width=True, disabled=st.session_state.get("should_fetch_recommendations", False)):
             st.session_state.should_fetch_recommendations = True
         
@@ -1087,7 +1111,7 @@ else:
         
         st.divider()
         
-        # SUOSITUSTEN NÄYTTÄMINEN (paremmat tiedot Jellyseerr:stä)
+        # DISPLAYING RECOMMENDATIONS (better details from Jellyseerr)
         if st.session_state.get("recommendations"):
             st.subheader("✨ Tässä sinulle suosituksia:")
             
@@ -1113,7 +1137,7 @@ else:
                 with st.container(border=True):
                     col1, col2, col3 = st.columns([1, 3, 1])
                     
-                    # Juliste
+                    # Poster
                     with col1:
                         poster_path = None
                         if jellyseerr_details and isinstance(jellyseerr_details, dict):
@@ -1138,7 +1162,7 @@ else:
                         else:
                             st.write("📷 Ei julistetta")
                     
-                    # Tiedot
+                    # Details
                     with col2:
                         st.markdown(f"**{title}** ({year})")
                         
@@ -1155,7 +1179,7 @@ else:
                         
                         st.caption(f"💡 {reason[:300]}..." if len(reason) > 300 else f"💡 {reason}")
                     
-                    # Painikkeet (4 vaihtoehtoa)
+                    # Buttons (4 options)
                     with col3:
                         st.write("**Toiminnot:**")
                         
@@ -1167,7 +1191,7 @@ else:
                         is_in_watchlist = title in user_data.get("watchlist", {}).get(type_key, [])
                         is_blacklisted = title in user_data.get("do_not_recommend", [])
                         
-                        # Row 1: Lisää katsottuihin
+                        # Row 1: Add to watched
                         watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
                         watched_disabled = is_watched
                         if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", use_container_width=True,
@@ -1178,7 +1202,7 @@ else:
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
                             st.rerun()
                         
-                        # Row 2: Pyydä Jellyseerristä
+                        # Row 2: Request from Jellyseerr
                         if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", use_container_width=True,
                                       help="Pyydä Jellyseerristä ladattavaksi"):
                             handle_search_result_request(media_id, media_type if media_type else media_type_from_radio)
@@ -1186,7 +1210,7 @@ else:
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
                             st.rerun()
                         
-                        # Row 3: Lisää katselulistalle
+                        # Row 3: Add to watchlist
                         watchlist_label = "✅ Katselulista" if is_in_watchlist else "📋 Katselulista"
                         watchlist_disabled = is_in_watchlist
                         if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", use_container_width=True,
@@ -1197,7 +1221,7 @@ else:
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
                             st.rerun()
                         
-                        # Row 4: Älä suosittele
+                        # Row 4: Do not recommend
                         blacklist_label = "✅ Estetty" if is_blacklisted else "🚫 Älä suosittele"
                         blacklist_disabled = is_blacklisted
                         if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", use_container_width=True,
@@ -1276,7 +1300,7 @@ else:
             st.header("✏️ Merkitse nimike katsottuksi manuaalisesti")
             st.write("Hae Jellyseerrista tai lisää nimikkeitä, joita et ole katsellut Jellyfinissä.")
             
-            # Jellyseerr-hakuosio
+            # Jellyseerr search section
             st.subheader("🔍 Hae Jellyseerrista")
             search_col1, search_col2 = st.columns([3, 1])
             with search_col1:
@@ -1293,7 +1317,7 @@ else:
                     else:
                         st.warning(f"❌ Ei löytynyt tuloksia haulle: '{search_query}'")
             
-            # Näytä hakutulokset
+            # Display search results
             if st.session_state.search_results:
                 st.divider()
                 st.subheader("📺 Hakutulokset")
@@ -1302,7 +1326,7 @@ else:
                     with st.container(border=True):
                         col1, col2, col3 = st.columns([1, 3, 1])
                         
-                        # Juliste
+                        # Poster
                         with col1:
                             poster_path = result.get("posterPath")
                             if poster_path and JELLYSEERR_URL:
@@ -1324,9 +1348,8 @@ else:
                             else:
                                 st.write("📷 Ei julistetta")
                         
-                        # Tiedot
+                        # Details
                         with col2:
-                            # API palauttaa 'name' eikä 'title', 'firstAirDate' eikä 'releaseDate'
                             title = result.get("name") or result.get("title", "N/A")
                             media_type = result.get("mediaType", "unknown")
                             release_date = result.get("firstAirDate") or result.get("releaseDate", "")
@@ -1341,23 +1364,23 @@ else:
                             if overview:
                                 st.write(overview[:300] + "..." if len(overview) > 300 else overview)
                         
-                        # Painikkeet (4 vaihtoehtoa)
+                        # Buttons (4 options)
                         with col3:
                             media_id = result.get("id")
                             st.write("**Toiminnot:**")
                             
-                            # Hae nykyisen käyttäjän tiedot
+                            # Fetch current user data
                             username = st.session_state.get("jellyfin_session", {}).get('User', {}).get('Name', 'Unknown')
                             db = load_manual_db()
                             user_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
                             type_key = "movies" if media_type.lower() == "movie" else "series"
                             
-                            # Tarkista statukset
+                            # Check statuses
                             is_watched = title in user_data.get(type_key, [])
                             is_in_watchlist = title in user_data.get("watchlist", {}).get(type_key, [])
                             is_blacklisted = title in user_data.get("do_not_recommend", [])
                             
-                            # Row 1: Lisää katsottuihin
+                            # Row 1: Add to watched
                             watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
                             watched_disabled = is_watched
                             if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", use_container_width=True,
@@ -1366,12 +1389,12 @@ else:
                                 handle_search_result_add_watched(title, media_type)
                                 st.rerun()
                             
-                            # Row 2: Pyydä Jellyseerristä
+                            # Row 2: Request from Jellyseerr
                             if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", use_container_width=True,
                                           help="Pyydä Jellyseerristä ladattavaksi"):
                                 handle_search_result_request(media_id, media_type)
                             
-                            # Row 3: Lisää katselulistalle
+                            # Row 3: Add to watchlist
                             watchlist_label = "✅ Katselulista" if is_in_watchlist else "📋 Katselulista"
                             watchlist_disabled = is_in_watchlist
                             if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", use_container_width=True,
@@ -1380,7 +1403,7 @@ else:
                                 handle_search_result_watchlist(title, media_type)
                                 st.rerun()
                             
-                            # Row 4: Älä suosittele
+                            # Row 4: Do not recommend
                             blacklist_label = "✅ Estetty" if is_blacklisted else "🚫 Älä suosittele"
                             blacklist_disabled = is_blacklisted
                             if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", use_container_width=True,
