@@ -132,6 +132,67 @@ All button actions use `on_click` callbacks with `st.session_state` updates to t
 
 ---
 
+## Versioning Guidelines
+
+### Release Format
+Follow semantic versioning with alpha designation: `vX.Y.Z-alpha`
+
+### Release Documentation Template
+Each release should include comprehensive release notes following this structure:
+
+```markdown
+## vX.Y.Z-alpha - Release Title
+🎯 Overview
+[1-2 sentence summary of release focus]
+
+✨ What's New
+[Key sections with emoji headers]
+- Feature 1 with description
+- Feature 2 with description
+- Feature 3 with description
+
+🐛 Bug Fixes
+- Fixed issue 1
+- Fixed issue 2
+- Fixed issue 3
+
+⚠️ Known Issues & Limitations
+- Issue 1
+- Issue 2
+- Issue 3
+
+📚 Documentation
+- 📖 README.md - Feature overview
+- 🚀 SETUP.md - Deployment instructions
+- 🔗 API_INTEGRATION.md - Integration details
+- 🗄️ DATABASE_SCHEMA.md - Database structure
+
+🚀 Installation & Upgrade
+[Installation instructions]
+
+📊 Monitoring
+[Log checking and debugging tips]
+
+⚠️ Disclaimer: This is a pre-release version...
+
+Tag: vX.Y.Z-alpha | Date: [Release Date] | Type: Pre-release (Alpha)
+```
+
+### Release Checklist
+1. Update `CHANGELOG.md` with all changes (Added, Changed, Fixed sections)
+2. Create annotated git tag: `git tag -a vX.Y.Z-alpha -m "Release message"`
+3. Push tag and main branch: `git push origin main --tags`
+4. Create comprehensive release notes on GitHub Releases page
+5. Verify CI/CD pipeline passes (Python validation, Docker build)
+
+### GitHub Tag Message Format
+Include full changelog summary in tag message:
+- Added: [Feature list]
+- Changed: [Behavior/API changes]
+- Fixed: [Bug fixes]
+
+---
+
 ## Notes for AI Agents
 - Focus on maintaining a clean and user-friendly UI using Streamlit best practices.
 - Ensure all API calls handle errors gracefully with try-catch blocks and user-friendly error messages.
@@ -141,6 +202,12 @@ All button actions use `on_click` callbacks with `st.session_state` updates to t
 - Use callback functions with `on_click` for button interactions.
 - Keep database operations atomic and validate JSON structure before saving.
 - Test with multiple user scenarios to ensure data isolation and integrity.
+- **Session State Safety**: Always use `.get()` method for session state access with appropriate defaults to prevent AttributeError
+- **Logout Flow**: Include explicit `st.rerun()` after clearing session state to force UI refresh
+- **Error Handling**: Use try-catch blocks for all external API calls with graceful fallbacks
+- **Logging**: Log all errors to `app.log` with appropriate severity levels
+- **Parallel Processing**: Use ThreadPoolExecutor for concurrent API calls to improve performance
+- **UI Responsiveness**: Never block UI with long-running operations; use `st.spinner()` context for feedback
 
 ---
 
