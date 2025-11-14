@@ -218,4 +218,5 @@ venv/
 TODO.md
 *.log
 app.log
+database.json
 database.json.backup

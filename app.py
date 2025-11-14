@@ -312,7 +312,7 @@ GENRE: {genre_instruction}
 
 VAATIMUKSET:
 - TULEE suositella VAIN {media_type_normalized} -tyyppisiä nimikkeitä
-- Älä suosittele mitään katsotusta listalta tai älä-suosittele-listalta
+- Älä suosittele mitään elokuvia tai sarjoja joka löytyy jo listalta katsottu, kiinnostunut (katselulista) tai älä suosittele
 - Tittelit täytyy olla englanninkielisiä
 - Jokainen suositus max 80 merkkiä "reason"-kentässä
 - Palauta vastauksesi minimoituna JSON-listana ilman rivinvaihtoja tai ylimääräisiä välilyöntejä
@@ -443,29 +443,28 @@ def search_jellyseerr_advanced(query: str):
 
 @st.cache_data(ttl=6*60*60, show_spinner=False)
 def get_jellyseerr_details(title: str):
-    """Hakee Jellyseerr:stä yksityiskohtaiset tiedot elokuvasta/sarjasta. Välimuistissa 6 tunnin ajan."""
+    """
+    Hakee Jellyseerr:stä yksityiskohtaiset tiedot elokuvasta/sarjasta nimen perusteella.
+    Palauttaa kaikki tulokset taulukossa. Välimuistissa 6 tunnin ajan.
+    """
     if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
-        return None
+        return []
     
     try:
         encoded_title = quote(title or "")
         base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
         endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
         
-        logger.debug(f"Fetching details from Jellyseerr for: {title}")
+        logger.debug(f"Fetching results from Jellyseerr for: {title}")
         resp = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
         
         results = resp.json().get("results", [])
-        if not results:
-            return None
-        
-        result = results[0]
-        logger.debug(f"Full Jellyseerr response for '{title}': {json.dumps(result, indent=2, default=str)[:200]}")
-        return result
+        logger.debug(f"Found {len(results)} results for '{title}'")
+        return results
     except Exception as e:
         logger.warning(f"Error fetching Jellyseerr details for '{title}': {e}")
-        return None
+        return []
 
 @retry_with_backoff(max_attempts=2, initial_delay=1)
 def request_on_jellyseerr(media_id, media_type):
@@ -1059,6 +1058,9 @@ else:
                 username = st.session_state.get("jellyfin_session", {}).get('User', {}).get('Name', 'Unknown')
                 
                 try:
+                    # Reset user-cleared flag when fetching new recommendations
+                    st.session_state.recommendations_cleared_by_user = False
+                    
                     jellyfin_watched = get_jellyfin_watched_titles()
                     db = load_manual_db()
                     user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
@@ -1122,7 +1124,7 @@ else:
         # Show success/error/warning messages after the button
         if st.session_state.get("recommendations_fetched", False) and st.session_state.get("recommendations"):
             st.success(f"✅ {len(st.session_state.get('recommendations', []))} suositusta haettu onnistuneesti!")
-        elif st.session_state.get("recommendations_fetched", False) and not st.session_state.get("recommendations"):
+        elif st.session_state.get("recommendations_fetched", False) and not st.session_state.get("recommendations") and not st.session_state.get("recommendations_cleared_by_user", False):
             st.warning("⚠️ Gemini ei palauttanut suosituksia. Yritä uudelleen.")
         
         if st.session_state.get("last_error"):
@@ -1158,7 +1160,57 @@ else:
                 # Fetch Jellyseerr details (must be on main thread for @st.cache_data to work)
                 jellyseerr_details = None
                 if JELLYSEERR_API_KEY and JELLYSEERR_URL:
-                    jellyseerr_details = get_jellyseerr_details(title)
+                    # Extract year as integer for validation
+                    gemini_year = None
+                    if isinstance(year, str) and year.isdigit():
+                        gemini_year = int(year)
+                    elif isinstance(year, int):
+                        gemini_year = year
+                    
+                    # Get all search results and validate against Gemini data
+                    all_results = get_jellyseerr_details(title)
+                    
+                    # Find best match by validating year and media type
+                    for result in all_results:
+                        result_title = result.get("title", "").lower()
+                        result_year_str = result.get("releaseDate") or result.get("firstAirDate")
+                        result_media_type = result.get("mediaType", "").lower()
+                        
+                        # Parse year from result (YYYY-MM-DD format)
+                        result_year_int = None
+                        if result_year_str:
+                            try:
+                                result_year_int = int(result_year_str.split("-")[0])
+                            except:
+                                pass
+                        
+                        # Normalize media types for comparison
+                        normalized_media_type = "movie" if media_type.lower() in ["elokuva", "movie"] else "tv"
+                        
+                        # Match title (case-insensitive, partial match acceptable)
+                        title_matches = title.lower() in result_title or result_title in title.lower()
+                        
+                        # Match year (within 1 year tolerance for date differences)
+                        year_matches = True
+                        if gemini_year and result_year_int:
+                            year_matches = abs(gemini_year - result_year_int) <= 1
+                        
+                        # Match media type
+                        type_matches = normalized_media_type == result_media_type
+                        
+                        logger.debug(f"Validating result '{result_title}' ({result_year_int}, {result_media_type}): title_match={title_matches}, year_match={year_matches}, type_match={type_matches}")
+                        
+                        # If all match, use this result
+                        if title_matches and year_matches and type_matches:
+                            jellyseerr_details = result
+                            logger.debug(f"Found validated match: {result_title}")
+                            break
+                    
+                    # If no validated match found, use first result as fallback
+                    if not jellyseerr_details and all_results:
+                        jellyseerr_details = all_results[0]
+                        logger.debug(f"No validated match found, using first result: {all_results[0].get('title')}")
+
                 
                 with st.container(border=True):
                     col1, col2, col3 = st.columns([1, 3, 1])
@@ -1226,6 +1278,8 @@ else:
                             handle_search_result_add_watched(title, media_type if media_type else media_type_from_radio)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
+                                if not st.session_state.recommendations:
+                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
                         
                         # Row 2: Request from Jellyseerr
@@ -1234,6 +1288,8 @@ else:
                             handle_search_result_request(media_id, media_type if media_type else media_type_from_radio)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
+                                if not st.session_state.recommendations:
+                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
                         
                         # Row 3: Add to watchlist
@@ -1245,6 +1301,8 @@ else:
                             handle_search_result_watchlist(title, media_type if media_type else media_type_from_radio)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
+                                if not st.session_state.recommendations:
+                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
                         
                         # Row 4: Do not recommend
@@ -1256,6 +1314,8 @@ else:
                             handle_search_result_blacklist(title)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
+                                if not st.session_state.recommendations:
+                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
 
     # ===== TAB 2: KATSELULISTA =====
