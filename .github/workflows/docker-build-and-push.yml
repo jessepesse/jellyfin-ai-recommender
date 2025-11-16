@@ -60,12 +60,6 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.authors=jessepesse
             org.opencontainers.image.url=https://github.com/jessepesse/jellyfin-ai-recommender
-            org.opencontainers.image.license=MIT
-          # Annotations for manifest (multi-arch support)
-          outputs: type=oci
-          annotations: |
-            org.opencontainers.image.title=Jellyfin AI Recommender
-            org.opencontainers.image.description=AI-powered movie and TV show recommendations using Google Gemini, integrated with Jellyfin and Jellyseerr
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
-            org.opencontainers.image.url=https://github.com/jessepesse/jellyfin-ai-recommender
-            org.opencontainers.image.license=MIT
+            org.opencontainers.image.licenses=MIT
+          # Multi-arch image annotations (GitHub Container Registry support)
+          outputs: type=image,name=target,annotation-index.org.opencontainers.image.title=Jellyfin AI Recommender,annotation-index.org.opencontainers.image.description=AI-powered movie and TV show recommendations using Google Gemini integrated with Jellyfin and Jellyseerr,annotation-index.org.opencontainers.image.version=${{ steps.version.outputs.version }},annotation-index.org.opencontainers.image.licenses=MIT
