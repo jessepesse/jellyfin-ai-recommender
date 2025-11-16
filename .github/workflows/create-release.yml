@@ -1,0 +1,83 @@
+# GitHub Actions workflow for automatic release creation
+# Automatically creates GitHub Release when a tag is pushed
+
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*-alpha'  # Matches tags like v0.2.5-alpha
+      - 'v*-beta'   # Matches tags like v0.2.5-beta
+      - 'v*'        # Matches tags like v1.0.0
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper git operations
+
+      - name: Extract tag name
+        id: tag
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Extract release notes from git tag
+        id: release_notes
+        run: |
+          # Get the annotated tag message
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ steps.tag.outputs.version }})
+          
+          # If tag has no message, use a default format
+          if [ -z "$TAG_MESSAGE" ]; then
+            TAG_MESSAGE="Release ${{ steps.tag.outputs.version }}"
+          fi
+          
+          # Use EOF to handle multiline content
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Determine release type (pre-release or stable)
+        id: release_type
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          if [[ "$VERSION" =~ -alpha$ ]] || [[ "$VERSION" =~ -beta$ ]] || [[ "$VERSION" =~ -rc$ ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "type=Pre-release" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "type=Release" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.version }}
+          release_name: "${{ steps.release_type.outputs.type }} ${{ steps.tag.outputs.version }}"
+          body: |
+            ## Release Notes
+            ${{ steps.release_notes.outputs.notes }}
+            
+            ---
+            
+            **Commit Hash:** ${{ github.sha }}  
+            **Branch:** ${{ github.ref_name }}  
+            **Created at:** ${{ github.event.head_commit.timestamp }}
+          draft: false
+          prerelease: ${{ steps.release_type.outputs.prerelease }}
+
+      - name: Print release info
+        run: |
+          echo "✅ GitHub Release created successfully!"
+          echo "Release: ${{ steps.tag.outputs.version }}"
+          echo "Type: ${{ steps.release_type.outputs.type }}"
+          echo "Pre-release: ${{ steps.release_type.outputs.prerelease }}"
+          echo "URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.version }}"
