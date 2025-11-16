@@ -14,6 +14,7 @@ Personalized movie and TV show recommendation engine powered by **Google Gemini 
 - 🔗 **Jellyseerr Integration** — Request media directly from Jellyseerr with one click
 - 📊 **Manual Tracking** — Add movies/series watched outside Jellyfin
 - 💾 **Database Backup** — Export and import your personal data
+- 🎬 **Availability Tracking** — Automatically detects available content on Jellyseerr
 
 ## 🚀 Quick Start
 
@@ -137,12 +138,17 @@ See [SETUP.md](SETUP.md) for detailed environment variable configuration.
 2. **Select media type** (Movies or TV Series)
 3. **Choose genre** (optional)
 4. **Click "Hae suositukset"** to generate recommendations
+   - ⏳ Button will be disabled for 5 seconds after fetching (rate limiting)
+   - 🔄 Countdown timer updates in real-time
 5. **Manage recommendations:**
    - ✅ Request via Jellyseerr
    - 👁️ Mark as watched
    - 🚫 Block from future recommendations
    - 🔖 Add to watchlist
-6. **Backup your data:**
+6. **Available Content Tracking:**
+   - 🎬 App automatically tracks available (but unwatched) content from Jellyseerr
+   - ❌ Won't recommend content you already have available
+7. **Backup your data:**
    - 📥 Export as JSON file
    - 📤 Import previously exported backup
 
@@ -150,9 +156,20 @@ See [SETUP.md](SETUP.md) for detailed environment variable configuration.
 
 ```
 Jellyfin → Watch History → AI Recommendations → Jellyseerr (requests)
-           Manual Tracking ↓
-           Database (JSON) → Watchlist, Blacklist, Backup/Restore
+           Manual Tracking ↓                      ↓
+           Jellyseerr Available Content (synced)
+           Database (JSON) ← Availability Tracking ← (auto-detect available content)
+           ↓
+           Watchlist, Blacklist, Backup/Restore
+           Available But Unwatched Tracking
 ```
+
+### Key Data Flows:
+- **Rate Limiting:** 5-second cooldown enforced after each fetch (prevents API spam)
+- **Jellyseerr Sync:** Fetches all AVAILABLE content from `/api/v1/request` endpoint and stores in database
+- **Availability Check:** After enrichment, checks each recommendation on Jellyseerr for AVAILABLE/PARTIALLY_AVAILABLE status
+- **Smart Filtering:** Gemini AI avoids recommending content that's already available but unwatched
+- **Persistent Tracking:** Available content automatically saved to database for future reference
 
 ## 📄 License
 
@@ -184,6 +201,11 @@ This is a personal project. Contributions are welcome! Feel free to fork, modify
   - [Jellyseerr](https://github.com/seerr-team/seerr) — Media request management
 - **Storage:** JSON-based user database
 - **Deployment:** Docker & Docker Compose
+- **Performance:**
+  - Fragment-based rate limiting (Streamlit native)
+  - ThreadPoolExecutor for parallel API calls (5 workers)
+  - Caching for Jellyseerr searches (6-hour TTL)
+  - Smart availability tracking integrated into enrichment flow
 
 ## 🐛 Troubleshooting
 

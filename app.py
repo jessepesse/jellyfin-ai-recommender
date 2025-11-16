@@ -13,6 +13,7 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 from threading import Thread, Lock
+from datetime import datetime
 
 load_dotenv()
 
@@ -329,6 +330,47 @@ def _save_jellyfin_watched_to_db(watched_titles):
     user_data["jellyfin_synced"] = watched_titles
     save_manual_db(db)
 
+def sync_jellyseerr_available_titles():
+    """
+    Hakee Jellyseerristä kaikki saatavilla olevat elokuvat ja sarjat.
+    Tallentaa ne tietokantaan "jellyseerr_available" -kenttiin.
+    """
+    try:
+        available_movies, available_series = get_jellyseerr_available_titles()
+        
+        if not available_movies and not available_series:
+            logger.warning("[AVAIL] No available titles found from Jellyseerr")
+            return available_movies, available_series
+        
+        # Save to database
+        username = st.session_state.jellyfin_session['User']['Name']
+        db = load_manual_db()
+        user_data = db.setdefault(username, {
+            "movies": [],
+            "series": [],
+            "do_not_recommend": [],
+            "watchlist": {"movies": [], "series": []},
+            "jellyseerr_available": {"movies": [], "series": []},
+            "jellyseerr_synced_at": ""
+        })
+        
+        # Ensure structure exists
+        if "jellyseerr_available" not in user_data:
+            user_data["jellyseerr_available"] = {"movies": [], "series": []}
+        
+        # Update available titles from Jellyseerr
+        user_data["jellyseerr_available"]["movies"] = available_movies
+        user_data["jellyseerr_available"]["series"] = available_series
+        user_data["jellyseerr_synced_at"] = str(datetime.now())
+        
+        save_manual_db(db)
+        logger.info(f"[AVAIL] Synced {len(available_movies)} available movies and {len(available_series)} available series to database")
+        
+        return available_movies, available_series
+    
+    except Exception as e:
+        logger.error(f"[AVAIL] Error syncing Jellyseerr available titles to database: {e}", exc_info=True)
+        return [], []
 
 # NOTE: AI prompts are localized to Finnish (user's native language) to ensure consistent UX.
 # The application creator is Finnish, so prompts are crafted in Finnish.
@@ -372,7 +414,7 @@ GENRE: {genre_instruction}
 
 VAATIMUKSET:
 - TULEE suositella VAIN {media_type_normalized} -tyyppisiä nimikkeitä
-- Älä suosittele mitään elokuvia tai sarjoja joka löytyy jo listalta katsottu, kiinnostunut (katselulista), älä suosittele tai saatavilla (mutta katsomatta)
+- Älä ikinä suosittele mitään elokuvia tai sarjoja joka löytyy jo listalta katsottu, kiinnostunut (katselulista), älä suosittele tai saatavilla (mutta katsomatta)
 - Tittelit täytyy olla englanninkielisiä
 - Jokainen suositus max 80 merkkiä "reason"-kentässä
 - Palauta vastauksesi minimoituna JSON-listana ilman rivinvaihtoja tai ylimääräisiä välilyöntejä
@@ -423,11 +465,11 @@ def get_gemini_recommendations(prompt):
 # Headers convenience
 JELLYSEERR_HEADERS = {"X-Api-Key": JELLYSEERR_API_KEY} if JELLYSEERR_API_KEY else {}
 
-@st.cache_data(ttl=6*60*60, show_spinner=False)
-def search_jellyseerr(title: str):
+def search_jellyseerr(title: str, session=None):
     """
     Etsii nimikettä Jellyseeristä pelkällä nimellä ja palauttaa
     ensimmäisen osuman ID:n ja media-tyypin (tai (None, None) jos ei löydy).
+    session: requests.Session object for making HTTP calls (needed for thread safety)
     Välimuistissa 6 tunnin ajan.
     """
     if not JELLYSEERR_API_KEY:
@@ -436,37 +478,116 @@ def search_jellyseerr(title: str):
     if not JELLYSEERR_URL:
         logger.error("JELLYSEERR_URL not configured")
         return None, None
+    
+    # Use provided session or fall back to st.session_state (for backwards compatibility)
+    if session is None:
+        logger.warning(f"[SEARCH] No session provided for '{title}'")
+        if hasattr(st.session_state, 'jellyseerr_requests_session'):
+            session = st.session_state.jellyseerr_requests_session
+            logger.info(f"[SEARCH] Using st.session_state session for '{title}'")
+        else:
+            logger.error(f"[SEARCH] No session available for '{title}'")
+            return None, None
+    
     try:
         encoded_title = quote(title or "")
         base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
         endpoint = f"{base}/api/v1/search?query={encoded_title}&page=1"
         
-        logger.debug(f"Searching Jellyseerr for: {title}")
-        resp = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        logger.info(f"[SEARCH] Jellyseerr search endpoint: {endpoint}")
+        resp = session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
         resp.raise_for_status()
         
         results = resp.json().get("results", [])
         if not results:
-            logger.debug(f"No results found in Jellyseerr for: {title}")
+            logger.info(f"[SEARCH] No results found in Jellyseerr for: {title}")
             return None, None
         
         first = results[0]
         media_id = first.get("id")
         media_type = first.get("mediaType")
-        logger.debug(f"Found Jellyseerr match for '{title}': ID={media_id}, type={media_type}")
+        logger.info(f"[SEARCH] Found Jellyseerr match for '{title}': ID={media_id}, type={media_type}")
         return media_id, media_type
     except requests.exceptions.Timeout:
-        logger.warning(f"Jellyseerr search timeout for title: {title}")
+        logger.warning(f"[SEARCH] Jellyseerr search timeout for title: {title}")
         return None, None
     except requests.exceptions.HTTPError as e:
-        logger.warning(f"Jellyseerr HTTP error during search: {e.response.status_code}")
+        logger.warning(f"[SEARCH] Jellyseerr HTTP error during search for '{title}': {e.response.status_code}")
         return None, None
     except requests.exceptions.RequestException as e:
-        logger.warning(f"Jellyseerr connection error during search: {e}")
+        logger.warning(f"[SEARCH] Jellyseerr connection error during search for '{title}': {e}")
         return None, None
     except Exception as e:
-        logger.error(f"Unexpected error searching Jellyseerr: {e}")
+        logger.error(f"[SEARCH] Unexpected error searching Jellyseerr for '{title}': {e}", exc_info=True)
         return None, None
+
+def get_jellyseerr_available_titles():
+    """
+    Hakee kaikki saatavilla olevat elokuvat ja sarjat Jellyseerristä /api/v1/request endpointista.
+    Palauttaa kaksi listaa: (elokuvat, sarjat), joissa vain AVAILABLE-statuksella olevat mediat.
+    """
+    if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
+        logger.debug("Jellyseerr not configured for available titles fetch")
+        return [], []
+    
+    try:
+        session = st.session_state.get("jellyseerr_requests_session")
+        if not session:
+            session = requests.Session()
+        
+        base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+        endpoint = f"{base}/api/v1/request"
+        
+        logger.debug("Fetching available titles from Jellyseerr /api/v1/request endpoint")
+        resp = session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=15)
+        resp.raise_for_status()
+        
+        requests_data = resp.json().get("data", [])
+        logger.debug(f"Received {len(requests_data)} requests from Jellyseerr API")
+        
+        available_movies = []
+        available_series = []
+        
+        for request_item in requests_data:
+            status = request_item.get("status")
+            if status != "AVAILABLE":
+                continue
+            
+            media = request_item.get("media", {})
+            media_type = media.get("mediaType")
+            title = media.get("title") or media.get("name")
+            
+            if not title:
+                logger.debug(f"Skipping request without title: {request_item}")
+                continue
+            
+            logger.debug(f"[AVAIL] Found {media_type}: {title}")
+            
+            if media_type == "movie":
+                available_movies.append(title)
+            elif media_type == "tv":
+                available_series.append(title)
+        
+        # Remove duplicates while preserving order
+        available_movies = list(dict.fromkeys(available_movies))
+        available_series = list(dict.fromkeys(available_series))
+        
+        logger.info(f"[AVAIL] Successfully fetched {len(available_movies)} movies and {len(available_series)} TV series from Jellyseerr")
+        
+        return available_movies, available_series
+        
+    except requests.exceptions.Timeout:
+        logger.error("[AVAIL] Jellyseerr available titles fetch timeout")
+        return [], []
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"[AVAIL] Jellyseerr HTTP error fetching available titles: {e.response.status_code}")
+        return [], []
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"[AVAIL] Jellyseerr connection error during available titles fetch: {e}")
+        return [], []
+    except Exception as e:
+        logger.error(f"[AVAIL] Unexpected error fetching Jellyseerr available titles: {e}", exc_info=True)
+        return [], []
 
 @st.cache_data(ttl=6*60*60)
 def search_jellyseerr_advanced(query: str):
@@ -568,52 +689,95 @@ def request_on_jellyseerr(media_id, media_type):
         st.toast("❌ Odottamaton virhe pyynnön teossa.", icon="🚨")
         return False
 
-def get_jellyseerr_media_status(media_id: int, media_type: str):
+def get_jellyseerr_media_status(media_id: int, media_type: str, session=None):
     """
     Fetch media availability status from Jellyseerr.
     media_type: 'movie' or 'tv'
+    session: requests.Session object (if None, uses st.session_state)
+    
+    Jellyseerr API endpoints:
+    - GET /api/v1/movie/{id} -> returns mediaInfo with status
+    - GET /api/v1/tv/{id} -> returns mediaInfo with status
+    - Status values: UNKNOWN, REQUESTED, APPROVED, AVAILABLE, PARTIALLY_AVAILABLE
+    
     Returns: 'AVAILABLE', 'PARTIALLY_AVAILABLE', 'PENDING', 'PROCESSING', or None if not found/error
     """
     if not JELLYSEERR_API_KEY or not JELLYSEERR_URL or not media_id:
         return None
-    
+
+    # Use provided session or fall back to st.session_state
+    if session is None:
+        if hasattr(st.session_state, 'jellyseerr_requests_session'):
+            session = st.session_state.jellyseerr_requests_session
+        else:
+            logger.error("No session provided and st.session_state.jellyseerr_requests_session not available")
+            return None
+
     try:
         # Construct endpoint based on media type
         endpoint_type = "movie" if media_type.lower() == "movie" else "tv"
         endpoint = f"{JELLYSEERR_URL}/api/v1/{endpoint_type}/{media_id}"
-        
-        logger.debug(f"Fetching media status from Jellyseerr: {endpoint_type}/{media_id}")
-        response = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=5)
+
+        logger.info(f"[AVAIL] Fetching media status from: {endpoint}")
+        response = session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=5)
         response.raise_for_status()
-        
+
         data = response.json()
-        status = data.get("mediaInfo", {}).get("status")
-        logger.debug(f"Media {endpoint_type}/{media_id} status: {status}")
+        logger.info(f"[AVAIL] Response keys: {list(data.keys())}")
+        
+        # Jellyseerr returns mediaInfo object with status field
+        # Structure: { "id": 123, "mediaInfo": { "status": "AVAILABLE", ... }, ... }
+        status = None
+        if "mediaInfo" in data:
+            status = data.get("mediaInfo", {}).get("status")
+            logger.info(f"[AVAIL] Found status via mediaInfo: {status}")
+        else:
+            logger.info(f"[AVAIL] No mediaInfo in response. Top-level keys: {list(data.keys())}")
+            # Try other possible paths
+            if "status" in data:
+                status = data.get("status")
+                logger.info(f"[AVAIL] Found status at top level: {status}")
+
+        logger.info(f"[AVAIL] Media {endpoint_type}/{media_id} final status: {status}")
         return status
+    except requests.exceptions.Timeout:
+        logger.warning(f"[AVAIL] Timeout fetching media status for {endpoint_type}/{media_id}")
+        return None
+    except requests.exceptions.HTTPError as e:
+        logger.warning(f"[AVAIL] HTTP error {e.response.status_code} for {endpoint_type}/{media_id}")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"[AVAIL] Connection error fetching status: {e}")
+        return None
     except Exception as e:
-        logger.debug(f"Could not fetch Jellyseerr media status for {endpoint_type}/{media_id}: {e}")
+        logger.error(f"[AVAIL] Unexpected error fetching Jellyseerr media status: {e}", exc_info=True)
         return None
 
-def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int, jellyfin_watched: list, db: dict, username: str) -> bool:
+def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int, jellyfin_watched: list, db: dict, username: str, session=None) -> bool:
     """
     Check if a recommendation is available on Jellyseerr but not watched on Jellyfin.
     If so, add it to available_but_unwatched list in database.
+    session: requests.Session object (if None, uses st.session_state)
     Returns True if item was added, False otherwise.
     """
     try:
+        logger.info(f"[AVAIL] Checking availability for '{title}' (id={tmdb_id}, type={media_type})")
+        
         # Normalize media_type for database keys
         db_type_key = "movies" if media_type.lower() == "movie" else "series"
         
         # Get media status from Jellyseerr
-        status = get_jellyseerr_media_status(tmdb_id, media_type)
+        status = get_jellyseerr_media_status(tmdb_id, media_type, session=session)
+        logger.info(f"[AVAIL] Status for '{title}': {status}")
         
         # Check if status indicates availability
         if status not in ["AVAILABLE", "PARTIALLY_AVAILABLE"]:
+            logger.info(f"[AVAIL] '{title}' status {status} not available - skipping")
             return False
         
         # Check if already watched on Jellyfin
         if title in jellyfin_watched:
-            logger.debug(f"'{title}' is available but already watched on Jellyfin - skipping")
+            logger.info(f"[AVAIL] '{title}' is available but already watched on Jellyfin - skipping")
             return False
         
         # Initialize user data and available_but_unwatched if needed
@@ -626,11 +790,10 @@ def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int,
         # Check for duplicates
         available_list = db[username]["available_but_unwatched"]
         if any(item["title"] == title for item in available_list):
-            logger.debug(f"'{title}' already in available_but_unwatched list - skipping duplicate")
+            logger.info(f"[AVAIL] '{title}' already in available_but_unwatched list - skipping duplicate")
             return False
         
         # Add to available_but_unwatched
-        from datetime import datetime
         new_item = {
             "title": title,
             "media_type": media_type,
@@ -638,10 +801,10 @@ def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int,
             "noted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         available_list.append(new_item)
-        logger.info(f"Added '{title}' to available_but_unwatched for user {username}")
+        logger.info(f"[AVAIL] ✅ Added '{title}' to available_but_unwatched for user {username}")
         return True
     except Exception as e:
-        logger.warning(f"Error checking/adding available_unwatched for '{title}': {e}")
+        logger.error(f"[AVAIL] Error checking/adding available_unwatched for '{title}': {e}", exc_info=True)
         return False
 
 # --- New UI handlers using callbacks ---
@@ -909,13 +1072,15 @@ def import_user_data_from_json(json_string, username):
         st.error(f"❌ Virhe tuodessa tietokantaa: {e}")
         return False
 
-def _enrich_recommendation_with_jellyseerr(title: str):
+def _enrich_recommendation_with_jellyseerr(title: str, session=None):
     """Helper function for parallel enrichment - no Streamlit calls here."""
     try:
-        media_id, m_type = search_jellyseerr(title)
+        logger.info(f"[ENRICH] Starting enrichment for: {title}, session={session is not None}")
+        media_id, m_type = search_jellyseerr(title, session=session)
+        logger.info(f"[ENRICH] Result for '{title}': media_id={media_id}, media_type={m_type}")
         return {"title": title, "media_id": media_id, "media_type": m_type, "success": True}
     except Exception as e:
-        logger.warning(f"Failed to enrich recommendation '{title}': {e}")
+        logger.error(f"[ENRICH] Failed to enrich recommendation '{title}': {e}", exc_info=True)
         return {"title": title, "media_id": None, "media_type": None, "success": False, "error": str(e)}
 
 # --- MAIN FUNCTION THAT HANDLES RECOMMENDATIONS FETCHING ---
@@ -927,6 +1092,8 @@ def fetch_and_show_recommendations(media_type, genre):
         with st.spinner("Haetaan katseluhistoriaa ja asetuksia..."):
             logger.debug(f"Fetching recommendations for user: {username}, media_type: {media_type}, genre: {genre}")
             jellyfin_watched = get_jellyfin_watched_titles()
+            # Also sync Jellyseerr available titles to database
+            available_movies, available_series = sync_jellyseerr_available_titles()
             db = load_manual_db()
             user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
             manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
@@ -1316,6 +1483,8 @@ else:
                     # (removed this flag as it's no longer needed - prev_results_displayed now controls gate)
                     
                     jellyfin_watched = get_jellyfin_watched_titles()
+                    # Also sync Jellyseerr available titles to database
+                    available_movies, available_series = sync_jellyseerr_available_titles()
                     db = load_manual_db()
                     user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
                     manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
@@ -1338,8 +1507,8 @@ else:
                         enriched_recommendations = []
                         logger.debug(f"Starting parallel Jellyseerr search for {len(recommendations)} recommendations")
                         
-                        # Get current script context for thread pool workers
-                        ctx = get_script_run_ctx()
+                        # Get session object for thread pool workers (they can't access st.session_state)
+                        jellyseerr_session = st.session_state.get("jellyseerr_requests_session")
                         
                         def enrichment_wrapper(title: str):
                             """Wrapper to handle ScriptRunContext for thread pool workers
@@ -1347,9 +1516,8 @@ else:
                             in ThreadPoolExecutor workers. Streamlit documentation confirms this is normal
                             behavior when running Streamlit operations in threads."""
                             try:
-                                # Context stored for potential future use, though Streamlit doesn't
-                                # recommend calling Streamlit functions directly from threads
-                                return _enrich_recommendation_with_jellyseerr(title)
+                                # Pass session to enrichment function for thread-safe API calls
+                                return _enrich_recommendation_with_jellyseerr(title, session=jellyseerr_session)
                             except Exception as e:
                                 logger.warning(f"Wrapper error for '{title}': {e}")
                                 return {"title": title, "media_id": None, "media_type": None, "success": False, "error": str(e)}
@@ -1380,6 +1548,26 @@ else:
                                     enriched_recommendations.append(rec)
                         
                         logger.info(f"Parallel enrichment completed for {len(enriched_recommendations)} recommendations")
+                        
+                        # Check availability on Jellyseerr and add to available_but_unwatched if applicable
+                        logger.debug("Checking Jellyseerr availability for recommendations...")
+                        jellyseerr_session = st.session_state.get("jellyseerr_requests_session")
+                        for rec in enriched_recommendations:
+                            if rec.get('media_id') and rec.get('media_type'):
+                                check_and_add_available_unwatched(
+                                    title=rec['title'],
+                                    media_type=rec['media_type'],
+                                    tmdb_id=rec['media_id'],
+                                    jellyfin_watched=full_watched_list,
+                                    db=db,
+                                    username=username,
+                                    session=jellyseerr_session
+                                )
+                        
+                        # Save database with updated available_but_unwatched entries
+                        save_manual_db(db)
+                        logger.debug("Database saved with available_but_unwatched updates")
+                        
                         st.session_state.recommendations = enriched_recommendations
                         st.session_state.recommendations_fetched = True
                         logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")

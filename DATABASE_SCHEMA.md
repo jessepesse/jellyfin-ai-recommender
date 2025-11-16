@@ -14,7 +14,20 @@ User data is stored in `database.json` with the following structure:
       "movies": ["Movie 3", "Movie 4"],
       "series": ["Series 3"]
     },
+    "available_but_unwatched": [
+      {
+        "title": "Avatar",
+        "media_type": "movie",
+        "tmdb_id": 19995,
+        "noted_at": "2025-11-16 14:30:00"
+      }
+    ],
+    "jellyseerr_available": {
+      "movies": ["Movie A", "Movie B", "Movie C"],
+      "series": ["Series A", "Series B"]
+    },
     "jellyfin_synced_at": "2024-01-15 14:23:45.123456",
+    "jellyseerr_synced_at": "2024-01-15 14:25:00.123456",
     "jellyfin_total_watched": 42
   }
 }
@@ -34,7 +47,16 @@ User data is stored in `database.json` with the following structure:
 | `do_not_recommend` | array[string] | Titles user doesn't want recommendations for |
 | `watchlist.movies` | array[string] | Movies added to watchlist from recommendations |
 | `watchlist.series` | array[string] | TV series added to watchlist from recommendations |
-| `jellyfin_synced_at` | string | Timestamp of last Jellyfin sync (ISO format) |
+| `available_but_unwatched` | array[object] | Available content on Jellyseerr but not yet watched (auto-tracked) |
+| `available_but_unwatched[].title` | string | Title of the available media |
+| `available_but_unwatched[].media_type` | string | Media type: "movie" or "tv" |
+| `available_but_unwatched[].tmdb_id` | number | TMDB ID for reference |
+| `available_but_unwatched[].noted_at` | string | Timestamp when availability was noted (ISO format) |
+| `jellyseerr_available` | object | All AVAILABLE content from Jellyseerr (synced on recommendation fetch) |
+| `jellyseerr_available.movies` | array[string] | Titles of AVAILABLE movies from Jellyseerr |
+| `jellyseerr_available.series` | array[string] | Titles of AVAILABLE TV series from Jellyseerr |
+| `jellyfin_synced_at` | string | Timestamp of last Jellyfin watch history sync (ISO format) |
+| `jellyseerr_synced_at` | string | Timestamp of last Jellyseerr available content sync (ISO format) |
 | `jellyfin_total_watched` | number | Total count of watched items from Jellyfin |
 
 ## Data Flow
@@ -76,6 +98,20 @@ User data is stored in `database.json` with the following structure:
       "movies": ["Blade Runner 2049", "Arrival"],
       "series": ["Severance", "Andor"]
     },
+    "available_but_unwatched": [
+      {
+        "title": "Avatar",
+        "media_type": "movie",
+        "tmdb_id": 19995,
+        "noted_at": "2025-11-16 14:30:00"
+      },
+      {
+        "title": "Dune: Part Two",
+        "media_type": "movie",
+        "tmdb_id": 282035,
+        "noted_at": "2025-11-16 14:35:00"
+      }
+    ],
     "jellyfin_synced_at": "2024-12-15 19:45:30.567890",
     "jellyfin_total_watched": 156
   }

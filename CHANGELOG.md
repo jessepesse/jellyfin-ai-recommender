@@ -5,6 +5,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.5-alpha] - 2025-11-16
+
+### 🎯 Overview
+Rate limiting and API cost control for Gemini recommendations. Jellyseerr availability tracking with intelligent filtering. Enhanced recommendation quality through persistent availability data and cooldown mechanism.
+
+### ✨ What's New
+
+- **Rate Limiting & Cooldown System**
+  - 5-second cooldown after successful recommendation fetch
+  - Auto-updating countdown display (⏳ Odota Xs ennen seuraavaa hakua)
+  - Button disabled during cooldown period
+  - Fragment-based auto-refresh using `@st.fragment(run_every=0.5)`
+  - Cooldown triggered AFTER fetch completes (not during)
+  - Pure Python implementation (no JavaScript dependencies)
+  - Prevents excessive Gemini API calls and uncontrolled billing
+
+- **Jellyseerr Availability Check & Database Persistence**
+  - New `get_jellyseerr_media_status()` function queries Jellyseerr for media availability
+  - Automatic tracking of available but unwatched content (AVAILABLE/PARTIALLY_AVAILABLE)
+  - Database schema extended with `available_but_unwatched` list
+  - Each tracked item includes: title, media_type, tmdb_id, noted_at timestamp
+  - Deduplication logic prevents duplicate entries
+  - Integrated into enrichment flow: runs after Jellyseerr lookup
+  - Available content included in Gemini prompt to prevent re-recommendations
+  - Better recommendation quality: avoids suggesting already-available content
+
+- **Bug Fixes & Modernization**
+  - Round rating values to 1 decimal place in display
+  - Replace deprecated `use_container_width` with `width` parameter across all buttons
+  - Suppress ThreadPoolExecutor ScriptRunContext warnings for cleaner output
+  - Add logging configuration for warning suppression
+
+### 🐛 Bug Fixes
+- Fixed cooldown timer not displaying immediately after fetch
+- Fixed button not auto-enabling after cooldown expires
+- Fixed duplicate `update_rate_limit_timestamp()` calls
+- Fixed hardcoded 20-second cooldown (changed to 5 seconds)
+- Improved session state management for rate limiting
+
+### 📚 Documentation
+- 📖 README.md - Feature overview
+- 🚀 SETUP.md - Deployment instructions
+- 🔗 API_INTEGRATION.md - Integration details
+- 🗄️ DATABASE_SCHEMA.md - Database structure (updated with available_but_unwatched)
+
+### ⚠️ Known Issues & Limitations
+- None at this time. All v0.2.5-alpha features implemented and tested.
+
+### 🚀 Installation & Upgrade
+From v0.2.4-alpha:
+```bash
+git pull origin main
+docker-compose up -d --build  # For Docker deployment
+# or
+streamlit run app.py  # For local development
+```
+
+### 📊 Monitoring
+- Rate limiter active: Prevents API spam (5-second cooldown enforced)
+- Availability checker: Automatically tracks available content on Jellyseerr
+- Gemini prompt enhanced: Includes available_but_unwatched filter
+- Cooldown countdown: Auto-updates every 0.5 seconds
+- Button auto-enables: Fragment triggers rerun when cooldown expires
+
+### 💾 Database Changes
+**New field in user_data:**
+```json
+{
+  "username": {
+    "movies": [...],
+    "series": [...],
+    "do_not_recommend": [...],
+    "watchlist": {...},
+    "available_but_unwatched": [
+      {
+        "title": "Avatar",
+        "media_type": "movie",
+        "tmdb_id": 19995,
+        "noted_at": "2025-11-16 14:30:00"
+      }
+    ]
+  }
+}
+```
+
+### ⚠️ Disclaimer
+This is a pre-release version (alpha) with ongoing development. Rate limiting and availability tracking are now core features for cost control and recommendation quality.
+
+**Tag:** v0.2.5-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha)
+
 ## [0.2.4-alpha] - 2025-11-16
 
 ### 🎯 Overview

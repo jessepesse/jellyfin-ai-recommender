@@ -78,6 +78,65 @@ Response: {
 }
 ```
 
+### Availability Status Check
+
+```python
+GET /api/v1/movie/{tmdbId}
+OR
+GET /api/v1/tv/{tmdbId}
+
+Headers: X-Api-Key: {api_key}
+Params: None
+
+Response: {
+  "id": 12345,
+  "name": "Title",
+  "mediaType": "movie",  # or "tv"
+  "status": "AVAILABLE",  # or "PARTIALLY_AVAILABLE", "UNKNOWN", etc.
+  "posterPath": "/path/to/poster.jpg"
+}
+```
+
+**Usage:** Checks if a recommendation is already available on the user's Jellyseerr instance. Status "AVAILABLE" or "PARTIALLY_AVAILABLE" means the content is accessible.
+
+**Caching:** Availability checks are NOT cached (real-time status needed).
+
+### Fetch All Available Content
+
+```python
+GET /api/v1/request
+
+Headers: X-Api-Key: {api_key}
+Params: None
+
+Response: {
+  "data": [
+    {
+      "id": "request-id-1",
+      "status": "AVAILABLE",  # or "PENDING", "APPROVED", "DECLINED"
+      "media": {
+        "mediaType": "movie",  # or "tv"
+        "title": "Movie Title",
+        "name": "Series Name"
+      }
+    },
+    {
+      "id": "request-id-2",
+      "status": "AVAILABLE",
+      "media": {
+        "mediaType": "tv",
+        "title": null,
+        "name": "Series Title"
+      }
+    }
+  ]
+}
+```
+
+**Usage:** Fetches all requests (user requests + auto-requests). Filters for AVAILABLE status only and separates into movies and TV series. Results are stored in database under `jellyseerr_available` for reference.
+
+**Caching:** NOT cached - fetched fresh on each recommendation request to ensure current availability data.
+
 ---
 
 ## Google Generative AI (Gemini) API
@@ -132,11 +191,17 @@ Fetch Recommendations Request
     ↓
 [Jellyfin API] → Watch history
     ↓
-[Local Database] → Manual watched + watchlist + blacklist
+[Local Database] → Manual watched + watchlist + blacklist + available_but_unwatched
     ↓
-[Gemini API] → AI generates recommendations
+[Gemini API] → AI generates recommendations (filtered by availability)
     ↓
-[Jellyseerr Search] → Find media IDs (cached)
+[Jellyseerr Search] → Find media IDs (cached 6 hours)
+    ↓
+[Jellyseerr Availability Check] → Query /api/v1/movie/{tmdbId} or /api/v1/tv/{tmdbId} (real-time)
+    ↓
+Check & Update Availability
+    ↓
+[Local Database] → Add to available_but_unwatched with timestamp
     ↓
 Display Recommendations
     ↓
@@ -188,7 +253,11 @@ streamlit run app.py
 - Free tier: 60 requests per minute
 - Upgrade to paid for higher limits
 
----
+### Availability Checks
+- Per-recommendation check to Jellyseerr API
+- No strict rate limits documented
+- Recommended: Use parallel checks with ThreadPoolExecutor (app uses 5 workers)
+- Real-time queries (not cached) for accurate availability status
 
 ## Troubleshooting
 

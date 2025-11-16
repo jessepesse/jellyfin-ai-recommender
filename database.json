@@ -50,7 +50,18 @@
             "Tenet",
             "Oldboy",
             "The Mitchells vs. the Machines",
-            "RoboCop"
+            "RoboCop",
+            "Mr. Nobody",
+            "Total Recall",
+            "Heat",
+            "The Raid: Redemption",
+            "A Clockwork Orange",
+            "Léon: The Professional",
+            "Fargo",
+            "Fight Club",
+            "The Fifth Element",
+            "Pulp Fiction",
+            "The Animatrix"
         ],
         "series": [
             "The Book of Boba Fett",
@@ -76,7 +87,11 @@
             "Crouching Tiger, Hidden Dragon",
             "Source Code",
             "Ponyo",
-            "The Fall"
+            "The Fall",
+            "Wolfwalkers",
+            "Legend",
+            "Fantastic Planet",
+            "Being John Malkovich"
         ],
         "watchlist": {
             "movies": [
@@ -88,15 +103,19 @@
                 "Fantastic Mr. Fox",
                 "Dark City",
                 "The Green Knight",
-                "Layer Cake"
+                "Layer Cake",
+                "Stalker",
+                "Coherence",
+                "Solaris",
+                "The Thing"
             ],
             "series": [
                 "Mindhunter",
                 "Station Eleven"
             ]
         },
-        "jellyfin_synced_at": "2025-11-16 13:20:14.094346",
-        "jellyfin_total_watched": 68
+        "jellyfin_synced_at": "2025-11-16 20:17:55.376254",
+        "jellyfin_total_watched": 69
     },
     "testuser": {
         "movies": [
