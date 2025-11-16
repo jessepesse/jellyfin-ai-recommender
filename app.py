@@ -333,8 +333,8 @@ def _save_jellyfin_watched_to_db(watched_titles):
 # NOTE: AI prompts are localized to Finnish (user's native language) to ensure consistent UX.
 # The application creator is Finnish, so prompts are crafted in Finnish.
 # If the app is localized to other languages in the future, these prompts should be localized accordingly.
-def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_list):
-    """Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista."""
+def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_list, available_but_unwatched_list=None):
+    """Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista ja saatavilla-lista."""
     # Normalize media_type for Gemini API to ensure consistent recommendations
     # UI uses "Elokuva"/"TV-sarja", but normalize to lowercase for clarity in prompt
     if media_type.lower() in ["elokuva", "movie"]:
@@ -347,6 +347,14 @@ def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_li
     watched_titles_str = ", ".join(watched_list) if watched_list else "ei yhtään"
     watchlist_str = ", ".join(watchlist) if watchlist else "ei yhtään"
     do_not_str = ", ".join(do_not_recommend_list) if do_not_recommend_list else "ei yhtään"
+    
+    # Extract titles from available_but_unwatched list (which contains dictionaries)
+    available_titles = []
+    if available_but_unwatched_list:
+        for item in available_but_unwatched_list:
+            if isinstance(item, dict) and "title" in item:
+                available_titles.append(item["title"])
+    available_str = ", ".join(available_titles) if available_titles else "ei yhtään"
 
     genre_instruction = f"Kaikkien suositusten tulee kuulua genreen: '{genre}'." if genre != "Kaikki" else "Suosittele monipuolisesti eri genrejä."
 
@@ -359,11 +367,12 @@ TÄRKEÄ: Sinun tulee suositella AINOASTAAN {media_type_normalized.upper()}, ei 
 KATSOTTU: {watched_titles_str}
 KIINNOSTUS (katselulista): {watchlist_str}
 ÄLÄ SUOSITTELE: {do_not_str}
+SAATAVILLA (MUTTA KATSOMATTA): {available_str}
 GENRE: {genre_instruction}
 
 VAATIMUKSET:
 - TULEE suositella VAIN {media_type_normalized} -tyyppisiä nimikkeitä
-- Älä suosittele mitään elokuvia tai sarjoja joka löytyy jo listalta katsottu, kiinnostunut (katselulista) tai älä suosittele
+- Älä suosittele mitään elokuvia tai sarjoja joka löytyy jo listalta katsottu, kiinnostunut (katselulista), älä suosittele tai saatavilla (mutta katsomatta)
 - Tittelit täytyy olla englanninkielisiä
 - Jokainen suositus max 80 merkkiä "reason"-kentässä
 - Palauta vastauksesi minimoituna JSON-listana ilman rivinvaihtoja tai ylimääräisiä välilyöntejä
@@ -557,6 +566,82 @@ def request_on_jellyseerr(media_id, media_type):
     except Exception as e:
         logger.error(f"Unexpected error making Jellyseerr request: {e}")
         st.toast("❌ Odottamaton virhe pyynnön teossa.", icon="🚨")
+        return False
+
+def get_jellyseerr_media_status(media_id: int, media_type: str):
+    """
+    Fetch media availability status from Jellyseerr.
+    media_type: 'movie' or 'tv'
+    Returns: 'AVAILABLE', 'PARTIALLY_AVAILABLE', 'PENDING', 'PROCESSING', or None if not found/error
+    """
+    if not JELLYSEERR_API_KEY or not JELLYSEERR_URL or not media_id:
+        return None
+    
+    try:
+        # Construct endpoint based on media type
+        endpoint_type = "movie" if media_type.lower() == "movie" else "tv"
+        endpoint = f"{JELLYSEERR_URL}/api/v1/{endpoint_type}/{media_id}"
+        
+        logger.debug(f"Fetching media status from Jellyseerr: {endpoint_type}/{media_id}")
+        response = st.session_state.jellyseerr_requests_session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=5)
+        response.raise_for_status()
+        
+        data = response.json()
+        status = data.get("mediaInfo", {}).get("status")
+        logger.debug(f"Media {endpoint_type}/{media_id} status: {status}")
+        return status
+    except Exception as e:
+        logger.debug(f"Could not fetch Jellyseerr media status for {endpoint_type}/{media_id}: {e}")
+        return None
+
+def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int, jellyfin_watched: list, db: dict, username: str) -> bool:
+    """
+    Check if a recommendation is available on Jellyseerr but not watched on Jellyfin.
+    If so, add it to available_but_unwatched list in database.
+    Returns True if item was added, False otherwise.
+    """
+    try:
+        # Normalize media_type for database keys
+        db_type_key = "movies" if media_type.lower() == "movie" else "series"
+        
+        # Get media status from Jellyseerr
+        status = get_jellyseerr_media_status(tmdb_id, media_type)
+        
+        # Check if status indicates availability
+        if status not in ["AVAILABLE", "PARTIALLY_AVAILABLE"]:
+            return False
+        
+        # Check if already watched on Jellyfin
+        if title in jellyfin_watched:
+            logger.debug(f"'{title}' is available but already watched on Jellyfin - skipping")
+            return False
+        
+        # Initialize user data and available_but_unwatched if needed
+        if username not in db:
+            db[username] = {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}, "available_but_unwatched": []}
+        
+        if "available_but_unwatched" not in db[username]:
+            db[username]["available_but_unwatched"] = []
+        
+        # Check for duplicates
+        available_list = db[username]["available_but_unwatched"]
+        if any(item["title"] == title for item in available_list):
+            logger.debug(f"'{title}' already in available_but_unwatched list - skipping duplicate")
+            return False
+        
+        # Add to available_but_unwatched
+        from datetime import datetime
+        new_item = {
+            "title": title,
+            "media_type": media_type,
+            "tmdb_id": tmdb_id,
+            "noted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        available_list.append(new_item)
+        logger.info(f"Added '{title}' to available_but_unwatched for user {username}")
+        return True
+    except Exception as e:
+        logger.warning(f"Error checking/adding available_unwatched for '{title}': {e}")
         return False
 
 # --- New UI handlers using callbacks ---
@@ -850,13 +935,16 @@ def fetch_and_show_recommendations(media_type, genre):
             watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
             # Flatten watchlist from both movies and series for the prompt
             watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
+            # Get available_but_unwatched list
+            available_but_unwatched = user_db_entry.get("available_but_unwatched", [])
+            
             full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
             
-            logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
+            logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}, available_unwatched={len(available_but_unwatched)}")
 
         with st.spinner("Kysytään suosituksia tekoälyltä..."):
             logger.debug(f"Building prompt with: media_type={media_type}, genre={genre}, watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
-            prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
+            prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist, available_but_unwatched)
             logger.debug(f"Prompt built, calling Gemini...")
             recommendations = get_gemini_recommendations(prompt)
             logger.debug(f"Gemini returned: {type(recommendations)} - {recommendations if recommendations else 'None/Empty'}")
@@ -895,6 +983,23 @@ def fetch_and_show_recommendations(media_type, genre):
                             enriched_recommendations.append(rec)
                 
                 logger.info(f"Parallel enrichment completed for {len(enriched_recommendations)} recommendations")
+            
+            # Check availability on Jellyseerr and add to available_but_unwatched if applicable
+            logger.debug("Checking Jellyseerr availability for recommendations...")
+            for rec in enriched_recommendations:
+                if rec.get('media_id') and rec.get('media_type'):
+                    check_and_add_available_unwatched(
+                        title=rec['title'],
+                        media_type=rec['media_type'],
+                        tmdb_id=rec['media_id'],
+                        jellyfin_watched=jellyfin_watched,
+                        db=db,
+                        username=username
+                    )
+            
+            # Save database with updated available_but_unwatched entries
+            save_manual_db(db)
+            logger.debug("Database saved with available_but_unwatched updates")
             
             st.session_state.recommendations = enriched_recommendations
             st.session_state.recommendations_fetched = True
