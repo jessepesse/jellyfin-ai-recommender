@@ -5,6 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-alpha] - 2025-11-16 (In Development)
+
+### 🎯 Overview
+TMDB ID and media_type storage for all media entries. Enhanced database schema for better Jellyseerr integration and cross-service compatibility. All media now traceable and requestable via TMDB IDs.
+
+### ✨ What's New
+
+- **TMDB ID Storage for All Media Collections**
+  - Extended database schema: ALL media lists now store objects (not strings)
+  - Each entry includes: `title`, `media_type`, `tmdb_id`
+  - Affected collections: watched, do_not_recommend, watchlist
+  - Media type ("movie"/"tv") from Jellyseerr ensures correct database placement
+  - TMDB ID enables direct requests and cross-service integrations
+  - Deduplication now uses tmdb_id matching (more accurate than title-only)
+
+- **New Database Schema Structure**
+  - Watched lists: `{"title": "...", "media_type": "...", "tmdb_id": ...}`
+  - Do-not-recommend: `{"title": "...", "media_type": "...", "tmdb_id": ...}`
+  - Watchlist: `{"title": "...", "media_type": "...", "tmdb_id": ...}`
+  - Jellyseerr available: `{"title": "...", "media_type": "...", "tmdb_id": ...}` (NEW - with TMDB IDs)
+  - Automatic media type detection ensures movies go to movies, series to series
+  - Complete audit trail with metadata for future integrations
+
+- **Jellyseerr Sync from /api/v1/request**
+  - New `get_jellyseerr_available_titles()` function fetches all AVAILABLE content
+  - New `sync_jellyseerr_available_titles()` stores results to database with TMDB metadata
+  - Syncs during recommendation fetch and after enrichment
+  - Database updated with available_movies and available_series lists (now with tmdb_id)
+  - Enables tracking of available content across sessions with full Jellyseerr data
+
+- **Automatic Media Enrichment**
+  - Enrichment layer automatically fetches tmdb_id and media_type from Jellyseerr
+  - Applied to: recommended media, watchlist additions, manual tracking entries, available content sync
+  - Session-safe enrichment using ThreadPoolExecutor with session parameter passing
+  - Comprehensive logging with [ENRICH], [SEARCH], [AVAIL] tags
+
+### 🐛 Bug Fixes
+- None at this version (no bugs reported)
+
+### 📚 Documentation Updates
+- DATABASE_SCHEMA.md - Complete restructuring with new object-based format for ALL collections
+- API_INTEGRATION.md - Added /api/v1/request endpoint documentation
+- README.md - Architecture diagram updated with Jellyseerr available content sync
+- Migration guide for legacy simple-string format to new object format
+
+
+### 💾 Database Changes
+**Schema migration from v0.2.5 to v0.2.6:**
+```json
+{
+  "movies": [
+    {"title": "Movie", "media_type": "movie", "tmdb_id": 12345}
+  ],
+  "series": [
+    {"title": "Series", "media_type": "tv", "tmdb_id": 67890}
+  ],
+  "do_not_recommend": [
+    {"title": "Blocked", "media_type": "movie", "tmdb_id": 11111}
+  ],
+  "watchlist": {
+    "movies": [{"title": "Queued", "media_type": "movie", "tmdb_id": 22222}],
+    "series": [{"title": "Queued", "media_type": "tv", "tmdb_id": 33333}]
+  },
+  "available_but_unwatched": [
+    {"title": "Available", "media_type": "movie", "tmdb_id": 44444, "noted_at": "..."}
+  ],
+  "jellyseerr_available": {
+    "movies": [{"title": "Available", "media_type": "movie", "tmdb_id": 55555}],
+    "series": [{"title": "Available", "media_type": "tv", "tmdb_id": 66666}]
+  }
+}
+```
+
+### ⚠️ Known Issues & Limitations
+- None at this version
+
+### ⚠️ Disclaimer
+This is a pre-release version (alpha) with ongoing development. Schema changes require data migration for existing users.
+
+**Tag:** v0.2.6-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha)
+
+---
+
 ## [0.2.5-alpha] - 2025-11-16
 
 ### 🎯 Overview
