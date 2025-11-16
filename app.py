@@ -266,7 +266,8 @@ def jellyfin_login(username, password):
 @st.cache_data(ttl=2*60*60, show_spinner=False)
 @retry_with_backoff(max_attempts=3, initial_delay=1)
 def get_jellyfin_watched_titles():
-    """Hakee katsotut nimikkeet käyttäen tallennettua sessiota ja tallentaa ne tietokantaan. Välimuistissa 2 tunnin ajan."""
+    """Fetches watched titles from Jellyfin with media_type info and saves to database. Cached for 2 hours.
+    Returns list of tuples: (title, media_type) to support new schema format."""
     try:
         session = st.session_state.jellyfin_session
         if not session:
@@ -291,18 +292,38 @@ def get_jellyfin_watched_titles():
         response.raise_for_status()
         
         items = response.json().get("Items", [])
-        watched_titles = [item.get("Name") for item in items if item.get("Name")]
-        logger.info(f"Successfully fetched {len(watched_titles)} watched titles from Jellyfin")
         
-        # Save to database with separation
+        # Extract titles with media_type info for new schema
+        watched_with_type = []
+        for item in items:
+            title = item.get("Name")
+            item_type = item.get("Type")  # "Movie" or "Series" from Jellyfin
+            
+            if title and item_type:
+                # Convert Jellyfin type to standard media_type
+                media_type = "movie" if item_type == "Movie" else "tv"
+                watched_with_type.append((title, media_type))
+                logger.debug(f"Fetched from Jellyfin: {title} ({media_type})")
+        
+        logger.info(f"Successfully fetched {len(watched_with_type)} watched titles from Jellyfin with media types")
+        
+        # Save to database with metadata
         username = st.session_state.jellyfin_session['User']['Name']
         db = load_manual_db()
-        user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+        user_data = db.setdefault(username, {
+            "movies": [], 
+            "series": [], 
+            "do_not_recommend": [], 
+            "watchlist": {"movies": [], "series": []},
+            "available_but_unwatched": [],
+            "jellyseerr_available": {"movies": [], "series": []}
+        })
         user_data["jellyfin_synced_at"] = str(__import__('datetime').datetime.now())
-        user_data["jellyfin_total_watched"] = len(watched_titles)
+        user_data["jellyfin_total_watched"] = len(watched_with_type)
         save_manual_db(db)
         
-        return watched_titles
+        # Return list of (title, media_type) tuples for use in recommendations
+        return watched_with_type
     except requests.exceptions.Timeout:
         logger.error("Jellyfin watch history fetch timeout")
         st.error("❌ Jellyfin-palvelin ei vastaa katseluhistorian haussa.")
@@ -324,7 +345,14 @@ def _save_jellyfin_watched_to_db(watched_titles):
     """Tallentaa Jellyfin-katseluhistorian tietokantaan."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     
     # Update watched titles (overwrite with latest from Jellyfin)
     user_data["jellyfin_synced"] = watched_titles
@@ -333,7 +361,7 @@ def _save_jellyfin_watched_to_db(watched_titles):
 def sync_jellyseerr_available_titles():
     """
     Hakee Jellyseerristä kaikki saatavilla olevat elokuvat ja sarjat.
-    Tallentaa ne tietokantaan "jellyseerr_available" -kenttiin.
+    Suodattaa pois jo katsotut ja tallentaa loput 'available_but_unwatched'-kenttään.
     """
     try:
         available_movies, available_series = get_jellyseerr_available_titles()
@@ -342,7 +370,7 @@ def sync_jellyseerr_available_titles():
             logger.warning("[AVAIL] No available titles found from Jellyseerr")
             return available_movies, available_series
         
-        # Save to database
+        # Get username and database
         username = st.session_state.jellyfin_session['User']['Name']
         db = load_manual_db()
         user_data = db.setdefault(username, {
@@ -350,21 +378,70 @@ def sync_jellyseerr_available_titles():
             "series": [],
             "do_not_recommend": [],
             "watchlist": {"movies": [], "series": []},
-            "jellyseerr_available": {"movies": [], "series": []},
-            "jellyseerr_synced_at": ""
+            "available_but_unwatched": []
         })
         
         # Ensure structure exists
-        if "jellyseerr_available" not in user_data:
-            user_data["jellyseerr_available"] = {"movies": [], "series": []}
+        if "available_but_unwatched" not in user_data:
+            user_data["available_but_unwatched"] = []
         
-        # Update available titles from Jellyseerr
-        user_data["jellyseerr_available"]["movies"] = available_movies
-        user_data["jellyseerr_available"]["series"] = available_series
+        # Get already watched titles (using get_media_title to handle both formats)
+        watched_movies = [get_media_title(entry) for entry in user_data.get("movies", [])]
+        watched_series = [get_media_title(entry) for entry in user_data.get("series", [])]
+        watched_titles = set(watched_movies + watched_series)
+        
+        # Extract titles from available media entries (now objects with {title, media_type, tmdb_id})
+        available_movie_titles = [get_media_title(entry) for entry in available_movies]
+        available_series_titles = [get_media_title(entry) for entry in available_series]
+        
+        # Filter: only keep available titles that are NOT already watched
+        unwatched_movies = [entry for entry in available_movies if get_media_title(entry) not in watched_titles]
+        unwatched_series = [entry for entry in available_series if get_media_title(entry) not in watched_titles]
+        
+        logger.info(f"[AVAIL] Available: {len(available_movie_titles)} movies, {len(available_series_titles)} series. Already watched: {len(watched_titles)}. Unwatched available: {len(unwatched_movies)} movies, {len(unwatched_series)} series")
+        
+        # Create media entries for unwatched available titles
+        available_list = user_data.get("available_but_unwatched", [])
+        
+        for entry in unwatched_movies:
+            # entry is already {title, media_type, tmdb_id}, just add noted_at
+            title = get_media_title(entry)
+            # Check if already in available_but_unwatched to avoid duplicates
+            if not any(get_media_title(item) == title for item in available_list):
+                new_entry = {
+                    "title": entry["title"],
+                    "media_type": entry.get("media_type", "movie"),
+                    "tmdb_id": entry.get("tmdb_id"),
+                    "noted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                available_list.append(new_entry)
+                logger.debug(f"[AVAIL] Added unwatched available movie: {title} (TMDB ID: {entry.get('tmdb_id')})")
+        
+        for entry in unwatched_series:
+            # entry is already {title, media_type, tmdb_id}, just add noted_at
+            title = get_media_title(entry)
+            # Check if already in available_but_unwatched to avoid duplicates
+            if not any(get_media_title(item) == title for item in available_list):
+                new_entry = {
+                    "title": entry["title"],
+                    "media_type": entry.get("media_type", "tv"),
+                    "tmdb_id": entry.get("tmdb_id"),
+                    "noted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                available_list.append(new_entry)
+                logger.debug(f"[AVAIL] Added unwatched available series: {title} (TMDB ID: {entry.get('tmdb_id')})")
+        
+        user_data["available_but_unwatched"] = available_list
         user_data["jellyseerr_synced_at"] = str(datetime.now())
         
+        # Store jellyseerr_available as required by DATABASE_SCHEMA.md
+        user_data["jellyseerr_available"] = {
+            "movies": available_movies,
+            "series": available_series
+        }
+        
         save_manual_db(db)
-        logger.info(f"[AVAIL] Synced {len(available_movies)} available movies and {len(available_series)} available series to database")
+        logger.info(f"[AVAIL] Synced {len(unwatched_movies)} unwatched available movies and {len(unwatched_series)} unwatched available series to available_but_unwatched, and stored all available titles in jellyseerr_available")
         
         return available_movies, available_series
     
@@ -376,7 +453,23 @@ def sync_jellyseerr_available_titles():
 # The application creator is Finnish, so prompts are crafted in Finnish.
 # If the app is localized to other languages in the future, these prompts should be localized accordingly.
 def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_list, available_but_unwatched_list=None):
-    """Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista ja saatavilla-lista."""
+    """Rakentaa kehotteen, joka pyytää JSON-vastausta. Huomioi myös 'älä suosittele' -lista ja saatavilla-lista.
+    Accepts flexible input formats: strings, tuples, or dicts."""
+    # Extract titles from flexible input formats
+    def extract_titles_from_flexible_list(items_list):
+        """Extract titles from list of: strings, (title, type) tuples, or {title, media_type, tmdb_id} dicts"""
+        titles = []
+        if not items_list:
+            return titles
+        for item in items_list:
+            if isinstance(item, dict) and "title" in item:
+                titles.append(item["title"])
+            elif isinstance(item, tuple) and len(item) >= 1:
+                titles.append(item[0])  # First element is title
+            elif isinstance(item, str):
+                titles.append(item)
+        return titles
+    
     # Normalize media_type for Gemini API to ensure consistent recommendations
     # UI uses "Elokuva"/"TV-sarja", but normalize to lowercase for clarity in prompt
     if media_type.lower() in ["elokuva", "movie"]:
@@ -386,16 +479,15 @@ def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_li
     else:
         media_type_normalized = media_type.lower()
     
-    watched_titles_str = ", ".join(watched_list) if watched_list else "ei yhtään"
-    watchlist_str = ", ".join(watchlist) if watchlist else "ei yhtään"
-    do_not_str = ", ".join(do_not_recommend_list) if do_not_recommend_list else "ei yhtään"
+    # Extract titles from flexible formats
+    watched_titles = extract_titles_from_flexible_list(watched_list)
+    watchlist_titles = extract_titles_from_flexible_list(watchlist)
+    do_not_titles = extract_titles_from_flexible_list(do_not_recommend_list)
+    available_titles = extract_titles_from_flexible_list(available_but_unwatched_list)
     
-    # Extract titles from available_but_unwatched list (which contains dictionaries)
-    available_titles = []
-    if available_but_unwatched_list:
-        for item in available_but_unwatched_list:
-            if isinstance(item, dict) and "title" in item:
-                available_titles.append(item["title"])
+    watched_titles_str = ", ".join(watched_titles) if watched_titles else "ei yhtään"
+    watchlist_str = ", ".join(watchlist_titles) if watchlist_titles else "ei yhtään"
+    do_not_str = ", ".join(do_not_titles) if do_not_titles else "ei yhtään"
     available_str = ", ".join(available_titles) if available_titles else "ei yhtään"
 
     genre_instruction = f"Kaikkien suositusten tulee kuulua genreen: '{genre}'." if genre != "Kaikki" else "Suosittele monipuolisesti eri genrejä."
@@ -521,58 +613,165 @@ def search_jellyseerr(title: str, session=None):
         logger.error(f"[SEARCH] Unexpected error searching Jellyseerr for '{title}': {e}", exc_info=True)
         return None, None
 
+def get_tmdb_title(tmdb_id: int, media_type: str, session=None):
+    """
+    Hakee elokuvan tai sarjan nimen Jellyseerr API:sta TMDB ID:n perusteella.
+    media_type: "movie" tai "tv"
+    Palauttaa (title, media_type) tai (None, None) jos haku epäonnistuu.
+    """
+    if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
+        logger.debug("[TMDB] Jellyseerr not configured for TMDB title fetch")
+        return None, None
+    
+    if not tmdb_id:
+        logger.warning("[TMDB] No TMDB ID provided")
+        return None, None
+    
+    try:
+        # Use provided session or create new one
+        if session is None:
+            session = requests.Session()
+        
+        # Determine endpoint based on media_type
+        endpoint_type = "tv" if media_type.lower() == "tv" else "movie"
+        base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
+        endpoint = f"{base}/api/v1/{endpoint_type}/{tmdb_id}"
+        
+        logger.debug(f"[TMDB] Fetching title from: {endpoint}")
+        resp = session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=10)
+        resp.raise_for_status()
+        
+        data = resp.json()
+        title = data.get("title") or data.get("name")
+        
+        if not title:
+            logger.warning(f"[TMDB] No title found for TMDB ID {tmdb_id}")
+            return None, None
+        
+        logger.info(f"[TMDB] Found title for TMDB ID {tmdb_id}: {title}")
+        return title, endpoint_type
+        
+    except requests.exceptions.Timeout:
+        logger.warning(f"[TMDB] Jellyseerr TMDB title fetch timeout for ID {tmdb_id}")
+        return None, None
+    except requests.exceptions.HTTPError as e:
+        logger.warning(f"[TMDB] Jellyseerr HTTP error fetching title for TMDB ID {tmdb_id}: {e.response.status_code}")
+        return None, None
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"[TMDB] Jellyseerr connection error fetching title for TMDB ID {tmdb_id}: {e}")
+        return None, None
+    except Exception as e:
+        logger.error(f"[TMDB] Unexpected error fetching TMDB title for ID {tmdb_id}: {e}", exc_info=True)
+        return None, None
+
 def get_jellyseerr_available_titles():
     """
     Hakee kaikki saatavilla olevat elokuvat ja sarjat Jellyseerristä /api/v1/request endpointista.
     Palauttaa kaksi listaa: (elokuvat, sarjat), joissa vain AVAILABLE-statuksella olevat mediat.
+    Each item in lists is a dict: {title, media_type, tmdb_id} matching DATABASE_SCHEMA.md format.
     """
+    logger.info(f"[AVAIL] Starting available titles fetch. JELLYSEERR_API_KEY set: {bool(JELLYSEERR_API_KEY)}, JELLYSEERR_URL: {JELLYSEERR_URL}")
+    
     if not JELLYSEERR_API_KEY or not JELLYSEERR_URL:
-        logger.debug("Jellyseerr not configured for available titles fetch")
+        logger.warning("[AVAIL] Jellyseerr not configured for available titles fetch")
         return [], []
     
     try:
         session = st.session_state.get("jellyseerr_requests_session")
         if not session:
+            logger.warning("[AVAIL] No session in st.session_state, creating new requests.Session()")
             session = requests.Session()
         
         base = JELLYSEERR_URL.rstrip('/') if isinstance(JELLYSEERR_URL, str) else JELLYSEERR_URL
         endpoint = f"{base}/api/v1/request"
         
-        logger.debug("Fetching available titles from Jellyseerr /api/v1/request endpoint")
+        logger.info(f"[AVAIL] Fetching from endpoint: {endpoint}")
         resp = session.get(endpoint, headers=JELLYSEERR_HEADERS, timeout=15)
+        logger.info(f"[AVAIL] Response status: {resp.status_code}")
         resp.raise_for_status()
         
-        requests_data = resp.json().get("data", [])
-        logger.debug(f"Received {len(requests_data)} requests from Jellyseerr API")
+        response_json = resp.json()
+        logger.debug(f"[AVAIL] Response keys: {response_json.keys() if isinstance(response_json, dict) else 'not a dict'}")
+        
+        # Jellyseerr returns 'results' not 'data'
+        requests_data = response_json.get("results", response_json.get("data", []))
+        logger.info(f"[AVAIL] Received {len(requests_data)} total requests from Jellyseerr API")
         
         available_movies = []
         available_series = []
+        available_count = 0
         
-        for request_item in requests_data:
+        # Use ThreadPoolExecutor for parallel TMDB title fetches
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        # Collect all AVAILABLE requests first
+        available_requests = []
+        for idx, request_item in enumerate(requests_data):
             status = request_item.get("status")
-            if status != "AVAILABLE":
+            logger.debug(f"[AVAIL] Item {idx}: status={status} (type: {type(status).__name__})")
+            
+            # Status 5 = AVAILABLE (integer comparison)
+            if status != 5:
                 continue
             
+            available_count += 1
             media = request_item.get("media", {})
+            tmdb_id = media.get("tmdbId")
             media_type = media.get("mediaType")
-            title = media.get("title") or media.get("name")
             
-            if not title:
-                logger.debug(f"Skipping request without title: {request_item}")
+            if not tmdb_id or not media_type:
+                logger.debug(f"[AVAIL] Skipping item {idx} - missing tmdbId or mediaType")
                 continue
             
-            logger.debug(f"[AVAIL] Found {media_type}: {title}")
-            
-            if media_type == "movie":
-                available_movies.append(title)
-            elif media_type == "tv":
-                available_series.append(title)
+            available_requests.append((tmdb_id, media_type))
+            logger.info(f"[AVAIL] Found AVAILABLE status item {idx}: tmdbId={tmdb_id}, type={media_type}")
         
-        # Remove duplicates while preserving order
-        available_movies = list(dict.fromkeys(available_movies))
-        available_series = list(dict.fromkeys(available_series))
+        logger.info(f"[AVAIL] Total AVAILABLE status items: {available_count}, to fetch titles for: {len(available_requests)}")
         
-        logger.info(f"[AVAIL] Successfully fetched {len(available_movies)} movies and {len(available_series)} TV series from Jellyseerr")
+        # Parallel fetch of TMDB titles using ThreadPoolExecutor
+        if available_requests:
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # Submit all TMDB title fetch tasks
+                futures = {
+                    executor.submit(get_tmdb_title, tmdb_id, media_type, session=session): (tmdb_id, media_type)
+                    for tmdb_id, media_type in available_requests
+                }
+                
+                # Process completed tasks as they finish
+                for future in as_completed(futures):
+                    tmdb_id, media_type = futures[future]
+                    try:
+                        title, fetched_type = future.result()
+                        if title:
+                            # Create media entry object with TMDB ID as required by DATABASE_SCHEMA.md
+                            media_entry = {
+                                "title": title,
+                                "media_type": fetched_type or media_type,
+                                "tmdb_id": tmdb_id
+                            }
+                            if media_type == "movie" or fetched_type == "movie":
+                                available_movies.append(media_entry)
+                            elif media_type == "tv" or fetched_type == "tv":
+                                available_series.append(media_entry)
+                            logger.info(f"[AVAIL] Added {fetched_type}: {title} (TMDB ID: {tmdb_id})")
+                        else:
+                            logger.warning(f"[AVAIL] Failed to fetch title for TMDB ID {tmdb_id}")
+                    except Exception as e:
+                        logger.error(f"[AVAIL] Error fetching title for TMDB ID {tmdb_id}: {e}")
+        
+        # Remove duplicates by TMDB ID while preserving order
+        def deduplicate_by_tmdb_id(items):
+            seen_ids = {}
+            for item in items:
+                tmdb_id = item.get("tmdb_id")
+                if tmdb_id not in seen_ids:
+                    seen_ids[tmdb_id] = item
+            return list(seen_ids.values())
+        
+        available_movies = deduplicate_by_tmdb_id(available_movies)
+        available_series = deduplicate_by_tmdb_id(available_series)
+        
+        logger.info(f"[AVAIL] After dedup - movies: {len(available_movies)}, series: {len(available_series)}")
         
         return available_movies, available_series
         
@@ -583,7 +782,7 @@ def get_jellyseerr_available_titles():
         logger.error(f"[AVAIL] Jellyseerr HTTP error fetching available titles: {e.response.status_code}")
         return [], []
     except requests.exceptions.RequestException as e:
-        logger.warning(f"[AVAIL] Jellyseerr connection error during available titles fetch: {e}")
+        logger.error(f"[AVAIL] Jellyseerr connection error during available titles fetch: {e}")
         return [], []
     except Exception as e:
         logger.error(f"[AVAIL] Unexpected error fetching Jellyseerr available titles: {e}", exc_info=True)
@@ -757,8 +956,17 @@ def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int,
     """
     Check if a recommendation is available on Jellyseerr but not watched on Jellyfin.
     If so, add it to available_but_unwatched list in database.
-    session: requests.Session object (if None, uses st.session_state)
-    Returns True if item was added, False otherwise.
+    
+    Parameters:
+    - title: Media title (string)
+    - media_type: "movie" or "tv"
+    - tmdb_id: TMDB ID for the media
+    - jellyfin_watched: List of STRINGS containing watched titles (NOT tuples). Extract titles from tuples before calling.
+    - db: Database dictionary reference
+    - username: Jellyfin username for database storage
+    - session: requests.Session object (if None, uses st.session_state)
+    
+    Returns: True if item was added, False otherwise.
     """
     try:
         logger.info(f"[AVAIL] Checking availability for '{title}' (id={tmdb_id}, type={media_type})")
@@ -782,7 +990,14 @@ def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int,
         
         # Initialize user data and available_but_unwatched if needed
         if username not in db:
-            db[username] = {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}, "available_but_unwatched": []}
+            db[username] = {
+                "movies": [], 
+                "series": [], 
+                "do_not_recommend": [], 
+                "watchlist": {"movies": [], "series": []}, 
+                "available_but_unwatched": [],
+                "jellyseerr_available": {"movies": [], "series": []}
+            }
         
         if "available_but_unwatched" not in db[username]:
             db[username]["available_but_unwatched"] = []
@@ -807,6 +1022,46 @@ def check_and_add_available_unwatched(title: str, media_type: str, tmdb_id: int,
         logger.error(f"[AVAIL] Error checking/adding available_unwatched for '{title}': {e}", exc_info=True)
         return False
 
+# --- Helper Functions for Media Entry Creation ---
+def create_media_entry(title: str, media_type: str, tmdb_id: int | None = None) -> dict:
+    """
+    Creates a standardized media entry object with title, media_type, and tmdb_id.
+    Used for all collections: movies, series, do_not_recommend, watchlist, etc.
+    
+    Args:
+        title: Media title (string)
+        media_type: "movie" or "tv" (from Jellyseerr)
+        tmdb_id: TMDB ID (optional, can be added later)
+    
+    Returns:
+        Dictionary: {"title": str, "media_type": str, "tmdb_id": int or None}
+    """
+    return {
+        "title": title,
+        "media_type": media_type,
+        "tmdb_id": tmdb_id
+    }
+
+def is_media_entry_dict(entry) -> bool:
+    """Check if an entry is the new dict format vs old string format."""
+    return isinstance(entry, dict) and "title" in entry and "media_type" in entry
+
+def get_media_title(entry) -> str:
+    """Extract title from either new dict format or old string format."""
+    if isinstance(entry, dict):
+        return entry.get("title", "")
+    return entry
+
+def find_media_in_list(title: str, media_list: list) -> tuple:
+    """
+    Find media in list by title. Handles both old (string) and new (dict) formats.
+    Returns (index, entry) or (None, None) if not found.
+    """
+    for idx, entry in enumerate(media_list):
+        if get_media_title(entry) == title:
+            return idx, entry
+    return None, None
+
 # --- New UI handlers using callbacks ---
 def handle_jellyseerr_request(recommendation):
     """Handles a request to Jellyseerr."""
@@ -820,15 +1075,28 @@ def handle_jellyseerr_request(recommendation):
     else:
         st.toast(f"Ei löytynyt nimikkeelle '{title}' Jellyseeristä.", icon="⚠️")
 
-def handle_search_result_add_watched(title, media_type):
-    """Adds title from search results to watched list."""
+def handle_search_result_add_watched(title, media_type, tmdb_id=None):
+    """Adds title from search results to watched list using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     
     type_key = "movies" if media_type.lower() == "movie" else "series"
-    if title not in user_data.get(type_key, []):
-        user_data.setdefault(type_key, []).append(title)
+    
+    # Check for duplicate using new helper function
+    idx, existing = find_media_in_list(title, user_data.get(type_key, []))
+    
+    if idx is None:
+        # Create new media entry with enriched data from search result
+        media_entry = create_media_entry(title, media_type.lower(), tmdb_id)
+        user_data.setdefault(type_key, []).append(media_entry)
         save_manual_db(db)
         st.toast(f"✅ '{title}' lisätty katsottuihin!", icon="👁️")
     else:
@@ -841,45 +1109,92 @@ def handle_search_result_request(media_id, media_type):
     else:
         st.toast(f"❌ Pyynnön lähettäminen epäonnistui.", icon="🚨")
 
-def handle_search_result_watchlist(title, media_type):
-    """Adds title from search results to watchlist."""
+def handle_search_result_watchlist(title, media_type, tmdb_id=None):
+    """Adds title from search results to watchlist using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     user_data.setdefault("watchlist", {"movies": [], "series": []})
     
     type_key = "movies" if media_type.lower() == "movie" else "series"
-    if title not in user_data["watchlist"].get(type_key, []):
-        user_data["watchlist"].setdefault(type_key, []).append(title)
+    
+    # Check for duplicate using new helper function
+    idx, existing = find_media_in_list(title, user_data["watchlist"].get(type_key, []))
+    
+    if idx is None:
+        # Create new media entry with enriched data from search result
+        media_entry = create_media_entry(title, media_type.lower(), tmdb_id)
+        user_data["watchlist"].setdefault(type_key, []).append(media_entry)
         save_manual_db(db)
         st.toast(f"📋 '{title}' lisätty katselulistalle!", icon="🔖")
     else:
         st.toast(f"ℹ️ '{title}' on jo katselulistallasi.", icon="ℹ️")
 
-def handle_search_result_blacklist(title):
-    """Adds title from search results to 'do not recommend' list."""
+def handle_search_result_blacklist(title, media_type=None, tmdb_id=None):
+    """Adds title from search results to 'do not recommend' list using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     
-    if title not in user_data.get("do_not_recommend", []):
-        user_data.setdefault("do_not_recommend", []).append(title)
+    # Use provided media_type or default based on context
+    if media_type is None:
+        media_type = st.session_state.get("media_type", "Elokuva")
+    
+    media_type_standard = "movie" if media_type.lower() in ["movie", "elokuva"] else "tv"
+    
+    # Check for duplicate using new helper function
+    idx, existing = find_media_in_list(title, user_data.get("do_not_recommend", []))
+    
+    if idx is None:
+        # Create new media entry with enriched data from search result
+        media_entry = create_media_entry(title, media_type_standard, tmdb_id)
+        user_data.setdefault("do_not_recommend", []).append(media_entry)
         save_manual_db(db)
         st.toast(f"🚫 '{title}' lisätty älä-suosittele listalle!", icon="🚫")
     else:
         st.toast(f"ℹ️ '{title}' on jo älä-suosittele listalla.", icon="ℹ️")
 
-def handle_watched_add(title, media_type_from_radio="Elokuva"):
-    """Marks a title as watched in the local DB."""
+def handle_watched_add(title, media_type_from_radio="Elokuva", tmdb_id=None):
+    """Marks a title as watched in the local DB using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
     # Ensure the user entry and all necessary keys exist with the correct type (list)
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": []})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [],
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     user_data.setdefault("do_not_recommend", [])
 
     key = "movies" if media_type_from_radio == "Elokuva" else "series"
-    if title not in user_data.get(key, []):
-        user_data.setdefault(key, []).append(title)
+    
+    # Convert media_type_from_radio (Finnish) to standard format
+    media_type_standard = "movie" if media_type_from_radio == "Elokuva" else "tv"
+    
+    # Check for duplicate using new helper function
+    idx, existing = find_media_in_list(title, user_data.get(key, []))
+    
+    if idx is None:
+        # Create new media entry with standard schema
+        media_entry = create_media_entry(title, media_type_standard, tmdb_id)
+        user_data.setdefault(key, []).append(media_entry)
         save_manual_db(db)
         # Remove from current recommendations shown in UI
         st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title]
@@ -889,18 +1204,43 @@ def handle_watched_add(title, media_type_from_radio="Elokuva"):
     # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_watchlist_add(title_to_add):
-    """Adds a title to the user's watchlist (from recommendations only)."""
+    """Adds a title to the user's watchlist (from recommendations only) using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
     media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
     # Ensure the user entry and the 'watchlist' key exist with correct structure
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     user_data.setdefault("watchlist", {"movies": [], "series": []})
 
     key = "movies" if media_type_from_radio == "Elokuva" else "series"
-    if title_to_add not in user_data["watchlist"].get(key, []):
-        user_data["watchlist"].setdefault(key, []).append(title_to_add)
+    
+    # Convert media_type_from_radio (Finnish) to standard format
+    media_type_standard = "movie" if media_type_from_radio == "Elokuva" else "tv"
+    
+    # Try to find recommendation to get enriched data (media_type, tmdb_id)
+    tmdb_id = None
+    actual_media_type = media_type_standard
+    for rec in st.session_state.get("recommendations", []):
+        if rec.get("title") == title_to_add:
+            actual_media_type = rec.get("media_type", media_type_standard)
+            tmdb_id = rec.get("media_id")  # This is the TMDB ID from enrichment
+            break
+    
+    # Check for duplicate using new helper function
+    idx, existing = find_media_in_list(title_to_add, user_data["watchlist"].get(key, []))
+    
+    if idx is None:
+        # Create new media entry with standard schema
+        media_entry = create_media_entry(title_to_add, actual_media_type, tmdb_id)
+        user_data["watchlist"].setdefault(key, []).append(media_entry)
         save_manual_db(db)
         # Remove from current recommendations shown in UI
         st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get("title") != title_to_add]
@@ -910,7 +1250,7 @@ def handle_watchlist_add(title_to_add):
     # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_watchlist_remove(title_to_remove, media_type_key):
-    """Removes a title from the user's watchlist."""
+    """Removes a title from the user's watchlist using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
 
@@ -918,8 +1258,11 @@ def handle_watchlist_remove(title_to_remove, media_type_key):
     watchlist = user_data.get("watchlist", {"movies": [], "series": []})
     watchlist_list = watchlist.get(media_type_key, [])
 
-    if title_to_remove in watchlist_list:
-        watchlist_list.remove(title_to_remove)
+    # Use new helper function to find by title (handles both old and new formats)
+    idx, found_entry = find_media_in_list(title_to_remove, watchlist_list)
+    
+    if idx is not None:
+        watchlist_list.pop(idx)
         save_manual_db(db)
         st.toast(f"'{title_to_remove}' poistettu katselulistalta.", icon="🗑️")
     else:
@@ -927,19 +1270,38 @@ def handle_watchlist_remove(title_to_remove, media_type_key):
     # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_watchlist_mark_watched(title_to_mark, media_type_key):
-    """Marks a title from watchlist as watched and removes it from watchlist."""
+    """Marks a title from watchlist as watched and removes it from watchlist using new schema format."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
 
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     watchlist = user_data.get("watchlist", {"movies": [], "series": []})
     watchlist_list = watchlist.get(media_type_key, [])
 
-    if title_to_mark in watchlist_list:
-        # Remove from watchlist
-        watchlist_list.remove(title_to_mark)
+    # Use new helper function to find by title (handles both old and new formats)
+    idx, found_entry = find_media_in_list(title_to_mark, watchlist_list)
+    
+    if idx is not None:
+        # Extract the entry to preserve tmdb_id and media_type during move
+        entry_to_move = watchlist_list.pop(idx)
+        
+        # If it's already in new format, use it as-is; if old format, convert it
+        if is_media_entry_dict(entry_to_move):
+            media_entry = entry_to_move
+        else:
+            # Old format (string) - create new entry with media_type
+            media_type_standard = "movie" if media_type_key == "movies" else "tv"
+            media_entry = create_media_entry(entry_to_move, media_type_standard, None)
+        
         # Add to watched list
-        user_data.setdefault(media_type_key, []).append(title_to_mark)
+        user_data.setdefault(media_type_key, []).append(media_entry)
         save_manual_db(db)
         st.toast(f"✅ '{title_to_mark}' merkitty katsotuksi ja poistettu katselulistalta.", icon="👁️")
     else:
@@ -947,23 +1309,49 @@ def handle_watchlist_mark_watched(title_to_mark, media_type_key):
     # Note: no explicit st.rerun() — Streamlit reruns after callback automatically
 
 def handle_blacklist_add(title):
-    """Adds a title to the user's 'do not recommend' list and removes from watchlist if present."""
+    """Adds a title to the user's 'do not recommend' list using new schema format and removes from watchlist if present."""
     username = st.session_state.jellyfin_session['User']['Name']
     db = load_manual_db()
     media_type_from_radio = st.session_state.get("media_type", "Elokuva")
 
     # Ensure the user entry and the 'do_not_recommend' key (as a list) exist
-    user_data = db.setdefault(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
+    user_data = db.setdefault(username, {
+        "movies": [], 
+        "series": [], 
+        "do_not_recommend": [], 
+        "watchlist": {"movies": [], "series": []},
+        "available_but_unwatched": [],
+        "jellyseerr_available": {"movies": [], "series": []}
+    })
     user_data.setdefault("do_not_recommend", [])
     user_data.setdefault("watchlist", {"movies": [], "series": []})
 
-    if title not in user_data.get("do_not_recommend", []):
-        user_data["do_not_recommend"].append(title)
-        # Also remove from watchlist if present
+    # Convert media_type_from_radio (Finnish) to standard format
+    media_type_standard = "movie" if media_type_from_radio == "Elokuva" else "tv"
+    
+    # Check for duplicate using new helper function
+    idx, existing = find_media_in_list(title, user_data.get("do_not_recommend", []))
+    
+    if idx is None:
+        # Try to find recommendation to get enriched data (media_type, tmdb_id)
+        tmdb_id = None
+        actual_media_type = media_type_standard
+        for rec in st.session_state.get("recommendations", []):
+            if rec.get("title") == title:
+                actual_media_type = rec.get("media_type", media_type_standard)
+                tmdb_id = rec.get("media_id")  # This is the TMDB ID from enrichment
+                break
+        
+        # Create new media entry with standard schema
+        media_entry = create_media_entry(title, actual_media_type, tmdb_id)
+        user_data["do_not_recommend"].append(media_entry)
+        
+        # Also remove from watchlist if present using new helper function
         watchlist = user_data.get("watchlist", {"movies": [], "series": []})
         for media_key in ["movies", "series"]:
-            if title in watchlist.get(media_key, []):
-                watchlist[media_key].remove(title)
+            idx_in_watchlist, _ = find_media_in_list(title, watchlist.get(media_key, []))
+            if idx_in_watchlist is not None:
+                watchlist[media_key].pop(idx_in_watchlist)
                 st.info(f"'{title}' poistettu myös katselulistalta.")
                 break
         save_manual_db(db)
@@ -995,7 +1383,7 @@ def export_user_data_as_json(username):
     return json.dumps(export_data, ensure_ascii=False, indent=4)
 
 def merge_user_data_from_json(json_string, username):
-    """Merges imported user data with existing data."""
+    """Merges imported user data with existing data. Handles both old (string) and new (dict) formats."""
     try:
         logger.debug(f"Attempting to merge user data for: {username}")
         import_data = json.loads(json_string)
@@ -1008,19 +1396,29 @@ def merge_user_data_from_json(json_string, username):
         current_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
         imported_data = import_data.get("data", {})
         
+        # Helper to deduplicate lists containing both strings and dicts
+        def deduplicate_list(items_list):
+            """Remove duplicates based on title, keeping new dict format when possible."""
+            seen_titles = {}
+            for item in items_list:
+                title = get_media_title(item)
+                if title not in seen_titles:
+                    seen_titles[title] = item
+            return list(seen_titles.values())
+        
         # Merge movies (combine lists, remove duplicates)
-        merged_movies = list(set(current_data.get("movies", []) + imported_data.get("movies", [])))
+        merged_movies = deduplicate_list(current_data.get("movies", []) + imported_data.get("movies", []))
         # Merge series (combine lists, remove duplicates)
-        merged_series = list(set(current_data.get("series", []) + imported_data.get("series", [])))
+        merged_series = deduplicate_list(current_data.get("series", []) + imported_data.get("series", []))
         # Merge do_not_recommend (combine lists, remove duplicates)
-        merged_blacklist = list(set(current_data.get("do_not_recommend", []) + imported_data.get("do_not_recommend", [])))
+        merged_blacklist = deduplicate_list(current_data.get("do_not_recommend", []) + imported_data.get("do_not_recommend", []))
         
         # Merge watchlist (combine movies and series separately)
         current_watchlist = current_data.get("watchlist", {"movies": [], "series": []})
         imported_watchlist = imported_data.get("watchlist", {"movies": [], "series": []})
         merged_watchlist = {
-            "movies": list(set(current_watchlist.get("movies", []) + imported_watchlist.get("movies", []))),
-            "series": list(set(current_watchlist.get("series", []) + imported_watchlist.get("series", [])))
+            "movies": deduplicate_list(current_watchlist.get("movies", []) + imported_watchlist.get("movies", [])),
+            "series": deduplicate_list(current_watchlist.get("series", []) + imported_watchlist.get("series", []))
         }
         
         # Update database with merged data
@@ -1096,16 +1494,25 @@ def fetch_and_show_recommendations(media_type, genre):
             available_movies, available_series = sync_jellyseerr_available_titles()
             db = load_manual_db()
             user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
-            manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
+            # Extract titles using the compatibility helper (handles both string and dict formats)
+            manual_watched_movies = [get_media_title(entry) for entry in user_db_entry.get("movies", [])]
+            manual_watched_series = [get_media_title(entry) for entry in user_db_entry.get("series", [])]
+            manual_watched = manual_watched_movies + manual_watched_series
             # Correctly read the simple lists
-            blacklist = user_db_entry.get("do_not_recommend", [])
+            blacklist_raw = user_db_entry.get("do_not_recommend", [])
+            blacklist = [get_media_title(entry) for entry in blacklist_raw]
             watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
-            # Flatten watchlist from both movies and series for the prompt
-            watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
-            # Get available_but_unwatched list
-            available_but_unwatched = user_db_entry.get("available_but_unwatched", [])
+            # Flatten watchlist from both movies and series for the prompt, extracting titles
+            watchlist_movies = [get_media_title(entry) for entry in watchlist_dict.get("movies", [])]
+            watchlist_series = [get_media_title(entry) for entry in watchlist_dict.get("series", [])]
+            watchlist = watchlist_movies + watchlist_series
+            # Get available_but_unwatched list and extract titles
+            available_raw = user_db_entry.get("available_but_unwatched", [])
+            available_but_unwatched = [get_media_title(entry) for entry in available_raw]
             
-            full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
+            # Extract titles from jellyfin_watched tuples to match with manual_watched format
+            jellyfin_titles = [title for title, _ in jellyfin_watched] if jellyfin_watched else []
+            full_watched_list = sorted(list(set(jellyfin_titles + manual_watched)))
             
             logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}, available_unwatched={len(available_but_unwatched)}")
 
@@ -1153,13 +1560,14 @@ def fetch_and_show_recommendations(media_type, genre):
             
             # Check availability on Jellyseerr and add to available_but_unwatched if applicable
             logger.debug("Checking Jellyseerr availability for recommendations...")
+            jellyfin_watched_titles = [title for title, _ in jellyfin_watched] if jellyfin_watched else []
             for rec in enriched_recommendations:
                 if rec.get('media_id') and rec.get('media_type'):
                     check_and_add_available_unwatched(
                         title=rec['title'],
                         media_type=rec['media_type'],
                         tmdb_id=rec['media_id'],
-                        jellyfin_watched=jellyfin_watched,
+                        jellyfin_watched=jellyfin_watched_titles,
                         db=db,
                         username=username
                     )
@@ -1176,8 +1584,9 @@ def fetch_and_show_recommendations(media_type, genre):
             st.session_state.recommendations_fetched = False
             logger.warning(f"No recommendations generated for user: {username} - Gemini returned None or empty")
     except Exception as e:
-        logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}")
+        logger.error(f"Unexpected error in fetch_and_show_recommendations: {e}", exc_info=True)
         st.session_state.recommendations_fetched = False
+        st.error(f"❌ Virhe suositusten haussa: {str(e)}")
 
 # --- Streamlit User Interface ---
 
@@ -1487,16 +1896,30 @@ else:
                     available_movies, available_series = sync_jellyseerr_available_titles()
                     db = load_manual_db()
                     user_db_entry = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
-                    manual_watched = user_db_entry.get("movies", []) + user_db_entry.get("series", [])
-                    blacklist = user_db_entry.get("do_not_recommend", [])
+                    # Extract titles using the compatibility helper (handles both string and dict formats)
+                    manual_watched_movies = [get_media_title(entry) for entry in user_db_entry.get("movies", [])]
+                    manual_watched_series = [get_media_title(entry) for entry in user_db_entry.get("series", [])]
+                    manual_watched = manual_watched_movies + manual_watched_series
+                    # Correctly read the simple lists
+                    blacklist_raw = user_db_entry.get("do_not_recommend", [])
+                    blacklist = [get_media_title(entry) for entry in blacklist_raw]
                     watchlist_dict = user_db_entry.get("watchlist", {"movies": [], "series": []})
-                    watchlist = watchlist_dict.get("movies", []) + watchlist_dict.get("series", [])
-                    full_watched_list = sorted(list(set(jellyfin_watched + manual_watched)))
+                    # Flatten watchlist from both movies and series for the prompt, extracting titles
+                    watchlist_movies = [get_media_title(entry) for entry in watchlist_dict.get("movies", [])]
+                    watchlist_series = [get_media_title(entry) for entry in watchlist_dict.get("series", [])]
+                    watchlist = watchlist_movies + watchlist_series
+                    # Get available_but_unwatched list and extract titles
+                    available_raw = user_db_entry.get("available_but_unwatched", [])
+                    available_but_unwatched = [get_media_title(entry) for entry in available_raw]
                     
-                    logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
+                    # Extract titles from jellyfin_watched tuples to match with manual_watched format
+                    jellyfin_titles = [title for title, _ in jellyfin_watched] if jellyfin_watched else []
+                    full_watched_list = sorted(list(set(jellyfin_titles + manual_watched)))
+                    
+                    logger.info(f"Loaded data: watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}, available_unwatched={len(available_but_unwatched)}")
                     
                     logger.debug(f"Building prompt with: media_type={media_type}, genre={genre}, watched={len(full_watched_list)}, watchlist={len(watchlist)}, blacklist={len(blacklist)}")
-                    prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist)
+                    prompt = build_prompt(media_type, genre, full_watched_list, watchlist, blacklist, available_but_unwatched)
                     logger.debug(f"Prompt built, calling Gemini...")
                     recommendations = get_gemini_recommendations(prompt)
                     logger.debug(f"Gemini returned: {type(recommendations)} - {recommendations if recommendations else 'None/Empty'}")
@@ -1552,6 +1975,7 @@ else:
                         # Check availability on Jellyseerr and add to available_but_unwatched if applicable
                         logger.debug("Checking Jellyseerr availability for recommendations...")
                         jellyseerr_session = st.session_state.get("jellyseerr_requests_session")
+                        # Extract titles from full_watched_list (which are plain strings after combining jellyfin_titles + manual_watched)
                         for rec in enriched_recommendations:
                             if rec.get('media_id') and rec.get('media_type'):
                                 check_and_add_available_unwatched(
@@ -1759,10 +2183,15 @@ else:
                         # Use pre-loaded user data from outside the loop
                         type_key = "movies" if media_type and media_type.lower() == "movie" else "series"
                         
-                        # Tarkista statukset
-                        is_watched = title in user_data.get(type_key, [])
-                        is_in_watchlist = title in user_data.get("watchlist", {}).get(type_key, [])
-                        is_blacklisted = title in user_data.get("do_not_recommend", [])
+                        # Check statuses using new helper function (handles both dict and string formats)
+                        idx_watched, _ = find_media_in_list(title, user_data.get(type_key, []))
+                        is_watched = idx_watched is not None
+                        
+                        idx_watchlist, _ = find_media_in_list(title, user_data.get("watchlist", {}).get(type_key, []))
+                        is_in_watchlist = idx_watchlist is not None
+                        
+                        idx_blacklist, _ = find_media_in_list(title, user_data.get("do_not_recommend", []))
+                        is_blacklisted = idx_blacklist is not None
                         
                         # Row 1: Add to watched
                         watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
@@ -1770,7 +2199,7 @@ else:
                         if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", width="stretch",
                                       disabled=watched_disabled,
                                       help="Lisää katsottuihin elokuviin/sarjoihin" if not watched_disabled else "Tämä on jo katsottu"):
-                            handle_search_result_add_watched(title, media_type if media_type else media_type_from_radio)
+                            handle_search_result_add_watched(title, media_type if media_type else media_type_from_radio, tmdb_id=media_id)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
                             st.rerun()
@@ -1789,7 +2218,7 @@ else:
                         if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", width="stretch",
                                       disabled=watchlist_disabled,
                                       help="Lisää katselulistalle" if not watchlist_disabled else "Tämä on jo katselulistallasi"):
-                            handle_search_result_watchlist(title, media_type if media_type else media_type_from_radio)
+                            handle_search_result_watchlist(title, media_type if media_type else media_type_from_radio, tmdb_id=media_id)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
                             st.rerun()
@@ -1800,7 +2229,7 @@ else:
                         if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", width="stretch",
                                       disabled=blacklist_disabled,
                                       help="Lisää älä-suosittele listalle" if not blacklist_disabled else "Tämä on jo estolistalla"):
-                            handle_search_result_blacklist(title)
+                            handle_search_result_blacklist(title, tmdb_id=media_id)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
                             st.rerun()
@@ -1836,7 +2265,8 @@ else:
             # Movies section
             if watchlist_movies:
                 st.subheader("🎬 Elokuvat")
-                for idx, wl_title in enumerate(watchlist_movies):
+                for idx, entry in enumerate(watchlist_movies):
+                    wl_title = get_media_title(entry)  # Handles both dict and string formats
                     col1, col2, col3, col4 = st.columns([0.5, 0.2, 0.15, 0.15])
                     with col1:
                         st.write(f"• {wl_title}")
@@ -1858,7 +2288,8 @@ else:
             # Series section
             if watchlist_series:
                 st.subheader("📺 Sarjat")
-                for idx, wl_title in enumerate(watchlist_series):
+                for idx, entry in enumerate(watchlist_series):
+                    wl_title = get_media_title(entry)  # Handles both dict and string formats
                     col1, col2, col3, col4 = st.columns([0.5, 0.2, 0.15, 0.15])
                     with col1:
                         st.write(f"• {wl_title}")
@@ -1961,10 +2392,15 @@ else:
                             user_data = db.get(username, {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}})
                             type_key = "movies" if media_type.lower() == "movie" else "series"
                             
-                            # Check statuses
-                            is_watched = title in user_data.get(type_key, [])
-                            is_in_watchlist = title in user_data.get("watchlist", {}).get(type_key, [])
-                            is_blacklisted = title in user_data.get("do_not_recommend", [])
+                            # Check statuses using new helper function (handles both dict and string formats)
+                            idx_watched, _ = find_media_in_list(title, user_data.get(type_key, []))
+                            is_watched = idx_watched is not None
+                            
+                            idx_watchlist, _ = find_media_in_list(title, user_data.get("watchlist", {}).get(type_key, []))
+                            is_in_watchlist = idx_watchlist is not None
+                            
+                            idx_blacklist, _ = find_media_in_list(title, user_data.get("do_not_recommend", []))
+                            is_blacklisted = idx_blacklist is not None
                             
                             # Row 1: Add to watched
                             watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"

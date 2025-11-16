@@ -1,143 +1,198 @@
 {
     "jesse": {
         "movies": [
-            "Shaun of the Dead",
-            "Annihilation",
-            "Dune",
-            "Avatar",
-            "The Chronicles of Narnia: The Lion, the Witch and the Wardrobe",
-            "Pan's Labyrinth",
-            "Arrival",
-            "Interstellar",
-            "Hot Fuzz",
-            "Inception",
-            "The Princess Bride",
-            "Spider-Man: Into the Spider-Verse",
-            "Looper",
-            "Up",
-            "Pirates of the Caribbean: The Curse of the Black Pearl",
-            "District 9",
-            "Moon",
-            "Blade Runner",
-            "How to Train Your Dragon",
-            "Elysium",
-            "Spider-Man: Across the Spider-Verse",
-            "Coco",
-            "Minority Report",
-            "Drive",
-            "Dredd",
-            "Paprika",
-            "28 Days Later",
-            "12 Monkeys",
-            "Mad Max: Fury Road",
-            "The Prestige",
-            "Memento",
-            "Snowpiercer",
-            "Predestination",
-            "Isle of Dogs",
-            "John Wick",
-            "Snatch",
-            "2001: A Space Odyssey",
-            "The Dark Knight",
-            "The Iron Giant",
-            "Upgrade",
-            "Sunshine",
-            "V for Vendetta",
-            "Brazil",
-            "Everything Everywhere All at Once",
-            "The World's End",
-            "Prey",
-            "Tenet",
-            "Oldboy",
-            "The Mitchells vs. the Machines",
-            "RoboCop",
-            "Mr. Nobody",
-            "Total Recall",
-            "Heat",
-            "The Raid: Redemption",
-            "A Clockwork Orange",
-            "Léon: The Professional",
-            "Fargo",
-            "Fight Club",
-            "The Fifth Element",
-            "Pulp Fiction",
-            "The Animatrix"
+            {
+                "title": "Dune",
+                "media_type": "movie",
+                "tmdb_id": 438631
+            },
+            {
+                "title": "Inception",
+                "media_type": "movie",
+                "tmdb_id": 27205
+            },
+            {
+                "title": "Interstellar",
+                "media_type": "movie",
+                "tmdb_id": 157336
+            },
+            {
+                "title": "Mad Max: Fury Road",
+                "media_type": "movie",
+                "tmdb_id": 76341
+            },
+            {
+                "title": "Looper",
+                "media_type": "movie",
+                "tmdb_id": 59967
+            },
+            {
+                "title": "The Prestige",
+                "media_type": "movie",
+                "tmdb_id": 1124
+            }
         ],
         "series": [
-            "The Book of Boba Fett",
-            "Andor",
-            "The Bear"
+            {
+                "title": "Breaking Bad",
+                "media_type": "tv",
+                "tmdb_id": 1396
+            },
+            {
+                "title": "The Office",
+                "media_type": "tv",
+                "tmdb_id": 6594
+            },
+            {
+                "title": "Mr. Robot",
+                "media_type": "tv",
+                "tmdb_id": 62560
+            },
+            {
+                "title": "The Expanse",
+                "media_type": "tv",
+                "tmdb_id": 63639
+            },
+            {
+                "title": "Dark",
+                "media_type": "tv",
+                "tmdb_id": 70523
+            }
         ],
         "do_not_recommend": [
-            "Weathering with You",
-            "Disenchantment",
-            "Kubo and the Two Strings",
-            "Coraline",
-            "Your Name.",
-            "Eternal Sunshine of the Spotless Mind",
-            "No Country for Old Men",
-            "The Dark Crystal",
-            "Nausicaä of the Valley of the Wind",
-            "Labyrinth",
-            "Willow",
-            "Perfect Blue",
-            "Ghost in the Shell",
-            "Contact",
-            "Prisoners",
-            "Crouching Tiger, Hidden Dragon",
-            "Source Code",
-            "Ponyo",
-            "The Fall",
-            "Wolfwalkers",
-            "Legend",
-            "Fantastic Planet",
-            "Being John Malkovich"
+            {
+                "title": "The Room",
+                "media_type": "movie",
+                "tmdb_id": 138
+            },
+            {
+                "title": "Twilight",
+                "media_type": "movie",
+                "tmdb_id": 20644
+            },
+            {
+                "title": "Arcane",
+                "media_type": "tv",
+                "tmdb_id": 94605
+            },
+            {
+                "title": "Foundation",
+                "media_type": "tv",
+                "tmdb_id": 93740
+            }
         ],
         "watchlist": {
             "movies": [
-                "Primer",
-                "Gattaca",
-                "Stardust",
-                "Sicario",
-                "Baby Driver",
-                "Fantastic Mr. Fox",
-                "Dark City",
-                "The Green Knight",
-                "Layer Cake",
-                "Stalker",
-                "Coherence",
-                "Solaris",
-                "The Thing"
+                {
+                    "title": "Blade Runner 2049",
+                    "media_type": "movie",
+                    "tmdb_id": 335984
+                },
+                {
+                    "title": "Arrival",
+                    "media_type": "movie",
+                    "tmdb_id": 329865
+                },
+                {
+                    "title": "Spider-Man: Into the Spider-Verse",
+                    "media_type": "movie",
+                    "tmdb_id": 324857
+                },
+                {
+                    "title": "Stardust",
+                    "media_type": "movie",
+                    "tmdb_id": 2270
+                }
             ],
             "series": [
-                "Mindhunter",
-                "Station Eleven"
+                {
+                    "title": "Severance",
+                    "media_type": "tv",
+                    "tmdb_id": 142585
+                },
+                {
+                    "title": "Andor",
+                    "media_type": "tv",
+                    "tmdb_id": 114410
+                }
             ]
         },
-        "jellyfin_synced_at": "2025-11-16 20:17:55.376254",
+        "available_but_unwatched": [
+            {
+                "title": "Frankenstein",
+                "media_type": "movie",
+                "tmdb_id": 1062722,
+                "noted_at": "2025-11-16 21:40:48"
+            },
+            {
+                "title": "Playdate",
+                "media_type": "movie",
+                "tmdb_id": 1248226,
+                "noted_at": "2025-11-16 21:40:48"
+            },
+            {
+                "title": "Gattaca",
+                "media_type": "movie",
+                "tmdb_id": 782,
+                "noted_at": "2025-11-16 21:40:48"
+            },
+            {
+                "title": "Chainsaw Man",
+                "media_type": "tv",
+                "tmdb_id": 114410,
+                "noted_at": "2025-11-16 21:40:48"
+            },
+            {
+                "title": "Get Shorty",
+                "media_type": "tv",
+                "tmdb_id": 71951,
+                "noted_at": "2025-11-16 21:40:48"
+            },
+            {
+                "title": "The Congregation",
+                "media_type": "tv",
+                "tmdb_id": 137140,
+                "noted_at": "2025-11-16 21:40:48"
+            }
+        ],
+        "jellyseerr_available": {
+            "movies": [
+                {
+                    "title": "Playdate",
+                    "media_type": "movie",
+                    "tmdb_id": 1248226
+                },
+                {
+                    "title": "Frankenstein",
+                    "media_type": "movie",
+                    "tmdb_id": 1062722
+                },
+                {
+                    "title": "Gattaca",
+                    "media_type": "movie",
+                    "tmdb_id": 782
+                }
+            ],
+            "series": [
+                {
+                    "title": "Chainsaw Man",
+                    "media_type": "tv",
+                    "tmdb_id": 114410
+                },
+                {
+                    "title": "Get Shorty",
+                    "media_type": "tv",
+                    "tmdb_id": 71951
+                },
+                {
+                    "title": "The Congregation",
+                    "media_type": "tv",
+                    "tmdb_id": 137140
+                }
+            ]
+        },
+        "jellyfin_synced_at": "2025-11-16 21:40:48.220141",
+        "jellyseerr_synced_at": "2025-11-16 21:41:44.048252",
         "jellyfin_total_watched": 69
-    },
-    "testuser": {
-        "movies": [
-            "The Matrix",
-            "Inception"
-        ],
-        "series": [
-            "Stranger Things",
-            "Breaking Bad"
-        ],
-        "do_not_recommend": [
-            "Twilight"
-        ],
-        "watchlist": {
-            "movies": [
-                "Oppenheimer"
-            ],
-            "series": [
-                "Westworld"
-            ]
-        },
-        "jellyfin_synced_at": "2025-11-13 19:00:00",
-        "jellyfin_total_watched": 5
     }
 }

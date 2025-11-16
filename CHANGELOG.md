@@ -5,10 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.6-alpha] - 2025-11-16 (In Development)
+## [0.2.5-alpha] - 2025-11-16 (In Development)
 
 ### 🎯 Overview
-TMDB ID and media_type storage for all media entries. Enhanced database schema for better Jellyseerr integration and cross-service compatibility. All media now traceable and requestable via TMDB IDs.
+Comprehensive TMDB ID and media_type storage for all media entries. Enhanced database schema for better Jellyseerr integration and cross-service compatibility. Rate limiting and API cost control. All media now traceable and requestable via TMDB IDs.
 
 ### ✨ What's New
 
@@ -41,60 +41,6 @@ TMDB ID and media_type storage for all media entries. Enhanced database schema f
   - Session-safe enrichment using ThreadPoolExecutor with session parameter passing
   - Comprehensive logging with [ENRICH], [SEARCH], [AVAIL] tags
 
-### 🐛 Bug Fixes
-- None at this version (no bugs reported)
-
-### 📚 Documentation Updates
-- DATABASE_SCHEMA.md - Complete restructuring with new object-based format for ALL collections
-- API_INTEGRATION.md - Added /api/v1/request endpoint documentation
-- README.md - Architecture diagram updated with Jellyseerr available content sync
-- Migration guide for legacy simple-string format to new object format
-
-
-### 💾 Database Changes
-**Schema migration from v0.2.5 to v0.2.6:**
-```json
-{
-  "movies": [
-    {"title": "Movie", "media_type": "movie", "tmdb_id": 12345}
-  ],
-  "series": [
-    {"title": "Series", "media_type": "tv", "tmdb_id": 67890}
-  ],
-  "do_not_recommend": [
-    {"title": "Blocked", "media_type": "movie", "tmdb_id": 11111}
-  ],
-  "watchlist": {
-    "movies": [{"title": "Queued", "media_type": "movie", "tmdb_id": 22222}],
-    "series": [{"title": "Queued", "media_type": "tv", "tmdb_id": 33333}]
-  },
-  "available_but_unwatched": [
-    {"title": "Available", "media_type": "movie", "tmdb_id": 44444, "noted_at": "..."}
-  ],
-  "jellyseerr_available": {
-    "movies": [{"title": "Available", "media_type": "movie", "tmdb_id": 55555}],
-    "series": [{"title": "Available", "media_type": "tv", "tmdb_id": 66666}]
-  }
-}
-```
-
-### ⚠️ Known Issues & Limitations
-- None at this version
-
-### ⚠️ Disclaimer
-This is a pre-release version (alpha) with ongoing development. Schema changes require data migration for existing users.
-
-**Tag:** v0.2.6-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha)
-
----
-
-## [0.2.5-alpha] - 2025-11-16
-
-### 🎯 Overview
-Rate limiting and API cost control for Gemini recommendations. Jellyseerr availability tracking with intelligent filtering. Enhanced recommendation quality through persistent availability data and cooldown mechanism.
-
-### ✨ What's New
-
 - **Rate Limiting & Cooldown System**
   - 5-second cooldown after successful recommendation fetch
   - Auto-updating countdown display (⏳ Odota Xs ennen seuraavaa hakua)
@@ -105,7 +51,6 @@ Rate limiting and API cost control for Gemini recommendations. Jellyseerr availa
   - Prevents excessive Gemini API calls and uncontrolled billing
 
 - **Jellyseerr Availability Check & Database Persistence**
-  - New `get_jellyseerr_media_status()` function queries Jellyseerr for media availability
   - Automatic tracking of available but unwatched content (AVAILABLE/PARTIALLY_AVAILABLE)
   - Database schema extended with `available_but_unwatched` list
   - Each tracked item includes: title, media_type, tmdb_id, noted_at timestamp
@@ -126,12 +71,15 @@ Rate limiting and API cost control for Gemini recommendations. Jellyseerr availa
 - Fixed duplicate `update_rate_limit_timestamp()` calls
 - Fixed hardcoded 20-second cooldown (changed to 5 seconds)
 - Improved session state management for rate limiting
+- Fixed TMDB IDs not being stored in available_but_unwatched and jellyseerr_available
+- Fixed get_jellyseerr_available_titles() returning strings instead of objects with TMDB IDs
+- Fixed missing database schema fields in user_data initialization
 
 ### 📚 Documentation
 - 📖 README.md - Feature overview
 - 🚀 SETUP.md - Deployment instructions
 - 🔗 API_INTEGRATION.md - Integration details
-- 🗄️ DATABASE_SCHEMA.md - Database structure (updated with available_but_unwatched)
+- 🗄️ DATABASE_SCHEMA.md - Database structure (updated with available_but_unwatched, jellyseerr_available, TMDB IDs)
 
 ### ⚠️ Known Issues & Limitations
 - None at this time. All v0.2.5-alpha features implemented and tested.
@@ -151,32 +99,41 @@ streamlit run app.py  # For local development
 - Gemini prompt enhanced: Includes available_but_unwatched filter
 - Cooldown countdown: Auto-updates every 0.5 seconds
 - Button auto-enables: Fragment triggers rerun when cooldown expires
+- TMDB ID storage: All media now stores TMDB IDs for cross-service integration
 
 ### 💾 Database Changes
-**New field in user_data:**
+**Schema migration from v0.2.4 to v0.2.5:**
 ```json
 {
   "username": {
-    "movies": [...],
-    "series": [...],
-    "do_not_recommend": [...],
-    "watchlist": {...},
+    "movies": [
+      {"title": "Movie", "media_type": "movie", "tmdb_id": 12345}
+    ],
+    "series": [
+      {"title": "Series", "media_type": "tv", "tmdb_id": 67890}
+    ],
+    "do_not_recommend": [
+      {"title": "Blocked", "media_type": "movie", "tmdb_id": 11111}
+    ],
+    "watchlist": {
+      "movies": [{"title": "Queued", "media_type": "movie", "tmdb_id": 22222}],
+      "series": [{"title": "Queued", "media_type": "tv", "tmdb_id": 33333}]
+    },
     "available_but_unwatched": [
-      {
-        "title": "Avatar",
-        "media_type": "movie",
-        "tmdb_id": 19995,
-        "noted_at": "2025-11-16 14:30:00"
-      }
-    ]
+      {"title": "Available", "media_type": "movie", "tmdb_id": 44444, "noted_at": "2025-11-16 14:30:00"}
+    ],
+    "jellyseerr_available": {
+      "movies": [{"title": "Available", "media_type": "movie", "tmdb_id": 55555}],
+      "series": [{"title": "Available", "media_type": "tv", "tmdb_id": 66666}]
+    }
   }
 }
 ```
 
 ### ⚠️ Disclaimer
-This is a pre-release version (alpha) with ongoing development. Rate limiting and availability tracking are now core features for cost control and recommendation quality.
+This is a pre-release version (alpha) with ongoing development. TMDB ID storage and rate limiting are now core features for cost control and cross-service integration.
 
-**Tag:** v0.2.5-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha)
+**Tag:** v0.2.5-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha) | **Status:** In Development
 
 ## [0.2.4-alpha] - 2025-11-16
 
