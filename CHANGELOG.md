@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.5-alpha] - 2025-11-16 (In Development)
+## [0.2.5-alpha] - 2025-11-16
 
 ### 🎯 Overview
 Comprehensive TMDB ID and media_type storage for all media entries. Enhanced database schema for better Jellyseerr integration and cross-service compatibility. Rate limiting and API cost control. All media now traceable and requestable via TMDB IDs.
@@ -133,7 +133,7 @@ streamlit run app.py  # For local development
 ### ⚠️ Disclaimer
 This is a pre-release version (alpha) with ongoing development. TMDB ID storage and rate limiting are now core features for cost control and cross-service integration.
 
-**Tag:** v0.2.5-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha) | **Status:** In Development
+**Tag:** v0.2.5-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha)
 
 ## [0.2.4-alpha] - 2025-11-16
 
