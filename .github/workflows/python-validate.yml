@@ -2,6 +2,8 @@
 # Runs on every push to main branch
 
 name: Python Validation
+permissions:
+  contents: read
 
 on:
   push:
