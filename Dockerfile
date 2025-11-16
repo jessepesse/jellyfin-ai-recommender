@@ -1,6 +1,13 @@
 # Use official Python 3.11 slim base image
 FROM python:3.11-slim
 
+# Set metadata labels for container registry
+LABEL org.opencontainers.image.title="Jellyfin AI Recommender"
+LABEL org.opencontainers.image.description="AI-powered movie and TV show recommendations using Google Gemini, integrated with Jellyfin and Jellyseerr"
+LABEL org.opencontainers.image.authors="jessepesse"
+LABEL org.opencontainers.image.url="https://github.com/jessepesse/jellyfin-ai-recommender"
+LABEL org.opencontainers.image.license="MIT"
+
 # Set working directory inside the container
 WORKDIR /app
 

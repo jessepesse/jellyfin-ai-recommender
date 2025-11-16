@@ -24,6 +24,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Vaihe 1.5: Extract version from app.py
+      - name: Extract version from app.py
+        id: version
+        run: |
+          VERSION=$(grep "APP_VERSION = " app.py | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version extracted: $VERSION"
+
       # Vaihe 2: Kirjaudutaan GitHub Container Registryyn (ghcr.io)
       # GITHUB_TOKEN on turvallinen, automaattisesti luotu avain.
       - name: Log in to the Container Registry
@@ -34,14 +42,30 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Vaihe 3: Rakennetaan ja työnnetään Docker-image rekisteriin
-      # Tämä on tärkein vaihe.
+      # Pushaa sekä 'latest' että versionäkijä (esim. v0.2.5-alpha)
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           # Kerrotaan, että haluamme myös työntää imagen rekisteriin
           push: true
-          # Määritellään imagen nimi ja tagi. Tämä on dynaaminen ja toimii aina.
-          tags: ghcr.io/${{ github.repository }}:latest
+          # Määritellään imagen nimet ja tagit (molemmat: latest ja versio)
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
           labels: |
+            org.opencontainers.image.title=Jellyfin AI Recommender
+            org.opencontainers.image.description=AI-powered movie and TV show recommendations using Google Gemini, integrated with Jellyfin and Jellyseerr
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.authors=jessepesse
+            org.opencontainers.image.url=https://github.com/jessepesse/jellyfin-ai-recommender
+            org.opencontainers.image.license=MIT
+          # Annotations for manifest (multi-arch support)
+          outputs: type=oci
+          annotations: |
+            org.opencontainers.image.title=Jellyfin AI Recommender
+            org.opencontainers.image.description=AI-powered movie and TV show recommendations using Google Gemini, integrated with Jellyfin and Jellyseerr
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.url=https://github.com/jessepesse/jellyfin-ai-recommender
+            org.opencontainers.image.license=MIT
