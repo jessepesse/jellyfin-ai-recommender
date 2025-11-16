@@ -2,8 +2,6 @@
 # Runs on every push to main branch
 
 name: Python Validation
-permissions:
-  contents: read
 
 permissions:
   contents: read
@@ -18,7 +16,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
