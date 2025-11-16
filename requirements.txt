@@ -2,3 +2,4 @@ streamlit
 requests
 google-generativeai
 python-dotenv
+streamlit-autorefresh>=0.0.2

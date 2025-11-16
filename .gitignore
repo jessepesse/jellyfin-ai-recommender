@@ -220,3 +220,4 @@ TODO.md
 app.log
 database.json
 database.json.backup
+database.json.tmp

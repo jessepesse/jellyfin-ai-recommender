@@ -3,6 +3,7 @@ import requests
 import streamlit as st
 import json
 import logging
+import warnings
 import time
 from dotenv import load_dotenv
 from urllib.parse import quote
@@ -10,6 +11,8 @@ from functools import wraps
 from PIL import Image
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from streamlit.runtime.scriptrunner import get_script_run_ctx
+from threading import Thread, Lock
 
 load_dotenv()
 
@@ -20,6 +23,12 @@ logger.setLevel(logging.DEBUG)
 
 # Suppress Streamlit's ScriptRunContext warnings from threaded code
 logging.getLogger("streamlit.runtime.scriptrunner").setLevel(logging.ERROR)
+logging.getLogger("streamlit.runtime.state").setLevel(logging.ERROR)
+
+# Also suppress warnings at the root level for cleaner output
+logging.captureWarnings(True)
+warnings_logger = logging.getLogger("py.warnings")
+warnings_logger.setLevel(logging.ERROR)
 
 # Create handlers
 try:
@@ -40,8 +49,50 @@ except Exception as e:
     print(f"Warning: Could not configure logging to file: {e}")
 
 # --- Application Version ---
-APP_VERSION = "0.2.3-alpha-hotfix"
+APP_VERSION = "0.2.5"
 
+# --- Rate Limiter for Gemini Recommendations ---
+# Prevents API spam and excessive costs using session state
+# Simple but effective: track last request time in session state
+def init_rate_limiter():
+    """Initialize rate limiter and in-flight state in session state if not exists"""
+    if "gemini_last_request_time" not in st.session_state:
+        st.session_state.gemini_last_request_time = 0
+    if "gemini_busy" not in st.session_state:
+        st.session_state.gemini_busy = False
+    if "gemini_prev_results_displayed" not in st.session_state:
+        st.session_state.gemini_prev_results_displayed = True
+    # Track whether Gemini returned empty on the last fetch (for distinguishing API_empty vs user_filtered_empty)
+    if "api_empty_last_fetch" not in st.session_state:
+        st.session_state.api_empty_last_fetch = False
+    # Track if list is empty due to user filtering/removals (not API_empty)
+    if "user_filtered_empty" not in st.session_state:
+        st.session_state.user_filtered_empty = False
+
+def check_rate_limit(cooldown_seconds=5):
+    """Check if rate limit allows the request. Returns (allowed, wait_seconds)"""
+    now = time.time()
+    elapsed = now - st.session_state.gemini_last_request_time
+    if elapsed >= cooldown_seconds:
+        return True, 0
+    else:
+        wait_time = cooldown_seconds - elapsed
+        return False, int(wait_time) + 1
+
+def update_rate_limit_timestamp():
+    """Update the rate limit timestamp after a request is made"""
+    st.session_state.gemini_last_request_time = time.time()
+
+@st.fragment(run_every=0.5)
+def display_cooldown_countdown(wait_time: int):
+    """Display cooldown countdown that auto-updates every 0.5 seconds"""
+    is_allowed, current_wait = check_rate_limit()
+    if not is_allowed:
+        st.caption(f"⏳ Odota {current_wait}s ennen seuraavaa hakua")
+    else:
+        # Cooldown finished - trigger parent rerun to enable button
+        st.rerun()
+    
 # --- Retry Decorator with Exponential Backoff ---
 def retry_with_backoff(max_attempts=3, initial_delay=1, backoff_factor=2):
     """Decorator for retry logic with exponential backoff."""
@@ -1006,13 +1057,13 @@ else:
         
         # Page navigation buttons
         st.write("**Navigaatio:**")
-        if st.button("🔍 Suositukset", use_container_width=True, key="btn_page_recommendations"):
+        if st.button("🔍 Suositukset", width="stretch", key="btn_page_recommendations"):
             st.session_state.current_page = "recommendations"
-        if st.button("📝 Katselulista", use_container_width=True, key="btn_page_watchlist"):
+        if st.button("📝 Katselulista", width="stretch", key="btn_page_watchlist"):
             st.session_state.current_page = "watchlist"
-        if st.button("✏️ Merkitse", use_container_width=True, key="btn_page_mark"):
+        if st.button("✏️ Merkitse", width="stretch", key="btn_page_mark"):
             st.session_state.current_page = "mark"
-        if st.button("💾 Tiedot", use_container_width=True, key="btn_page_info"):
+        if st.button("💾 Tiedot", width="stretch", key="btn_page_info"):
             st.session_state.current_page = "info"
         
         st.divider()
@@ -1024,7 +1075,7 @@ else:
         st.markdown("<div style='height: 400px;'></div>", unsafe_allow_html=True)
         
         # Logout button at the bottom
-        if st.button("🚪 Kirjaudu ulos", use_container_width=True, type="secondary"):
+        if st.button("🚪 Kirjaudu ulos", width="stretch", type="secondary"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()  # Force rerun to display login page
@@ -1095,22 +1146,69 @@ else:
         
         st.divider()
 
-        # Section 3: Fetch Recommendations
+        # Section 3: Fetch Recommendations with Rate Limiting
         st.subheader("🚀 Hae")
-        if st.button("🎬 Hae suositukset", use_container_width=True, disabled=st.session_state.get("should_fetch_recommendations", False)):
-            st.session_state.should_fetch_recommendations = True
         
-        # Show loading container with steps
+        # Initialize rate limiter on first run
+        init_rate_limiter()
+        
+        # Init flags (in case missing from session state)
+        if "gemini_busy" not in st.session_state:
+            st.session_state.gemini_busy = False
+        if "gemini_prev_results_displayed" not in st.session_state:
+            st.session_state.gemini_prev_results_displayed = True  # allow first run
+        if "should_fetch_recommendations" not in st.session_state:
+            st.session_state.should_fetch_recommendations = False
+        
+        # Check rate limit status before showing button
+        is_allowed, wait_time = check_rate_limit(cooldown_seconds=5)
+        
+        # Single status message with strict priority: busy > prev_results > rate_limit > nothing
+        # This ensures only ONE message is ever displayed
+        if st.session_state.gemini_busy:
+            # Priority 1: Show busy message
+            st.info("🔄 Haku on jo käynnissä — odota tuloksia.")
+        elif not st.session_state.gemini_prev_results_displayed:
+            # Priority 2: Show finishing display message
+            st.info("🕒 Viimeisimmät tulokset viimeistellään näkyviin.")
+        # Priority 3: No message (cooldown handled by button disabled state)
+        
+        # Get rate limit status
+        is_allowed, wait_time = check_rate_limit()
+        btn_disabled = st.session_state.gemini_busy or not is_allowed
+        
+        # Show rate-limited button
+        button_clicked = st.button(
+            "🎬 Hae suositukset",
+            key="fetch_recommendations", 
+            disabled=btn_disabled,
+            use_container_width=True
+        )
+        
+        # Show cooldown countdown only AFTER fetch is done (not during busy)
+        if not is_allowed and not st.session_state.gemini_busy:
+            display_cooldown_countdown(wait_time)
+        
+        # Check if button was clicked and allowed
+        if button_clicked and is_allowed:
+            # Button click was accepted - start recommendation fetch
+            st.session_state.should_fetch_recommendations = True
+            st.session_state.gemini_prev_results_displayed = False
+            st.session_state.recommendations = []
+            st.session_state.recommendations_fetched = False
+            st.session_state.last_error = None
+        
         if st.session_state.get("should_fetch_recommendations", False):
-            with st.spinner("🔄 Haetaan suosituksia..."):
-                media_type = st.session_state.get("media_type", "Elokuva")
-                genre = st.session_state.get("selected_genre", "Kaikki")
-                
-                username = st.session_state.get("jellyfin_session", {}).get('User', {}).get('Name', 'Unknown')
-                
-                try:
+            st.session_state.gemini_busy = True
+            try:
+                with st.spinner("🔄 Haetaan suosituksia..."):
+                    media_type = st.session_state.get("media_type", "Elokuva")
+                    genre = st.session_state.get("selected_genre", "Kaikki")
+                    
+                    username = st.session_state.get("jellyfin_session", {}).get('User', {}).get('Name', 'Unknown')
+                    
                     # Reset user-cleared flag when fetching new recommendations
-                    st.session_state.recommendations_cleared_by_user = False
+                    # (removed this flag as it's no longer needed - prev_results_displayed now controls gate)
                     
                     jellyfin_watched = get_jellyfin_watched_titles()
                     db = load_manual_db()
@@ -1130,11 +1228,30 @@ else:
                     logger.debug(f"Gemini returned: {type(recommendations)} - {recommendations if recommendations else 'None/Empty'}")
                     
                     if recommendations:
+                        # Mark as non-empty for later display logic
+                        st.session_state.api_empty_last_fetch = False
                         enriched_recommendations = []
                         logger.debug(f"Starting parallel Jellyseerr search for {len(recommendations)} recommendations")
+                        
+                        # Get current script context for thread pool workers
+                        ctx = get_script_run_ctx()
+                        
+                        def enrichment_wrapper(title: str):
+                            """Wrapper to handle ScriptRunContext for thread pool workers
+                            Note: The 'missing ScriptRunContext' warning is expected and safe to ignore
+                            in ThreadPoolExecutor workers. Streamlit documentation confirms this is normal
+                            behavior when running Streamlit operations in threads."""
+                            try:
+                                # Context stored for potential future use, though Streamlit doesn't
+                                # recommend calling Streamlit functions directly from threads
+                                return _enrich_recommendation_with_jellyseerr(title)
+                            except Exception as e:
+                                logger.warning(f"Wrapper error for '{title}': {e}")
+                                return {"title": title, "media_id": None, "media_type": None, "success": False, "error": str(e)}
+                        
                         with ThreadPoolExecutor(max_workers=5) as executor:
                             futures = {
-                                executor.submit(_enrich_recommendation_with_jellyseerr, rec['title']): rec 
+                                executor.submit(enrichment_wrapper, rec['title']): rec 
                                 for rec in recommendations
                             }
                             
@@ -1162,30 +1279,61 @@ else:
                         st.session_state.recommendations_fetched = True
                         logger.info(f"Successfully generated {len(enriched_recommendations)} recommendations for user: {username}")
                     else:
+                        # Mark as empty from API
+                        st.session_state.api_empty_last_fetch = True
                         st.session_state.recommendations = []
                         st.session_state.recommendations_fetched = False
                         logger.warning(f"No recommendations generated for user: {username} - Gemini returned None or empty")
-                except Exception as e:
-                    logger.error(f"Unexpected error in recommendations fetch: {e}")
-                    st.session_state.recommendations_fetched = False
-                    st.session_state.last_error = str(e)
-                finally:
-                    st.session_state.should_fetch_recommendations = False
+            except Exception as e:
+                logger.error(f"Unexpected error in recommendations fetch: {e}")
+                st.session_state.recommendations_fetched = False
+                st.session_state.last_error = str(e)
+            finally:
+                # Mark attempt and release in-flight lock (busy must always flip to False)
+                st.session_state.should_fetch_recommendations = False
+                st.session_state.gemini_busy = False
+                # Set rate limit timestamp after fetch is complete so cooldown starts now
+                update_rate_limit_timestamp()
+                # Trigger immediate UI update to display cooldown timer
+                st.rerun()
+                # NOTE: recommendations_fetched is set during try block (True/False based on success)
+                # and will control whether status messages are shown
         
-        # Show success/error/warning messages after the button
+        # After-fetch messages and gates
+        # Set flags BEFORE rendering messages so they take effect immediately on next render
         if st.session_state.get("recommendations_fetched", False) and st.session_state.get("recommendations"):
+            # Mark results as displayed before showing the message
+            st.session_state.gemini_prev_results_displayed = True
+            st.session_state.gemini_busy = False
             st.success(f"✅ {len(st.session_state.get('recommendations', []))} suositusta haettu onnistuneesti!")
-        elif st.session_state.get("recommendations_fetched", False) and not st.session_state.get("recommendations") and not st.session_state.get("recommendations_cleared_by_user", False):
+        elif st.session_state.get("recommendations_fetched", False) and not st.session_state.get("recommendations") and st.session_state.get("api_empty_last_fetch", False):
+            # Gemini returned empty (not user-filtered empty) - show warning and mark display done
+            st.session_state.gemini_prev_results_displayed = True
+            st.session_state.gemini_busy = False
             st.warning("⚠️ Gemini ei palauttanut suosituksia. Yritä uudelleen.")
         
         if st.session_state.get("last_error"):
+            # Mark results as displayed before showing the message
+            st.session_state.gemini_prev_results_displayed = True
+            st.session_state.gemini_busy = False
             st.error(f"❌ Virhe suositusten haussa: {st.session_state.get('last_error', '')[:150]}")
             st.session_state.last_error = None
         
         st.divider()
         
         # DISPLAYING RECOMMENDATIONS (better details from Jellyseerr)
-        if st.session_state.get("recommendations"):
+        # Clear user_filtered_empty at the start of this section
+        st.session_state.user_filtered_empty = False
+        
+        # Determine displayed list (currently just st.session_state.recommendations, but placeholder for any future filtering)
+        displayed_recommendations = st.session_state.get("recommendations", [])
+        
+        # Check if list is empty due to user filtering (not API_empty)
+        if not displayed_recommendations and st.session_state.get("recommendations_fetched", False) and not st.session_state.get("api_empty_last_fetch", False):
+            st.session_state.user_filtered_empty = True
+        
+        # Display recommendations if any
+        if displayed_recommendations:
             st.subheader("✨ Tässä sinulle suosituksia:")
             
             # Load database once before the loop
@@ -1194,7 +1342,7 @@ else:
             user_data_default = {"movies": [], "series": [], "do_not_recommend": [], "watchlist": {"movies": [], "series": []}}
             user_data = db.get(username, user_data_default)
             
-            for idx, rec in enumerate(st.session_state.get("recommendations", [])[:]):
+            for idx, rec in enumerate(displayed_recommendations[:]):
                 title = rec.get('title', 'N/A')
                 year = rec.get('year', 'N/A')
                 reason = rec.get('reason', 'N/A')
@@ -1282,7 +1430,7 @@ else:
                                 logger.debug(f"Response status: {poster_response.status_code}, content type: {poster_response.headers.get('content-type')}")
                                 if poster_response.status_code == 200:
                                     image = Image.open(BytesIO(poster_response.content))
-                                    st.image(image, use_container_width=True)
+                                    st.image(image, width="stretch")
                                 else:
                                     st.write("📷 Ei julistetta")
                             except Exception as e:
@@ -1297,6 +1445,9 @@ else:
                         
                         if jellyseerr_details and isinstance(jellyseerr_details, dict):
                             rating = jellyseerr_details.get("voteAverage", "N/A")
+                            # Round rating to 1 decimal place if it's a number
+                            if rating != "N/A" and isinstance(rating, (int, float)):
+                                rating = round(rating, 1)
                             overview = jellyseerr_details.get("overview", "")
                             
                             if rating != "N/A":
@@ -1323,51 +1474,52 @@ else:
                         # Row 1: Add to watched
                         watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
                         watched_disabled = is_watched
-                        if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", use_container_width=True,
+                        if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", width="stretch",
                                       disabled=watched_disabled,
                                       help="Lisää katsottuihin elokuviin/sarjoihin" if not watched_disabled else "Tämä on jo katsottu"):
                             handle_search_result_add_watched(title, media_type if media_type else media_type_from_radio)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
-                                if not st.session_state.recommendations:
-                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
                         
                         # Row 2: Request from Jellyseerr
-                        if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", use_container_width=True,
+                        if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", width="stretch",
                                       help="Pyydä Jellyseerristä ladattavaksi"):
                             handle_search_result_request(media_id, media_type if media_type else media_type_from_radio)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
-                                if not st.session_state.recommendations:
-                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
                         
                         # Row 3: Add to watchlist
                         watchlist_label = "✅ Katselulista" if is_in_watchlist else "📋 Katselulista"
                         watchlist_disabled = is_in_watchlist
-                        if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", use_container_width=True,
+                        if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", width="stretch",
                                       disabled=watchlist_disabled,
                                       help="Lisää katselulistalle" if not watchlist_disabled else "Tämä on jo katselulistallasi"):
                             handle_search_result_watchlist(title, media_type if media_type else media_type_from_radio)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
-                                if not st.session_state.recommendations:
-                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
                         
                         # Row 4: Do not recommend
                         blacklist_label = "✅ Estetty" if is_blacklisted else "🚫 Älä suosittele"
                         blacklist_disabled = is_blacklisted
-                        if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", use_container_width=True,
+                        if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", width="stretch",
                                       disabled=blacklist_disabled,
                                       help="Lisää älä-suosittele listalle" if not blacklist_disabled else "Tämä on jo estolistalla"):
                             handle_search_result_blacklist(title)
                             if st.session_state.get("recommendations"):
                                 st.session_state.recommendations = [r for r in st.session_state.get("recommendations", []) if r.get('title') != title]
-                                if not st.session_state.recommendations:
-                                    st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
+        
+        # Show neutral message if list is empty due to user filtering (not API_empty)
+        if st.session_state.get("user_filtered_empty", False):
+            st.info("ℹ️ Ei näytettäviä suosituksia. Hae uudet suositukset.")
+        
+        # Set prev_results_displayed = True at the end of this DISPLAYING section (regardless of list state)
+        # This decouples button enablement from list content
+        if st.session_state.get("recommendations_fetched", False):
+            st.session_state.gemini_prev_results_displayed = True
 
     # ===== PAGE 2: KATSELULISTA =====
     if current_page == "watchlist":
@@ -1397,15 +1549,15 @@ else:
                         st.write(f"• {wl_title}")
                     with col2:
                         if st.button("📥 Pyydä", key=f"request_watchlist_movie_{idx}",
-                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
+                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), width="stretch"):
                             pass  # Callback handles the request
                     with col3:
                         if st.button("✅ Katsottu", key=f"watched_watchlist_movie_{idx}",
-                                     on_click=handle_watchlist_mark_watched, args=(wl_title, "movies"), use_container_width=True):
+                                     on_click=handle_watchlist_mark_watched, args=(wl_title, "movies"), width="stretch"):
                             pass  # Callback handles marking as watched
                     with col4:
                         if st.button("🗑️ Poista", key=f"remove_watchlist_movie_{idx}",
-                                     on_click=handle_watchlist_remove, args=(wl_title, "movies"), use_container_width=True):
+                                     on_click=handle_watchlist_remove, args=(wl_title, "movies"), width="stretch"):
                             pass  # Callback handles the removal
                 st.markdown("")  # spacing
                 st.divider()
@@ -1419,15 +1571,15 @@ else:
                         st.write(f"• {wl_title}")
                     with col2:
                         if st.button("📥 Pyydä", key=f"request_watchlist_series_{idx}",
-                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
+                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), width="stretch"):
                             pass  # Callback handles the request
                     with col3:
                         if st.button("✅ Katsottu", key=f"watched_watchlist_series_{idx}",
-                                     on_click=handle_watchlist_mark_watched, args=(wl_title, "series"), use_container_width=True):
+                                     on_click=handle_watchlist_mark_watched, args=(wl_title, "series"), width="stretch"):
                             pass  # Callback handles marking as watched
                     with col4:
                         if st.button("🗑️ Poista", key=f"remove_watchlist_series_{idx}",
-                                     on_click=handle_watchlist_remove, args=(wl_title, "series"), use_container_width=True):
+                                     on_click=handle_watchlist_remove, args=(wl_title, "series"), width="stretch"):
                             pass  # Callback handles the removal
 
     # ===== PAGE 3: MERKITSE =====
@@ -1444,7 +1596,7 @@ else:
             with search_col1:
                 search_query = st.text_input("Elokuvan tai sarjan nimi", key="jellyseerr_search_input", placeholder="Kirjoita nimike...", label_visibility="collapsed")
             with search_col2:
-                search_button = st.button("🔎 Hae", use_container_width=True, key="search_button")
+                search_button = st.button("🔎 Hae", width="stretch", key="search_button")
             
             if search_button and search_query:
                 with st.spinner("🔍 Etsitään Jellyseerrista..."):
@@ -1477,7 +1629,7 @@ else:
                                     logger.debug(f"Response status: {poster_response.status_code}, content type: {poster_response.headers.get('content-type')}")
                                     if poster_response.status_code == 200:
                                         image = Image.open(BytesIO(poster_response.content))
-                                        st.image(image, use_container_width=True)
+                                        st.image(image, width="stretch")
                                     else:
                                         st.write("📷 Ei julistetta")
                                 except Exception as e:
@@ -1494,6 +1646,9 @@ else:
                             year = release_date[:4] if release_date else "N/A"
                             overview = result.get("overview", "")
                             vote_average = result.get("voteAverage", "N/A")
+                            # Round rating to 1 decimal place if it's a number
+                            if vote_average != "N/A" and isinstance(vote_average, (int, float)):
+                                vote_average = round(vote_average, 1)
                             
                             st.markdown(f"**{title}** ({year})")
                             if media_type:
@@ -1521,21 +1676,21 @@ else:
                             # Row 1: Add to watched
                             watched_label = "✅ Katsottu" if is_watched else "📽️ Katsottu"
                             watched_disabled = is_watched
-                            if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", use_container_width=True,
+                            if st.button(watched_label, key=f"add_watched_{media_id}_{idx}", width="stretch",
                                           disabled=watched_disabled,
                                           help="Lisää katsottuihin elokuviin/sarjoihin" if not watched_disabled else "Tämä on jo katsottu"):
                                 handle_search_result_add_watched(title, media_type)
                                 st.rerun()
                             
                             # Row 2: Request from Jellyseerr
-                            if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", use_container_width=True,
+                            if st.button("📥 Pyydä", key=f"request_{media_id}_{idx}", width="stretch",
                                           help="Pyydä Jellyseerristä ladattavaksi"):
                                 handle_search_result_request(media_id, media_type)
                             
                             # Row 3: Add to watchlist
                             watchlist_label = "✅ Katselulista" if is_in_watchlist else "📋 Katselulista"
                             watchlist_disabled = is_in_watchlist
-                            if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", use_container_width=True,
+                            if st.button(watchlist_label, key=f"add_watchlist_{media_id}_{idx}", width="stretch",
                                           disabled=watchlist_disabled,
                                           help="Lisää katselulistalle" if not watchlist_disabled else "Tämä on jo katselulistallasi"):
                                 handle_search_result_watchlist(title, media_type)
@@ -1544,7 +1699,7 @@ else:
                             # Row 4: Do not recommend
                             blacklist_label = "✅ Estetty" if is_blacklisted else "🚫 Älä suosittele"
                             blacklist_disabled = is_blacklisted
-                            if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", use_container_width=True,
+                            if st.button(blacklist_label, key=f"blacklist_{media_id}_{idx}", width="stretch",
                                           disabled=blacklist_disabled,
                                           help="Lisää älä-suosittele listalle" if not blacklist_disabled else "Tämä on jo estolistalla"):
                                 handle_search_result_blacklist(title)
@@ -1580,7 +1735,7 @@ else:
         # Export
         with col1:
             st.write("**📥 Vie tietokantasi**")
-            if st.button("⬇️ Lataa varmuuskopio", use_container_width=True):
+            if st.button("⬇️ Lataa varmuuskopio", width="stretch"):
                 backup_json = export_user_data_as_json(username)
                 if backup_json:
                     st.download_button(
@@ -1588,7 +1743,7 @@ else:
                         data=backup_json,
                         file_name=f"jellyfin_ai_recommender_backup_{username}_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                         mime="application/json",
-                        use_container_width=True
+                        width="stretch"
                     )
         
         st.divider()
@@ -1612,12 +1767,12 @@ else:
                     col_replace, col_merge = st.columns(2)
                     
                     with col_replace:
-                        if st.button("🔄 Korvaa tietokanta", use_container_width=True, key="btn_replace"):
+                        if st.button("🔄 Korvaa tietokanta", width="stretch", key="btn_replace"):
                             if import_user_data_from_json(backup_content, username):
                                 st.rerun()
                     
                     with col_merge:
-                        if st.button("🔗 Yhdistä tietokannat", use_container_width=True, key="btn_merge"):
+                        if st.button("🔗 Yhdistä tietokannat", width="stretch", key="btn_merge"):
                             if merge_user_data_from_json(backup_content, username):
                                 st.rerun()
                 except Exception as e:
@@ -1639,4 +1794,5 @@ with footer_col2:
         """,
         unsafe_allow_html=True
     )
+
 

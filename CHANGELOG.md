@@ -72,7 +72,7 @@ Major UI/UX improvements focusing on navigation restructuring, visual consistenc
 ### 🐛 Bug Fixes
 - Fixed sidebar toggle button visibility (removed problematic `header {visibility: hidden;}` CSS rule)
 - Fixed recommendation fetch button disabled state management
-- Fixed genre selection state persistence across page reloads
+- Fixed genre selection persistence across page reloads
 - Improved session state type safety with null checks
 
 ### 📚 Documentation
