@@ -8,13 +8,14 @@ Personalized movie and TV show recommendation engine powered by **Google Gemini 
 
 - 🤖 **AI-Powered Recommendations** — Uses Google Gemini to generate personalized suggestions
 - 🎥 **Jellyfin Integration** — Reads your watch history directly from Jellyfin
-- 📋 **Watchlist Management** — Save recommendations to a personal watchlist
+- 📋 **Watchlist Management** — Save recommendations to a personal watchlist with TMDB IDs
 - 🚫 **Blacklist Control** — Mark content you don't want recommendations for
 - 🎯 **Genre Filtering** — Filter recommendations by genre
 - 🔗 **Jellyseerr Integration** — Request media directly from Jellyseerr with one click
-- 📊 **Manual Tracking** — Add movies/series watched outside Jellyfin
+- 📊 **Manual Tracking** — Add movies/series watched outside Jellyfin (with TMDB metadata)
 - 💾 **Database Backup** — Export and import your personal data
 - 🎬 **Availability Tracking** — Automatically detects available content on Jellyseerr
+- 🔢 **TMDB ID Storage** — All media entries store TMDB IDs for accurate requests and integrations
 
 ## 🚀 Quick Start
 
