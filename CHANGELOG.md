@@ -5,6 +5,106 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.4-alpha] - 2025-11-16
+
+### 🎯 Overview
+Major UI/UX improvements focusing on navigation restructuring, visual consistency, and form clarity. Migrated from tabbed interface to sidebar-based navigation with enhanced mobile responsiveness. Comprehensive visual polish across all interface elements.
+
+### ✨ What's New
+- **Sidebar Navigation System**
+  - Replaced `st.tabs()` with sidebar button-based navigation
+  - 4 main pages: 🔍 Suositukset, 📝 Katselulista, ✏️ Merkitse, 💾 Tiedot
+  - Page routing via `st.session_state.current_page` with 4 states
+  - Logout button positioned at sidebar bottom with spacer (400px)
+  - Responsive toggle arrow (>) on desktop for sidebar visibility (Streamlit-native)
+  - Mobile adapts automatically with Streamlit's built-in responsive design
+  - User info display in sidebar footer
+
+- **Fix "Kirjaudu ulos" Button Placement**
+  - Moved logout from header to sidebar bottom
+  - Cleaner header layout without element conflicts
+  - Better responsive design for mobile and desktop
+
+- **Header Layout Optimization**
+  - Sidebar solution eliminates header crowding issues
+  - Professional appearance with better usability
+  - Full-width content area with st.markdown() welcome message
+
+- **Genre Selection UI Improvement**
+  - Reorganized genre radio buttons with emoji icons
+  - Improved clarity with visual grouping and emoji enhancement
+  - Better user experience for media filtering
+
+- **Content Grouping & Visual Separation**
+  - Added `st.divider()` between logical sections:
+    - Media type vs Genre selection (Page 1)
+    - Movies vs Series lists (Page 2)
+    - Search field vs Results (Page 3)
+    - Stats vs Backup/Restore (Page 4)
+  - Added subheadings with semantic meaning:
+    - 📺 Sisältötyyppi, 🎬 Lajityyppi, 🚀 Hae (Page 1)
+    - 🎬 Elokuvat, 📺 Sarjat (Page 2)
+    - 🔍 Hae Jellyseerrista, 📋 Hakutulokset (Page 3)
+    - 📊 Tilastot, 💾 Varmuuskopio (Page 4)
+  - Better information hierarchy with reduced cognitive load
+
+- **Visual Polish & Icon Consistency**
+  - Added emojis to all interactive buttons:
+    - 📥 Pyydä (request), ✅ Katsottu (watched), 🗑️ Poista (delete)
+    - 🚪 Kirjaudu ulos (logout), 🔄 Korvaa (replace), 🔗 Yhdistä (merge)
+    - 💾 Lataa varmuuskopio (download backup)
+  - Consistent theming across all UI elements
+  - Professional and intuitive interface
+
+- **Search Input Alignment Fix**
+  - Improved `st.columns()` layout with `gap="small"` parameter
+  - Search button aligned to bottom of input field using `vertical_alignment="bottom"`
+  - Better visual cohesion in search form
+
+- **UI Polish Enhancements**
+  - Centered logo and title with flexbox for professional appearance
+  - Professional footer with version display (v0.2.4-alpha)
+  - GitHub repository link in footer
+  - Open Source status badge in footer
+  - Emoji favicon (🎬) for better browser compatibility
+  - .gitignore updated to exclude user-specific database.json
+
+### 🐛 Bug Fixes
+- Fixed sidebar toggle button visibility (removed problematic `header {visibility: hidden;}` CSS rule)
+- Fixed recommendation fetch button disabled state management
+- Fixed genre selection state persistence across page reloads
+- Improved session state type safety with null checks
+
+### 📚 Documentation
+- 📖 README.md - Feature overview
+- 🚀 SETUP.md - Deployment instructions
+- 🔗 API_INTEGRATION.md - Integration details
+- 🗄️ DATABASE_SCHEMA.md - Database structure
+
+### ⚠️ Known Issues & Limitations
+- None at this time. All v0.2.4-alpha features implemented and tested.
+
+### 🚀 Installation & Upgrade
+From v0.2.4-alpha:
+```bash
+git pull origin main
+docker-compose up -d --build  # For Docker deployment
+# or
+streamlit run app.py  # For local development
+```
+
+### 📊 Monitoring
+- Sidebar navigation accessible via toggle arrow (>) on desktop for show/hide
+- Mobile automatically adapts sidebar display with Streamlit's responsive design
+- All pages accessible via sidebar buttons with visual feedback
+- Form clarity improved with dividers and subheadings
+- Icon consistency maintained across all UI elements
+
+### ⚠️ Disclaimer
+This is a pre-release version (alpha) with ongoing development. UI/UX is now significantly improved with better navigation and visual organization.
+
+**Tag:** v0.2.4-alpha | **Date:** 2025-11-16 | **Type:** Pre-release (Alpha)
+
 ## [0.2.3-alpha-hotfix] - 2025-11-13
 
 ### 🎯 Overview

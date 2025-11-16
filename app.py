@@ -968,7 +968,6 @@ hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     </style>
     """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -1001,29 +1000,62 @@ else:
     # Main view for logged-in user
     username = st.session_state.get("jellyfin_session", {}).get('User', {}).get('Name', 'Unknown')
 
-    # Compact welcome + logout
-    col1, col2 = st.columns([0.8, 0.2])
-    with col1:
-        st.markdown(f"#### Tervetuloa, **{username}**! 👋")
-    with col2:
-        if st.button("Kirjaudu ulos", use_container_width=True, type="secondary"):
+    # Sidebar navigation and settings
+    with st.sidebar:
+        st.title("⚙️ Valikko")
+        
+        # Page navigation buttons
+        st.write("**Navigaatio:**")
+        if st.button("🔍 Suositukset", use_container_width=True, key="btn_page_recommendations"):
+            st.session_state.current_page = "recommendations"
+        if st.button("📝 Katselulista", use_container_width=True, key="btn_page_watchlist"):
+            st.session_state.current_page = "watchlist"
+        if st.button("✏️ Merkitse", use_container_width=True, key="btn_page_mark"):
+            st.session_state.current_page = "mark"
+        if st.button("💾 Tiedot", use_container_width=True, key="btn_page_info"):
+            st.session_state.current_page = "info"
+        
+        st.divider()
+        
+        # User info
+        st.caption(f"👤 {username}")
+        
+        # Spacer to push logout to bottom
+        st.markdown("<div style='height: 400px;'></div>", unsafe_allow_html=True)
+        
+        # Logout button at the bottom
+        if st.button("🚪 Kirjaudu ulos", use_container_width=True, type="secondary"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()  # Force rerun to display login page
+    
+    # Initialize current_page if not exists
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "recommendations"
+    
+    # Welcome header
     st.markdown("---")
 
     st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
     
-    # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🔍 Suositukset", "📝 Katselulista", "✏️ Merkitse", "💾 Tiedot"])
+    # Page content based on sidebar selection
+    current_page = st.session_state.current_page
 
-    # ===== TAB 1: SUOSITUKSET =====
-    with tab1:
+    # ===== PAGE 1: SUOSITUKSET =====
+    if current_page == "recommendations":
         st.header("🔎 Hae suosituksia")
-        media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type")
-
-        # Genre view displays emoji icon using format function (more stable than display labels)
-        genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
+        
+        # Section 1: Content Type Selection
+        st.subheader("📺 Sisältötyyppi")
+        st.write("**Mistä haluat suosituksia?**")
+        media_type = st.radio("Suositellaanko elokuvia vai sarjoja?", ["Elokuva", "TV-sarja"], horizontal=True, key="media_type", label_visibility="collapsed")
+        
+        st.divider()
+        
+        # Section 2: Genre Selection
+        st.subheader("🎬 Lajityyppi")
+        st.write("**Valitse genre:**")
+        
         genre_emoji = {
             "Kaikki": "🌐 Kaikki",
             "Toiminta": "🔫 Toiminta",
@@ -1035,17 +1067,36 @@ else:
             "Jännitys": "🔪 Jännitys",
             "Romantiikka": "❤️ Romantiikka",
         }
-        # Display emoji-enriched options in radio and map back to internal value
+        
+        # Define genre groups for better organization
+        genre_options = ["Kaikki", "Toiminta", "Komedia", "Draama", "Scifi", "Fantasia", "Kauhu", "Jännitys", "Romantiikka"]
+        
+        # Display emoji-enriched options
         display_options = [genre_emoji[g] for g in genre_options]
-        # Use vertical radio, it behaves reliably across different browsers and doesn't break visibility when selected
-        selected_display = st.radio("Valitse genre", display_options, index=0, key="genre_display_radio")
+        
+        # Radio button with improved clarity
+        selected_display = st.radio(
+            "Valitse genre",
+            display_options,
+            index=st.session_state.get("genre_index", 0),
+            key="genre_display_radio",
+            label_visibility="collapsed",
+            horizontal=False
+        )
+        
         # Map the selection back to the internal key
         reverse_map = {v: k for k, v in genre_emoji.items()}
-        genre = reverse_map.get(selected_display, "Kaikki")
-        # Store the genre in session state for the callback to access
+        genre = reverse_map.get(selected_display, "Kaikki") if selected_display else "Kaikki"
+        
+        # Store the genre and index in session state
         st.session_state.selected_genre = genre
+        if selected_display:
+            st.session_state.genre_index = display_options.index(selected_display)
+        
+        st.divider()
 
-        # Main button: full width, with purple highlight (CSS styles above)
+        # Section 3: Fetch Recommendations
+        st.subheader("🚀 Hae")
         if st.button("🎬 Hae suositukset", use_container_width=True, disabled=st.session_state.get("should_fetch_recommendations", False)):
             st.session_state.should_fetch_recommendations = True
         
@@ -1318,8 +1369,8 @@ else:
                                     st.session_state.recommendations_cleared_by_user = True
                             st.rerun()
 
-    # ===== TAB 2: KATSELULISTA =====
-    with tab2:
+    # ===== PAGE 2: KATSELULISTA =====
+    if current_page == "watchlist":
         st.header("📝 Oma katselulistani")
         db = load_manual_db()
         user_data = db.get(username, {})
@@ -1339,60 +1390,61 @@ else:
         else:
             # Movies section
             if watchlist_movies:
-                st.write("**🎬 Elokuvat:**")
+                st.subheader("🎬 Elokuvat")
                 for idx, wl_title in enumerate(watchlist_movies):
                     col1, col2, col3, col4 = st.columns([0.5, 0.2, 0.15, 0.15])
                     with col1:
                         st.write(f"• {wl_title}")
                     with col2:
-                        if st.button("Pyydä", key=f"request_watchlist_movie_{idx}",
+                        if st.button("📥 Pyydä", key=f"request_watchlist_movie_{idx}",
                                      on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
                             pass  # Callback handles the request
                     with col3:
-                        if st.button("Katsottu", key=f"watched_watchlist_movie_{idx}",
+                        if st.button("✅ Katsottu", key=f"watched_watchlist_movie_{idx}",
                                      on_click=handle_watchlist_mark_watched, args=(wl_title, "movies"), use_container_width=True):
                             pass  # Callback handles marking as watched
                     with col4:
-                        if st.button("Poista", key=f"remove_watchlist_movie_{idx}",
+                        if st.button("🗑️ Poista", key=f"remove_watchlist_movie_{idx}",
                                      on_click=handle_watchlist_remove, args=(wl_title, "movies"), use_container_width=True):
                             pass  # Callback handles the removal
                 st.markdown("")  # spacing
+                st.divider()
 
             # Series section
             if watchlist_series:
-                st.write("**📺 Sarjat:**")
+                st.subheader("📺 Sarjat")
                 for idx, wl_title in enumerate(watchlist_series):
                     col1, col2, col3, col4 = st.columns([0.5, 0.2, 0.15, 0.15])
                     with col1:
                         st.write(f"• {wl_title}")
                     with col2:
-                        if st.button("Pyydä", key=f"request_watchlist_series_{idx}",
+                        if st.button("📥 Pyydä", key=f"request_watchlist_series_{idx}",
                                      on_click=handle_jellyseerr_request, args=({"title": wl_title},), use_container_width=True):
                             pass  # Callback handles the request
                     with col3:
-                        if st.button("Katsottu", key=f"watched_watchlist_series_{idx}",
+                        if st.button("✅ Katsottu", key=f"watched_watchlist_series_{idx}",
                                      on_click=handle_watchlist_mark_watched, args=(wl_title, "series"), use_container_width=True):
                             pass  # Callback handles marking as watched
                     with col4:
-                        if st.button("Poista", key=f"remove_watchlist_series_{idx}",
+                        if st.button("🗑️ Poista", key=f"remove_watchlist_series_{idx}",
                                      on_click=handle_watchlist_remove, args=(wl_title, "series"), use_container_width=True):
                             pass  # Callback handles the removal
 
-    # ===== TAB 3: MERKITSE =====
-    with tab3:
+    # ===== PAGE 3: MERKITSE =====
+    if current_page == "mark":
         if not st.session_state.get("jellyfin_session"):
             st.warning("⚠️ Kirjaudu sisään jatkaaksesi.")
         else:
             st.header("✏️ Merkitse nimike katsottuksi manuaalisesti")
-            st.write("Hae Jellyseerrista tai lisää nimikkeitä, joita et ole katsellut Jellyfinissä.")
             
             # Jellyseerr search section
             st.subheader("🔍 Hae Jellyseerrista")
-            search_col1, search_col2 = st.columns([3, 1])
+            st.write("Hae Jellyseerrista ja lisää nimikkeitä katsottuihin.")
+            search_col1, search_col2 = st.columns([4, 1], gap="small", vertical_alignment="bottom")
             with search_col1:
-                search_query = st.text_input("Elokuvan tai sarjan nimi", key="jellyseerr_search_input", placeholder="Kirjoita nimike...")
+                search_query = st.text_input("Elokuvan tai sarjan nimi", key="jellyseerr_search_input", placeholder="Kirjoita nimike...", label_visibility="collapsed")
             with search_col2:
-                search_button = st.button("🔎 Hae", use_container_width=True)
+                search_button = st.button("🔎 Hae", use_container_width=True, key="search_button")
             
             if search_button and search_query:
                 with st.spinner("🔍 Etsitään Jellyseerrista..."):
@@ -1406,7 +1458,7 @@ else:
             # Display search results
             if st.session_state.search_results:
                 st.divider()
-                st.subheader("📺 Hakutulokset")
+                st.subheader("📋 Hakutulokset")
                 
                 for idx, result in enumerate(st.session_state.search_results):
                     with st.container(border=True):
@@ -1498,12 +1550,12 @@ else:
                                 handle_search_result_blacklist(title)
                                 st.rerun()
 
-    # ===== TAB 4: TIEDOT =====
-    with tab4:
+    # ===== PAGE 4: TIEDOT =====
+    if current_page == "info":
         st.header("💾 Tietokannan Varmuuskopio & Tiedot")
-        st.write("Vie ja palauta tietokantasi tai tarkastele tilastoja.")
         
         st.subheader("📊 Tilastot")
+        st.write("Yhteenveto katsotusta sisällöstä ja estoista.")
         db = load_manual_db()
         user_data = db.get(username, {})
         
@@ -1519,14 +1571,15 @@ else:
             st.metric("🚫 Estetyt", blacklist_count)
         
         st.divider()
-        st.subheader("📥/📤 Varmuuskopio")
+        
+        st.subheader("💾 Varmuuskopio")
         st.write("Vie tietokantasi varmuuskopioksi tai palauta aiemmin viety varmuuskopio.")
         
         col1, col2 = st.columns([1, 1])
         
         # Export
         with col1:
-            st.write("**📥 Vie varmuuskopio**")
+            st.write("**📥 Vie tietokantasi**")
             if st.button("⬇️ Lataa varmuuskopio", use_container_width=True):
                 backup_json = export_user_data_as_json(username)
                 if backup_json:
@@ -1538,9 +1591,11 @@ else:
                         use_container_width=True
                     )
         
+        st.divider()
+        
         # Import
         with col2:
-            st.write("**📤 Palauta varmuuskopio**")
+            st.write("**📤 Palauta tietokantasi**")
             uploaded_file = st.file_uploader(
                 "Valitse varmuuskopiotiedosto",
                 type=["json"],
