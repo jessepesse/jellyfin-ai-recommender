@@ -30,6 +30,66 @@
                 "title": "The Prestige",
                 "media_type": "movie",
                 "tmdb_id": 1124
+            },
+            {
+                "title": "Blade Runner",
+                "media_type": "movie",
+                "tmdb_id": 78
+            },
+            {
+                "title": "Annihilation",
+                "media_type": "movie",
+                "tmdb_id": 300668
+            },
+            {
+                "title": "District 9",
+                "media_type": "movie",
+                "tmdb_id": 17654
+            },
+            {
+                "title": "Children of Men",
+                "media_type": "movie",
+                "tmdb_id": 9693
+            },
+            {
+                "title": "Primer",
+                "media_type": "movie",
+                "tmdb_id": 14337
+            },
+            {
+                "title": "Arrival",
+                "media_type": "movie",
+                "tmdb_id": 329865
+            },
+            {
+                "title": "Sunshine",
+                "media_type": "movie",
+                "tmdb_id": 1272
+            },
+            {
+                "title": "Minority Report",
+                "media_type": "movie",
+                "tmdb_id": 180
+            },
+            {
+                "title": "The Creator",
+                "media_type": "movie",
+                "tmdb_id": 670292
+            },
+            {
+                "title": "Dune: Part Two",
+                "media_type": "movie",
+                "tmdb_id": 693134
+            },
+            {
+                "title": "Blade Runner 2049",
+                "media_type": "movie",
+                "tmdb_id": 335984
+            },
+            {
+                "title": "Edge of Tomorrow",
+                "media_type": "movie",
+                "tmdb_id": 137113
             }
         ],
         "series": [
@@ -79,6 +139,11 @@
                 "title": "Foundation",
                 "media_type": "tv",
                 "tmdb_id": 93740
+            },
+            {
+                "title": "Children of Time",
+                "media_type": "movie",
+                "tmdb_id": 256770
             }
         ],
         "watchlist": {
@@ -102,6 +167,16 @@
                     "title": "Stardust",
                     "media_type": "movie",
                     "tmdb_id": 2270
+                },
+                {
+                    "title": "Gattaca",
+                    "media_type": "movie",
+                    "tmdb_id": 782
+                },
+                {
+                    "title": "Past Lives",
+                    "media_type": "movie",
+                    "tmdb_id": 666277
                 }
             ],
             "series": [
@@ -153,10 +228,44 @@
                 "media_type": "tv",
                 "tmdb_id": 137140,
                 "noted_at": "2025-11-16 21:40:48"
+            },
+            {
+                "title": "Guardians of the Galaxy",
+                "media_type": "movie",
+                "tmdb_id": 118340,
+                "noted_at": "2025-11-21 16:44:18"
+            },
+            {
+                "title": "Guardians of the Galaxy Vol. 2",
+                "media_type": "movie",
+                "tmdb_id": 283995,
+                "noted_at": "2025-11-21 16:44:18"
+            },
+            {
+                "title": "Snowpiercer",
+                "media_type": "tv",
+                "tmdb_id": 79680,
+                "noted_at": "2025-11-21 16:44:18"
+            },
+            {
+                "title": "Sirens",
+                "media_type": "tv",
+                "tmdb_id": 246992,
+                "noted_at": "2025-11-21 16:44:18"
             }
         ],
         "jellyseerr_available": {
             "movies": [
+                {
+                    "title": "Guardians of the Galaxy Vol. 2",
+                    "media_type": "movie",
+                    "tmdb_id": 283995
+                },
+                {
+                    "title": "Guardians of the Galaxy",
+                    "media_type": "movie",
+                    "tmdb_id": 118340
+                },
                 {
                     "title": "Playdate",
                     "media_type": "movie",
@@ -166,33 +275,28 @@
                     "title": "Frankenstein",
                     "media_type": "movie",
                     "tmdb_id": 1062722
-                },
-                {
-                    "title": "Gattaca",
-                    "media_type": "movie",
-                    "tmdb_id": 782
                 }
             ],
             "series": [
                 {
+                    "title": "Sirens",
+                    "media_type": "tv",
+                    "tmdb_id": 246992
+                },
+                {
+                    "title": "Snowpiercer",
+                    "media_type": "tv",
+                    "tmdb_id": 79680
+                },
+                {
                     "title": "Chainsaw Man",
                     "media_type": "tv",
                     "tmdb_id": 114410
-                },
-                {
-                    "title": "Get Shorty",
-                    "media_type": "tv",
-                    "tmdb_id": 71951
-                },
-                {
-                    "title": "The Congregation",
-                    "media_type": "tv",
-                    "tmdb_id": 137140
                 }
             ]
         },
-        "jellyfin_synced_at": "2025-11-16 21:40:48.220141",
-        "jellyseerr_synced_at": "2025-11-16 21:41:44.048252",
+        "jellyfin_synced_at": "2025-11-21 16:44:17.378772",
+        "jellyseerr_synced_at": "2025-11-21 16:45:29.018886",
         "jellyfin_total_watched": 69
     }
 }

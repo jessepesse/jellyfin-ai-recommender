@@ -471,48 +471,60 @@ def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_li
         return titles
     
     # Normalize media_type for Gemini API to ensure consistent recommendations
-    # UI uses "Elokuva"/"TV-sarja", but normalize to lowercase for clarity in prompt
+    # UI uses "Elokuva"/"TV-sarja", but normalize to English for the prompt
     if media_type.lower() in ["elokuva", "movie"]:
-        media_type_normalized = "elokuva"
+        media_type_normalized = "movie"
     elif media_type.lower() in ["tv-sarja", "series", "tv-series"]:
-        media_type_normalized = "TV-sarja"
+        media_type_normalized = "tv"
     else:
         media_type_normalized = media_type.lower()
-    
+
     # Extract titles from flexible formats
     watched_titles = extract_titles_from_flexible_list(watched_list)
     watchlist_titles = extract_titles_from_flexible_list(watchlist)
     do_not_titles = extract_titles_from_flexible_list(do_not_recommend_list)
     available_titles = extract_titles_from_flexible_list(available_but_unwatched_list)
     
-    watched_titles_str = ", ".join(watched_titles) if watched_titles else "ei yhtään"
-    watchlist_str = ", ".join(watchlist_titles) if watchlist_titles else "ei yhtään"
-    do_not_str = ", ".join(do_not_titles) if do_not_titles else "ei yhtään"
-    available_str = ", ".join(available_titles) if available_titles else "ei yhtään"
+    # Use English for the prompt strings
+    watched_titles_str = ", ".join(watched_titles) if watched_titles else "none"
+    watchlist_str = ", ".join(watchlist_titles) if watchlist_titles else "none"
+    do_not_str = ", ".join(do_not_titles) if do_not_titles else "none"
+    available_str = ", ".join(available_titles) if available_titles else "none"
 
-    genre_instruction = f"Kaikkien suositusten tulee kuulua genreen: '{genre}'." if genre != "Kaikki" else "Suosittele monipuolisesti eri genrejä."
+    genre_instruction = f"All recommendations must belong to the genre: '{genre}'." if genre != "Kaikki" else "Recommend a variety of genres."
 
-    prompt = f"""Anna 5 uutta {media_type_normalized}-suositusta seuraavan profiilin perusteella:
+    reason_language = "English"
 
-TÄRKEÄ: Sinun tulee suositella AINOASTAAN {media_type_normalized.upper()}, ei muita tyyppejä!
-- Jos {media_type_normalized} = "elokuva", suosittele vain elokuvia
-- Jos {media_type_normalized} = "TV-sarja", suosittele vain TV-sarjoja
+    prompt = f"""Act as a movie and series expert. Your task is to recommend new media for the user in JSON format.
 
-KATSOTTU: {watched_titles_str}
-KIINNOSTUS (katselulista): {watchlist_str}
-ÄLÄ SUOSITTELE: {do_not_str}
-SAATAVILLA (MUTTA KATSOMATTA): {available_str}
+### TASK
+Provide exactly 5 new recommendations.
+MEDIA TYPE: {media_type_normalized.upper()} (Do not recommend other types).
 GENRE: {genre_instruction}
 
-VAATIMUKSET:
-- TULEE suositella VAIN {media_type_normalized} -tyyppisiä nimikkeitä
-- Älä ikinä suosittele mitään elokuvia tai sarjoja joka löytyy jo listalta katsottu, kiinnostunut (katselulista), älä suosittele tai saatavilla (mutta katsomatta)
-- Tittelit täytyy olla englanninkielisiä
-- Jokainen suositus max 80 merkkiä "reason"-kentässä
-- Palauta vastauksesi minimoituna JSON-listana ilman rivinvaihtoja tai ylimääräisiä välilyöntejä
-- Ainoastaan JSON-lista, ei muuta tekstiä
+### RESTRICTIONS (NO GO LIST)
+Under no circumstances recommend titles that appear in the lists below. These have already been seen or rejected:
+<excluded_titles>
+{watched_titles_str}
+{watchlist_str}
+{do_not_str}
+{available_str}
+</excluded_titles>
 
-Vastausmuoto: [{{ "title": "...", "year": 2024, "reason": "..." }}, ...]"""
+### INSTRUCTIONS
+1. Recommendations must be of the {media_type_normalized.upper()} type.
+2. The "title" field must be the original English name.
+3. The "reason" field must be in the language: {reason_language}.
+4. "reason" field length: keep it concise (max 15 words), but appealing.
+5. The "year" field must be the release year (number).
+
+### RESPONSE FORMAT
+Return the response as a clean JSON list without any Markdown formatting (like ```json).
+Example structure:
+[
+  {{ "title": "Movie Name", "year": 2023, "reason": "A brief justification here." }}
+]
+"""
     return prompt
 
 def get_gemini_recommendations(prompt):
@@ -528,14 +540,17 @@ def get_gemini_recommendations(prompt):
         model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
         logger.debug("Sending prompt to Gemini API")
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            generation_config={"response_mime_type": "application/json"}
+        )
         
         if not response or not response.text:
             logger.warning("Gemini returned empty response")
             return None
         
-        cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
-        recommendations = json.loads(cleaned_response)
+        # JSON parsing is now more direct
+        recommendations = json.loads(response.text)
         logger.info(f"Successfully received {len(recommendations) if isinstance(recommendations, list) else 'unknown'} recommendations from Gemini")
         return recommendations
     except json.JSONDecodeError as e:
