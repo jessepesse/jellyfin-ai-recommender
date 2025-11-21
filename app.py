@@ -50,7 +50,7 @@ except Exception as e:
     print(f"Warning: Could not configure logging to file: {e}")
 
 # --- Application Version ---
-APP_VERSION = "0.2.6-alpha"
+APP_VERSION = "0.2.7"
 
 # --- Rate Limiter for Gemini Recommendations ---
 # Prevents API spam and excessive costs using session state
