@@ -50,7 +50,7 @@ except Exception as e:
     print(f"Warning: Could not configure logging to file: {e}")
 
 # --- Application Version ---
-APP_VERSION = "0.2.5-alpha"
+APP_VERSION = "0.2.6-alpha"
 
 # --- Rate Limiter for Gemini Recommendations ---
 # Prevents API spam and excessive costs using session state
@@ -471,38 +471,53 @@ def build_prompt(media_type, genre, watched_list, watchlist, do_not_recommend_li
         return titles
     
     # Normalize media_type for Gemini API to ensure consistent recommendations
-    # UI uses "Elokuva"/"TV-sarja", but normalize to English for the prompt
+    # UI uses "Elokuva"/"TV-sarja", but normalize to lowercase for clarity in prompt
     if media_type.lower() in ["elokuva", "movie"]:
-        media_type_normalized = "movie"
+        media_type_normalized = "elokuva"
     elif media_type.lower() in ["tv-sarja", "series", "tv-series"]:
-        media_type_normalized = "tv"
+        media_type_normalized = "TV-sarja"
     else:
         media_type_normalized = media_type.lower()
-
+    
     # Extract titles from flexible formats
     watched_titles = extract_titles_from_flexible_list(watched_list)
     watchlist_titles = extract_titles_from_flexible_list(watchlist)
     do_not_titles = extract_titles_from_flexible_list(do_not_recommend_list)
     available_titles = extract_titles_from_flexible_list(available_but_unwatched_list)
     
-    # Use English for the prompt strings
-    watched_titles_str = ", ".join(watched_titles) if watched_titles else "none"
-    watchlist_str = ", ".join(watchlist_titles) if watchlist_titles else "none"
-    do_not_str = ", ".join(do_not_titles) if do_not_titles else "none"
-    available_str = ", ".join(available_titles) if available_titles else "none"
+    watched_titles_str = ", ".join(watched_titles) if watched_titles else "ei yhtään"
+    watchlist_str = ", ".join(watchlist_titles) if watchlist_titles else "ei yhtään"
+    do_not_str = ", ".join(do_not_titles) if do_not_titles else "ei yhtään"
+    available_str = ", ".join(available_titles) if available_titles else "ei yhtään"
 
-    genre_instruction = f"All recommendations must belong to the genre: '{genre}'." if genre != "Kaikki" else "Recommend a variety of genres."
+    # Map UI-normalized media type to a model-friendly token (e.g. MOVIE / TV SERIES)
+    mt_norm = media_type_normalized.lower() if isinstance(media_type_normalized, str) else ""
+    if mt_norm in ["elokuva", "movie"]:
+        model_media_type = "MOVIE"
+    elif mt_norm in ["tv-sarja", "series", "tv-series", "tv series"]:
+        model_media_type = "TV SERIES"
+    else:
+        model_media_type = str(media_type_normalized).upper()
 
-    reason_language = "English"
+    # Genre instruction: support both Finnish "Kaikki" and English "All"
+    if isinstance(genre, str) and genre not in ("Kaikki", "All"):
+        genre_instruction = f"The genre MUST be: '{genre}'."
+    else:
+        genre_instruction = "Select recommendations from a diverse range of genres."
 
-    prompt = f"""Act as a movie and series expert. Your task is to recommend new media for the user in JSON format.
+    # Specify which language the "reason" field should be in (UI-specific decision)
+    reason_language = "Finnish"
+
+    # Build an English prompt for Gemini that enforces strict JSON output
+    # model_media_type is mapped earlier to a model-friendly token (e.g. MOVIE / TV SERIES)
+    prompt = f"""Act as a movie and TV series expert. Your task is to recommend new content to the user in JSON format.
 
 ### TASK
 Provide exactly 5 new recommendations.
-MEDIA TYPE: {media_type_normalized.upper()} (Do not recommend other types).
+MEDIA TYPE: {model_media_type} (Do not recommend other types).
 GENRE: {genre_instruction}
 
-### RESTRICTIONS (NO GO LIST)
+### CONSTRAINTS (NO GO LIST)
 Under no circumstances recommend titles that appear in the lists below. These have already been seen or rejected:
 <excluded_titles>
 {watched_titles_str}
@@ -512,17 +527,17 @@ Under no circumstances recommend titles that appear in the lists below. These ha
 </excluded_titles>
 
 ### INSTRUCTIONS
-1. Recommendations must be of the {media_type_normalized.upper()} type.
-2. The "title" field must be the original English name.
+1. Recommendations must be of type {model_media_type}.
+2. The "title" field must be the original English title.
 3. The "reason" field must be in the language: {reason_language}.
-4. "reason" field length: keep it concise (max 15 words), but appealing.
+4. The "reason" field length: keep it concise (max 15 words) but engaging.
 5. The "year" field must be the release year (number).
 
-### RESPONSE FORMAT
-Return the response as a clean JSON list without any Markdown formatting (like ```json).
+### OUTPUT FORMAT
+Return the response as a raw JSON list without Markdown formatting (like ```json).
 Example structure:
 [
-  {{ "title": "Movie Name", "year": 2023, "reason": "A brief justification here." }}
+  {{ "title": "Movie Name", "year": 2023, "reason": "Short reasoning here." }}
 ]
 """
     return prompt
@@ -536,16 +551,16 @@ def get_gemini_recommendations(prompt):
     try:
         import google.generativeai as genai
         logger.debug("Configuring Google Generative AI")
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash-lite')
+        genai.api_key = GEMINI_API_KEY
         
         logger.debug("Sending prompt to Gemini API")
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
         response = model.generate_content(
             prompt,
             generation_config={"response_mime_type": "application/json"}
         )
         
-        if not response or not response.text:
+        if not response or not getattr(response, "text", None):
             logger.warning("Gemini returned empty response")
             return None
         
