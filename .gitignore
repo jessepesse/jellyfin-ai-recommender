@@ -222,3 +222,4 @@ database.json
 database.json.backup
 database.json.tmp
 GEMINI.md
+.vscode/settings.json

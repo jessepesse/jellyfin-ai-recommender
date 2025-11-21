@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+
+## [0.2.7-alpha] - 2025-11-21
+
+### 🎯 Overview
+Small patch release addressing a migration UX issue and cleaning up ephemeral migration artifacts created during the TMDB ID backfill. These changes prevent the UI from getting stuck in a "migration running" state after an application restart and tidy up generated proposal/log files.
+
+### ✨ What's New
+- feat(migration): TMDB ID backfill migration UI and safety
+  - Adds an in-app migration workflow accessible from the `Tiedot` (Database) tab.
+  - Dry-run mode: generates a `migration_proposal_*.json` report describing proposed changes without modifying `database.json`.
+  - Apply mode: runs the migration in a background worker, creates a timestamped pre-apply backup (`database.json.backup_YYYYMMDD_HHMMSS`) and applies updates safely.
+  - Restore & validation: provides a UI flow to restore from backups with JSON validation and pre-restore backups.
+  - Logging & audit: migration actions are logged to `app.log` and per-migration summaries are recorded for later inspection.
+  - Safety features: persistent migration flag (`_migration_status_v1_tmdb_backfill`) stored in `database.json`, attempted rollback on errors, and JSON validation to prevent malformed writes.
+  - UI sync: on startup the app synchronizes `st.session_state` with the persistent migration flag to avoid stale "migration in progress" UI states.
+
+### 🐛 Notes
+- Non-breaking patch; no database schema changes required.
+
+**Tag:** v0.2.7 | **Date:** 2025-11-21 | **Type:** Patch
+
 ## [0.2.6-alpha] - 2025-11-21
 
 ### 🎯 Overview

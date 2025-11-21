@@ -157,6 +157,304 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_FILE = "database.json"
 
 
+# --- Database Migration & TMDB ID Backfill ---
+
+MIGRATION_FLAG = "_migration_status_v1_tmdb_backfill"
+
+# Ensure migration session flags reflect persistent DB state so UI doesn't get stuck
+try:
+    db_check = {}
+    if os.path.exists(DATABASE_FILE):
+        with open(DATABASE_FILE, 'r', encoding='utf-8') as _f:
+            db_check = json.load(_f)
+
+    # If the persistent migration flag shows completed, clear any in-memory 'migration_in_progress'
+    if db_check.get(MIGRATION_FLAG) == "completed":
+        if st.session_state.get('migration_in_progress'):
+            st.session_state.migration_in_progress = False
+        # also set a friendly last status so the UI can show completion without waiting for a rerun
+        st.session_state.migration_last_status = "completed"
+except Exception:
+    # If anything goes wrong reading DB here, don't block app startup; log and continue
+    logger.debug("[MIGRATE] Could not read DB for migration status during session init.")
+
+def backup_database(db_file=DATABASE_FILE):
+    """Creates a timestamped backup of the database file."""
+    if not os.path.exists(db_file):
+        logger.warning(f"[MIGRATE] Database file {db_file} not found. Skipping backup.")
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = f"{db_file}.backup_{timestamp}"
+    
+    try:
+        import shutil
+        shutil.copy(db_file, backup_file)
+        logger.info(f"[MIGRATE] Successfully created database backup at {backup_file}")
+        return backup_file
+    except Exception as e:
+        logger.error(f"[MIGRATE] Failed to create database backup: {e}")
+        return None
+
+def restore_database_from_backup(backup_file, db_file=DATABASE_FILE):
+    """Restores the database from a backup file."""
+    if not backup_file or not os.path.exists(backup_file):
+        logger.error(f"[MIGRATE] Backup file {backup_file} not found. Cannot restore.")
+        return False
+        
+    try:
+        import shutil
+        shutil.copy(backup_file, db_file)
+        logger.info(f"[MIGRATE] Successfully restored database from {backup_file}")
+        return True
+    except Exception as e:
+        logger.error(f"[MIGRATE] Failed to restore database from backup: {e}")
+        return False
+
+def migrate_to_tmdb_ids():
+    """
+    Performs a one-time migration to backfill TMDB IDs for existing entries.
+    - Creates a backup before starting.
+    - Iterates through all user data (watched, watchlist, blacklist).
+    - Fetches TMDB ID from Jellyseerr for entries missing it.
+    - Updates entries to the new dictionary format.
+    - Logs successes and failures.
+    - Rolls back on failure.
+    """
+    logger.info("[MIGRATE] Starting TMDB ID backfill migration...")
+    
+    backup_file = backup_database()
+    if not backup_file:
+        logger.error("[MIGRATE] Migration aborted: Failed to create database backup.")
+        return
+
+    try:
+        db = load_manual_db()
+        
+        # Check if migration has already been run
+        if db.get(MIGRATION_FLAG) == "completed":
+            logger.info("[MIGRATE] Migration has already been completed. Skipping.")
+            return
+            
+        migration_log = {"success": [], "failed": []}
+        
+        # Use a single session for all API calls during migration
+        session = requests.Session()
+        
+        # Lists to iterate over for each user
+        media_lists_keys = ["movies", "series", "do_not_recommend"]
+        watchlist_keys = ["movies", "series"]
+
+        for username, user_data in db.items():
+            if not isinstance(user_data, dict):
+                continue
+            
+            logger.info(f"[MIGRATE] Processing user: {username}")
+            
+            # Process main lists (movies, series, do_not_recommend)
+            for key in media_lists_keys:
+                updated_list = []
+                for entry in user_data.get(key, []):
+                    title = get_media_title(entry)
+                    if not title:
+                        continue
+                    
+                    # If it's a dict and already has a valid tmdb_id, keep it
+                    if is_media_entry_dict(entry) and entry.get("tmdb_id"):
+                        updated_list.append(entry)
+                        continue
+                    
+                    # Backfill needed
+                    logger.debug(f"[MIGRATE] Backfilling TMDB ID for '{title}' in list '{key}'")
+                    tmdb_id, media_type = search_jellyseerr(title, session=session)
+                    
+                    if tmdb_id:
+                        new_entry = create_media_entry(title, media_type or "unknown", tmdb_id)
+                        updated_list.append(new_entry)
+                        migration_log["success"].append(f"User: {username}, List: {key}, Title: {title}, TMDB_ID: {tmdb_id}")
+                        logger.info(f"[MIGRATE] Success: Found TMDB ID {tmdb_id} for '{title}'")
+                    else:
+                        # Keep original entry if lookup fails to prevent data loss
+                        updated_list.append(entry) 
+                        migration_log["failed"].append(f"User: {username}, List: {key}, Title: {title}")
+                        logger.warning(f"[MIGRATE] Failed: Could not find TMDB ID for '{title}'")
+                
+                user_data[key] = updated_list
+
+            # Process watchlist
+            if "watchlist" in user_data and isinstance(user_data["watchlist"], dict):
+                for key in watchlist_keys:
+                    updated_list = []
+                    for entry in user_data["watchlist"].get(key, []):
+                        title = get_media_title(entry)
+                        if not title:
+                            continue
+                            
+                        if is_media_entry_dict(entry) and entry.get("tmdb_id"):
+                            updated_list.append(entry)
+                            continue
+                        
+                        logger.debug(f"[MIGRATE] Backfilling TMDB ID for '{title}' in watchlist '{key}'")
+                        tmdb_id, media_type = search_jellyseerr(title, session=session)
+
+                        if tmdb_id:
+                            new_entry = create_media_entry(title, media_type or "unknown", tmdb_id)
+                            updated_list.append(new_entry)
+                            migration_log["success"].append(f"User: {username}, List: watchlist.{key}, Title: {title}, TMDB_ID: {tmdb_id}")
+                            logger.info(f"[MIGRATE] Success: Found TMDB ID {tmdb_id} for '{title}' (watchlist)")
+                        else:
+                            updated_list.append(entry)
+                            migration_log["failed"].append(f"User: {username}, List: watchlist.{key}, Title: {title}")
+                            logger.warning(f"[MIGRATE] Failed: Could not find TMDB ID for '{title}' (watchlist)")
+                            
+                    user_data["watchlist"][key] = updated_list
+        
+        # Mark migration as completed
+        db[MIGRATION_FLAG] = "completed"
+        save_manual_db(db)
+        
+        logger.info("[MIGRATE] Migration completed successfully.")
+        logger.info(f"[MIGRATE] Summary - Success: {len(migration_log['success'])}, Failed: {len(migration_log['failed'])}")
+        
+        # Log detailed results
+        with open("migration_log.txt", "w", encoding="utf-8") as f:
+            f.write("--- TMDB ID Backfill Migration Log ---\n")
+            f.write(f"Completed at: {datetime.now()}\n\n")
+            f.write("--- Successful Migrations ---\n")
+            for line in migration_log["success"]:
+                f.write(f"{line}\n")
+            f.write("\n--- Failed Migrations (Could not find TMDB ID) ---\n")
+            for line in migration_log["failed"]:
+                f.write(f"{line}\n")
+                
+    except Exception as e:
+        logger.error(f"[MIGRATE] An unexpected error occurred during migration: {e}", exc_info=True)
+        logger.info("[MIGRATE] Attempting to roll back from backup...")
+        if restore_database_from_backup(backup_file):
+            logger.info("[MIGRATE] Rollback successful.")
+        else:
+            logger.error("[MIGRATE] CRITICAL: Rollback failed. Database may be in an inconsistent state.")
+        # Re-raise the exception to halt the application if needed
+        raise
+
+
+def migrate_dry_run(limit: int | None = None):
+    """
+    Performs a read-only dry-run of the TMDB backfill migration.
+    - Does NOT write to `database.json`.
+    - Scans database, performs Jellyseerr lookups for missing `tmdb_id` fields
+    - Writes a proposal file `migration_proposal_YYYYMMDD_HHMMSS.json` with suggested updates.
+    Returns a summary dict: {scanned, proposed, failed, proposal_file}
+    """
+    logger.info("[MIGRATE-DRY] Starting dry-run for TMDB backfill migration...")
+    try:
+        db = load_manual_db()
+        session = requests.Session()
+        scanned = 0
+        proposed = []
+        failed = []
+
+        media_lists_keys = ["movies", "series", "do_not_recommend"]
+        watchlist_keys = ["movies", "series"]
+
+        for username, user_data in db.items():
+            if not isinstance(user_data, dict):
+                continue
+
+            # Main lists
+            for key in media_lists_keys:
+                for entry in user_data.get(key, []):
+                    title = get_media_title(entry)
+                    if not title:
+                        continue
+                    scanned += 1
+                    if is_media_entry_dict(entry) and entry.get("tmdb_id"):
+                        continue
+
+                    tmdb_id, media_type = search_jellyseerr(title, session=session)
+                    if tmdb_id:
+                        proposed.append({"user": username, "collection": key, "title": title, "tmdb_id": tmdb_id, "media_type": media_type})
+                    else:
+                        failed.append({"user": username, "collection": key, "title": title})
+
+            # Watchlist
+            if "watchlist" in user_data and isinstance(user_data["watchlist"], dict):
+                for key in watchlist_keys:
+                    for entry in user_data["watchlist"].get(key, []):
+                        title = get_media_title(entry)
+                        if not title:
+                            continue
+                        scanned += 1
+                        if is_media_entry_dict(entry) and entry.get("tmdb_id"):
+                            continue
+
+                        tmdb_id, media_type = search_jellyseerr(title, session=session)
+                        if tmdb_id:
+                            proposed.append({"user": username, "collection": f"watchlist.{key}", "title": title, "tmdb_id": tmdb_id, "media_type": media_type})
+                        else:
+                            failed.append({"user": username, "collection": f"watchlist.{key}", "title": title})
+
+                    # Allow early exit for staged dry-runs
+                    if limit and scanned >= limit:
+                        break
+                if limit and scanned >= limit:
+                    break
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        proposal_file = f"migration_proposal_{timestamp}.json"
+        try:
+            with open(proposal_file, "w", encoding="utf-8") as pf:
+                json.dump({"scanned": scanned, "proposed": proposed, "failed": failed}, pf, ensure_ascii=False, indent=2)
+            logger.info(f"[MIGRATE-DRY] Proposal written to {proposal_file}")
+        except Exception as e:
+            logger.error(f"[MIGRATE-DRY] Failed to write proposal file: {e}")
+            proposal_file = None
+
+        summary = {"scanned": scanned, "proposed": len(proposed), "failed": len(failed), "proposal_file": proposal_file}
+        logger.info(f"[MIGRATE-DRY] Dry-run summary: {summary}")
+        return summary
+    except Exception as e:
+        logger.error(f"[MIGRATE-DRY] Unexpected error during dry-run: {e}", exc_info=True)
+        return {"scanned": 0, "proposed": 0, "failed": 0, "proposal_file": None}
+
+
+def _run_migration_background():
+    """Internal helper to run the migration in a background thread and update session state."""
+    try:
+        st.session_state.migration_in_progress = True
+        migrate_to_tmdb_ids()
+        st.session_state.migration_last_status = "completed"
+    except Exception as e:
+        st.session_state.migration_last_status = f"failed: {e}"
+        logger.error(f"[MIGRATE-BG] Migration failed in background: {e}")
+    finally:
+        st.session_state.migration_in_progress = False
+
+
+def run_migration_on_startup():
+    """Checks if the migration is needed and runs it."""
+    try:
+        # Load just enough to check the flag without loading the whole DB
+        with open(DATABASE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if data.get(MIGRATION_FLAG) == "completed":
+                logger.debug("[MIGRATE] TMDB ID backfill migration already completed. Skipping.")
+                return
+
+        logger.info("[MIGRATE] TMDB ID backfill required. Starting migration process.")
+        migrate_to_tmdb_ids()
+        
+    except FileNotFoundError:
+        logger.debug("[MIGRATE] Database file not found. No migration needed.")
+    except (json.JSONDecodeError, Exception) as e:
+        logger.error(f"[MIGRATE] Could not check migration status due to an error: {e}. Running migration as a precaution.", exc_info=True)
+        try:
+            migrate_to_tmdb_ids()
+        except Exception as migrate_err:
+            logger.error(f"[MIGRATE] Migration failed during startup check: {migrate_err}", exc_info=True)
+            st.error("❌ A critical error occurred during database migration. The application may not function correctly. Please check logs.")
+
+
 # --- Database Initialization ---
 
 def initialize_database():
@@ -1206,7 +1504,7 @@ def handle_watched_add(title, media_type_from_radio="Elokuva", tmdb_id=None):
     user_data = db.setdefault(username, {
         "movies": [], 
         "series": [], 
-        "do_not_recommend": [],
+        "do_not_recommend": [], 
         "watchlist": {"movies": [], "series": []},
         "available_but_unwatched": [],
         "jellyseerr_available": {"movies": [], "series": []}
@@ -1632,6 +1930,7 @@ st.set_page_config(
 
 # Initialize database on first application run
 initialize_database()
+run_migration_on_startup()
 
 # Dark theme configuration
 st.markdown("""
@@ -2537,6 +2836,142 @@ else:
                 except Exception as e:
                     st.error(f"Virhe tiedostoa luettaessa: {e}")
 
+        # --- TMDB Migration UI ---
+        st.divider()
+        st.subheader("🔁 TMDB ID Migraatio")
+        st.write("Suorita TMDB ID -backfill olemassaolevalle tietokannalle. Suosittelemme aloittamaan aina dry-runilla.")
+
+        mig_col1, mig_col2 = st.columns(2)
+
+        with mig_col1:
+            if st.button("🔍 Suorita Dry-run (Ehdotus)", key="btn_mig_dryrun", help="Skannaa tietokannan ja luo ehdotus ilman tietokannan päivitystä"):
+                with st.spinner("Suoritetaan dry-runia... Tämä voi viedä hetken..."):
+                    summary = migrate_dry_run()
+                    if summary and summary.get("proposal_file"):
+                        st.success(f"Dry-run valmis. Skannattu: {summary['scanned']}, ehdotuksia: {summary['proposed']}, epäonnistui: {summary['failed']}")
+                        try:
+                            with open(summary['proposal_file'], 'r', encoding='utf-8') as pf:
+                                proposal_data = pf.read()
+                            st.download_button(label="📄 Lataa ehdotus JSON", data=proposal_data, file_name=summary['proposal_file'], mime="application/json")
+                        except Exception as e:
+                            st.warning(f"Ehdotusluonti onnistui mutta ehdostiedoston lukeminen epäonnistui: {e}")
+                    else:
+                        st.error("Dry-run epäonnistui tai ei tuottanut ehdotustiedostoa. Tarkista lokit.")
+
+        with mig_col2:
+            if 'migration_in_progress' not in st.session_state:
+                st.session_state.migration_in_progress = False
+            if 'migration_confirm' not in st.session_state:
+                st.session_state.migration_confirm = False
+
+            if st.session_state.get('migration_in_progress'):
+                st.info("Migraatio on käynnissä taustalla. Odota hetki ja tarkista lokit myöhemmin.")
+            else:
+                if st.button("⚠️ Suorita migraatio (APPLY)", key="btn_mig_apply"):
+                    st.session_state.migration_confirm = True
+
+                if st.session_state.get('migration_confirm'):
+                    st.warning("Olet käynnistämässä varsinaista migraatiota. Tämä operaatio luo varmuuskopion ja päivittää tietokannan automaattisesti.")
+                    col_yes, col_no = st.columns([1,1])
+                    with col_yes:
+                        if st.button("Kyllä, suorita migraatio", key="btn_mig_confirm_yes"):
+                            # Start background thread to run migration
+                            if not st.session_state.get('migration_in_progress'):
+                                thread = Thread(target=_run_migration_background, daemon=True)
+                                thread.start()
+                                st.session_state.migration_in_progress = True
+                                st.success("Migraatio käynnistetty taustalla. Tarkista lokit ja Tiedot-välilehti myöhemmin.")
+                            st.session_state.migration_confirm = False
+                    with col_no:
+                        if st.button("Peruuta", key="btn_mig_confirm_no"):
+                            st.session_state.migration_confirm = False
+
+        # Restore from existing backup files (enhanced)
+        st.divider()
+        st.subheader("🛠️ Palauta varmuuskopiosta")
+        # List available backup files matching pattern
+        backups = [f for f in os.listdir('.') if f.startswith(f"{DATABASE_FILE}.backup_")]
+        if backups:
+            backups_sorted = sorted(backups, reverse=True)
+            selected = st.selectbox("Valitse palautettava varmuuskopio", options=backups_sorted, key="select_backup")
+
+            # Show selected backup metadata
+            try:
+                sel_path = os.path.abspath(selected)
+                sel_size = os.path.getsize(sel_path)
+                sel_mtime = datetime.fromtimestamp(os.path.getmtime(sel_path)).strftime("%Y-%m-%d %H:%M:%S")
+                st.caption(f"Valittu tiedosto: {os.path.basename(sel_path)} — Koko: {sel_size} bytes — Muokattu: {sel_mtime}")
+            except Exception:
+                st.caption(f"Valittu tiedosto: {selected}")
+
+            if st.button("🔁 Palauta valittu varmuuskopio", key="btn_restore_backup"):
+                # Validate selected backup is valid JSON before proceeding
+                try:
+                    with open(selected, 'r', encoding='utf-8') as f:
+                        json.load(f)
+                except Exception as e:
+                    st.error(f"Valittu varmuuskopio ei ole kelvollista JSON:ia tai sitä ei voida lukea: {e}")
+                    logger.error(f"[RESTORE] Selected backup JSON validation failed: {selected} - {e}")
+                else:
+                    # Create a pre-restore backup of current DB to allow undo
+                    pre_restore_backup = backup_database()
+                    logger.info(f"[RESTORE] Pre-restore backup created: {pre_restore_backup}")
+
+                    # Ensure migration_logs dir exists
+                    try:
+                        os.makedirs('migration_logs', exist_ok=True)
+                    except Exception:
+                        logger.warning("[RESTORE] Could not create migration_logs directory")
+
+                    # Attempt restore
+                    restored = False
+                    restore_err = None
+                    try:
+                        restored = restore_database_from_backup(selected)
+                        if restored:
+                            # Validate restored DB by attempting to load it
+                            try:
+                                db_test = load_manual_db()
+                                if not isinstance(db_test, dict):
+                                    raise ValueError("Restored database did not parse into expected dict structure")
+                            except Exception as ve:
+                                restore_err = f"Restored DB validation failed: {ve}"
+                                logger.error(f"[RESTORE] {restore_err}")
+                                restored = False
+                    except Exception as e:
+                        restore_err = str(e)
+                        logger.error(f"[RESTORE] Exception during restore: {e}")
+
+                    # Write restore log
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    log_file = f"migration_logs/restore_{timestamp}.log"
+                    try:
+                        with open(log_file, 'w', encoding='utf-8') as lf:
+                            lf.write(f"Restore run at: {datetime.now()}\n")
+                            lf.write(f"Selected backup: {selected}\n")
+                            lf.write(f"Pre-restore backup: {pre_restore_backup}\n")
+                            lf.write(f"Result: {'SUCCESS' if restored else 'FAILED'}\n")
+                            if restore_err:
+                                lf.write(f"Error: {restore_err}\n")
+                        logger.info(f"[RESTORE] Restore log written to {log_file}")
+                    except Exception as e:
+                        logger.error(f"[RESTORE] Failed to write restore log: {e}")
+
+                    if restored:
+                        st.success(f"Tietokanta palautettu varmuuskopiosta: {selected}")
+                        st.info(f"Palautuslokit: {log_file}")
+                        st.rerun()
+                    else:
+                        st.error(f"Palautus epäonnistui. Tarkista lokit. Restore-log: {log_file}")
+                        # Attempt to roll back to pre-restore backup if possible
+                        if pre_restore_backup:
+                            if restore_database_from_backup(pre_restore_backup):
+                                st.info("Palautus epäonnistui. Palautettiin esikopio (undo).")
+                            else:
+                                st.error("Palautus epäonnistui ja esikopioinnin palautus myös epäonnistui. Tarkista palvelinlokit.")
+        else:
+            st.info("Ei löytynyt paikallisia varmuuskopioita. Luo varmuuskopio ensin.")
+
 # --- Application Footer ---
 st.divider()
 footer_col1, footer_col2, footer_col3 = st.columns([1, 2, 1])
@@ -2553,5 +2988,3 @@ with footer_col2:
         """,
         unsafe_allow_html=True
     )
-
-

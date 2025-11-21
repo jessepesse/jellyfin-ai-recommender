@@ -298,5 +298,6 @@
         "jellyfin_synced_at": "2025-11-21 16:44:17.378772",
         "jellyseerr_synced_at": "2025-11-21 16:45:29.018886",
         "jellyfin_total_watched": 69
-    }
+    },
+    "_migration_status_v1_tmdb_backfill": "completed"
 }
