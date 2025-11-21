@@ -525,7 +525,7 @@ def get_gemini_recommendations(prompt):
         import google.generativeai as genai
         logger.debug("Configuring Google Generative AI")
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
         logger.debug("Sending prompt to Gemini API")
         response = model.generate_content(prompt)
@@ -901,6 +901,7 @@ def get_jellyseerr_media_status(media_id: int, media_type: str, session=None):
     
     Returns: 'AVAILABLE', 'PARTIALLY_AVAILABLE', 'PENDING', 'PROCESSING', or None if not found/error
     """
+    endpoint_type = "movie" if media_type and media_type.lower() == "movie" else "tv"
     if not JELLYSEERR_API_KEY or not JELLYSEERR_URL or not media_id:
         return None
 
@@ -914,7 +915,6 @@ def get_jellyseerr_media_status(media_id: int, media_type: str, session=None):
 
     try:
         # Construct endpoint based on media type
-        endpoint_type = "movie" if media_type.lower() == "movie" else "tv"
         endpoint = f"{JELLYSEERR_URL}/api/v1/{endpoint_type}/{media_id}"
 
         logger.info(f"[AVAIL] Fetching media status from: {endpoint}")
