@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-alpha] - 2025-11-21
+
+### 🎯 Overview
+Minor improvements to the Gemini integration and prompt engineering, plus an infrastructure CI fix to stabilize Docker Buildx usage on GitHub Actions. These changes improve recommendation latency and lower API costs while hardening the build pipeline.
+
+### ✨ What's New
+
+- feat: Switch Gemini model to `gemini-2.5-flash-lite` for faster and cheaper recommendations
+  - Updated GenerativeModel to use `gemini-2.5-flash-lite` instead of the previous model
+  - Improves response speed and reduces API costs
+  - No change to recommendation quality or database schema
+
+- feat(prompt): build English Gemini prompt, map media/genre and add `reason_language`
+  - Rewrote `build_prompt()` to emit an English, model-friendly prompt while keeping UI text localized to Finnish
+  - Maps UI media types and genres to model-friendly tokens (e.g. `MOVIE` / `TV SERIES`) to reduce ambiguity
+  - Adds `reason_language` configuration and enforces concise reasons (max ~15 words)
+  - Enforces strict JSON-only output to reduce parsing errors
+
+#### Infrastructure & CI Improvements
+
+- Docker: versioning + OCI metadata labels
+  - Commit: `77acd6b` - Added Docker image versioning and OCI labels for reproducible builds and registry metadata
+
+- Docker Buildx Idempotency Fix
+  - Replaced manual `docker buildx create` with `docker/setup-buildx-action@v2`
+  - Fixes "additional instances of driver cannot be created" error on GitHub Actions
+  - Action automatically reuses existing builder instance
+
+- CI: Fixed Create Release workflow
+  - Commit: `ebc0d31` - Restored release automation by replacing a deprecated action with a `github-script` approach
+
+- CI: `python-validate.yml` encoding fix
+  - Commit: `087e753` - Fixed YAML encoding issue that caused the validation workflow to fail
+
+- CI: explicit permissions added to workflows
+  - Commits: `6fa3aee` / `a645014` - Added explicit `permissions` blocks to GitHub Actions to follow least-privilege practices and satisfy code scanning requirements
+
+- CI: automatic GitHub Release workflow
+  - Commit: `a2ab49b` - Added workflow to create GitHub Releases automatically on tag events
+
+- Docs/Security: Add `SECURITY.md`
+  - Commit: `7e823ca` - Added `SECURITY.md` containing vulnerability disclosure process and contact information
+
+### 🐛 Notes
+- These are non-breaking changes focused on performance, prompt reliability and CI robustness. No database migrations are required.
+
+**Tag:** v0.2.6-alpha | **Date:** 2025-11-21 | **Type:** Pre-release (Alpha)
+
 ## [0.2.5-alpha] - 2025-11-16
 
 ### 🎯 Overview
