@@ -1,176 +1,78 @@
-# 🎬 Jellyfin AI Recommender
+# 🎬 Jellyfin AI Recommender (React + Node.js Version)
 
-Personalized movie and TV show recommendation engine powered by **Google Gemini AI**, **Jellyfin**, and **Jellyseerr**.
-
-![Screenshot](images/screenshot.png)
+A web application for getting movie and TV show recommendations from your Jellyfin library, rebuilt with a modern web stack.
 
 ## ✨ Features
 
-- 🤖 **AI-Powered Recommendations** — Uses Google Gemini to generate personalized suggestions
-- 🎥 **Jellyfin Integration** — Reads your watch history directly from Jellyfin
-- 📋 **Watchlist Management** — Save recommendations to a personal watchlist with TMDB IDs
-- 🚫 **Blacklist Control** — Mark content you don't want recommendations for
-- 🎯 **Genre Filtering** — Filter recommendations by genre
-- 🔗 **Jellyseerr Integration** — Request media directly from Jellyseerr with one click
-- 📊 **Manual Tracking** — Add movies/series watched outside Jellyfin (with TMDB metadata)
-- 💾 **Database Backup** — Export and import your personal data
-- 🎬 **Availability Tracking** — Automatically detects available content on Jellyseerr
-- 🔢 **TMDB ID Storage** — All media entries store TMDB IDs for accurate requests and integrations
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose (for containerized setup)
-- OR Python 3.9+ (for local development)
-- [Jellyfin](https://github.com/jellyfin/jellyfin) instance
-- [Jellyseerr](https://github.com/seerr-team/seerr) instance (optional, for media requests)
-- Google Gemini API key
-
-### Option 1: Docker (Recommended)
-
-**Fastest setup:**
-
-```bash
-# Clone repository
-git clone https://github.com/jessepesse/jellyfin-ai-recommender.git
-cd jellyfin-ai-recommender
-
-# Create environment file
-cp .env.example .env
-# Edit .env with your Jellyfin, Jellyseerr, and Gemini API credentials
-
-# Start with Docker Compose
-docker-compose up -d
-
-# Access the app
-# http://<your-server-ip>:8501
-```
-
-**View logs:**
-```bash
-docker-compose logs -f recommender
-```
-
-**Stop application:**
-```bash
-docker-compose down
-```
-
-### Option 2: Local Development
-
-**For development or testing:**
-
-```bash
-# Clone repository
-git clone https://github.com/jessepesse/jellyfin-ai-recommender.git
-cd jellyfin-ai-recommender
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create environment file
-cp .env.example .env
-# Edit .env with your credentials
-
-# Run application
-streamlit run app.py
-```
-
-Access at `http://localhost:8501`
-
-## 📖 Documentation
-
-- [Setup Guide](SETUP.md) — Detailed installation & configuration
-- [Database Persistence](DATABASE_PERSISTENCE.md) — Data backup and recovery strategies
-- [API Integration](API_INTEGRATION.md) — External service integration details
-- [Database Schema](DATABASE_SCHEMA.md) — User data structure reference
-- [Copilot Instructions](.github/copilot-instructions.md) — AI agent guidelines
-
-## 🐳 Docker Deployment
-
-### Docker Compose Configuration
-
-The `docker-compose.yml` handles all setup automatically:
-
-```yaml
-version: '3.8'
-services:
-  recommender:
-    build: .
-    ports:
-      - "8501:8501"
-    environment:
-      - JELLYFIN_URL=${JELLYFIN_URL}
-      - JELLYSEERR_URL=${JELLYSEERR_URL}
-      - JELLYSEERR_API_KEY=${JELLYSEERR_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    volumes:
-      - ./database.json:/app/database.json
-    restart: unless-stopped
-```
-
-### Environment Variables (Docker)
-
-Set in `.env` file:
-
-```env
-JELLYFIN_URL=http://your-jellyfin-ip:8096
-JELLYSEERR_URL=http://your-jellyseerr-ip:5055
-JELLYSEERR_API_KEY=your_api_key
-GEMINI_API_KEY=your_gemini_key
-```
-
-### Persistent Data
-
-The `database.json` is mounted as a volume to persist user data between container restarts.
-
-## 🔧 Configuration
-
-See [SETUP.md](SETUP.md) for detailed environment variable configuration.
-
-## 📝 Usage
-
-1. **Login** with your Jellyfin credentials
-2. **Select media type** (Movies or TV Series)
-3. **Choose genre** (optional)
-4. **Click "Hae suositukset"** to generate recommendations
-   - ⏳ Button will be disabled for 5 seconds after fetching (rate limiting)
-   - 🔄 Countdown timer updates in real-time
-5. **Manage recommendations:**
-   - ✅ Request via Jellyseerr
-   - 👁️ Mark as watched
-   - 🚫 Block from future recommendations
-   - 🔖 Add to watchlist
-6. **Available Content Tracking:**
-   - 🎬 App automatically tracks available (but unwatched) content from Jellyseerr
-   - ❌ Won't recommend content you already have available
-7. **Backup your data:**
-   - 📥 Export as JSON file
-   - 📤 Import previously exported backup
+- **Jellyfin Integration** — Connects to your Jellyfin server to browse your libraries.
+- **Similarity-Based Recommendations** — Select an item to get recommendations based on genre and community rating similarity.
+- **Modern UI** — A clean and responsive user interface built with React and Tailwind CSS.
+- **Search** — Quickly find movies and series across your libraries.
 
 ## 🏗️ Architecture
 
-```
-Jellyfin → Watch History → AI Recommendations → Jellyseerr (requests)
-           Manual Tracking ↓                      ↓
-           Jellyseerr Available Content (synced)
-           Database (JSON) ← Availability Tracking ← (auto-detect available content)
-           ↓
-           Watchlist, Blacklist, Backup/Restore
-           Available But Unwatched Tracking
-```
+This project is a full-stack monorepo with a separate frontend and backend.
 
-### Key Data Flows:
-- **Rate Limiting:** 5-second cooldown enforced after each fetch (prevents API spam)
-- **Jellyseerr Sync:** Fetches all AVAILABLE content from `/api/v1/request` endpoint and stores in database
-- **Availability Check:** After enrichment, checks each recommendation on Jellyseerr for AVAILABLE/PARTIALLY_AVAILABLE status
-- **Smart Filtering:** Gemini AI avoids recommending content that's already available but unwatched
-- **Persistent Tracking:** Available content automatically saved to database for future reference
+- **`frontend/`**: A [Vite](https://vitejs.dev/)-powered [React](https://react.dev/) application written in [TypeScript](https://www.typescriptlang.org/). It provides the user interface for interacting with the application.
+- **`backend/`**: A [Node.js](https://nodejs.org/) server using [Express](https://expressjs.com/) and [TypeScript]. It acts as a secure proxy to the Jellyfin API and contains the recommendation logic.
+
+## ⚙️ Tech Stack
+
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS
+- **Backend:** Node.js, Express, TypeScript
+- **API Communication:** Axios
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/en/download/) (v18 or higher recommended)
+- [npm](https://www.npmjs.com/get-npm)
+
+### Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/jessepesse/jellyfin-ai-recommender.git
+    cd jellyfin-ai-recommender
+    ```
+
+2.  **Set up the Backend:**
+    ```bash
+    # Navigate to the backend directory
+    cd backend
+
+    # Install dependencies
+    npm install
+
+    # Create an environment file from the example
+    # On Windows (Command Prompt): copy .env.example .env
+    # On Windows (PowerShell): cp .env.example .env
+    # On Linux/macOS: cp .env.example .env
+    
+    # Edit the .env file with your Jellyfin server details
+    # JELLYFIN_URL=http://your-jellyfin-ip:8096
+    # JELLYFIN_API_KEY=your_jellyfin_api_key
+    # USER_ID=your_jellyfin_user_id
+
+    # Start the backend server
+    npm run dev
+    ```
+    The backend will be running on `http://localhost:3001`.
+
+3.  **Set up the Frontend:**
+    (In a new terminal)
+    ```bash
+    # Navigate to the frontend directory
+    cd frontend
+
+    # Install dependencies
+    npm install
+
+    # Start the frontend development server
+    npm run dev
+    ```
+    The frontend will be accessible at the URL provided by Vite (usually `http://localhost:5173` or a similar port).
 
 ## 📄 License
 
@@ -184,75 +86,4 @@ This project is licensed under the **GNU Affero General Public License v3.0** (A
 - ⚠️ **Source code must be shared** — Any distributed version must include source code
 - ⚠️ **Same license applies** — Modifications must also be licensed under AGPLv3
 
-### Key difference from GPLv3:
-AGPLv3 closes the "**SaaS loophole**" — even if you don't distribute the software, if you offer it as a service over a network (like a web app), you must make the source code available to users.
-
 For full details, see the [LICENSE](LICENSE) file.
-
-## 🤝 Contributing
-
-This is a personal project. Contributions are welcome! Feel free to fork, modify, and share improvements while maintaining the AGPLv3 license.
-
-## ⚙️ Tech Stack
-
-- **Frontend:** Streamlit (Python)
-- **AI:** Google Generative AI (Gemini)
-- **Media Sources:** 
-  - [Jellyfin](https://github.com/jellyfin/jellyfin) — Free media system
-  - [Jellyseerr](https://github.com/seerr-team/seerr) — Media request management
-- **Storage:** JSON-based user database
-- **Deployment:** Docker & Docker Compose
-- **Performance:**
-  - Fragment-based rate limiting (Streamlit native)
-  - ThreadPoolExecutor for parallel API calls (5 workers)
-  - Caching for Jellyseerr searches (6-hour TTL)
-  - Smart availability tracking integrated into enrichment flow
-
-## 🐛 Troubleshooting
-
-### Docker Issues
-
-**Container won't start:**
-```bash
-docker-compose logs recommender
-```
-
-**Port 8501 already in use:**
-```bash
-# Edit docker-compose.yml to use different port
-ports:
-  - "8502:8501"  # Use 8502 instead
-```
-
-**Database file permissions:**
-```bash
-chmod 666 database.json
-```
-
-### Connection Issues
-
-**Error: "Yhteys Jellyfin-palvelimeen epäonnistui"**
-- Verify `JELLYFIN_URL` is correct (e.g., `http://192.168.1.x:8096`)
-- Check Jellyfin is running and accessible from container
-- Verify firewall allows connections
-
-**Error: "Ei löytynyt sopivaa mediaa"**
-- Jellyseerr might not be configured
-- Check `JELLYSEERR_API_KEY` is correct
-- Verify Jellyseerr has media library indexed
-
-### API Key Issues
-
-**Error: "Gemini API-avainta ei ole asetettu"**
-- `GEMINI_API_KEY` is missing in `.env`
-- Verify key is valid (test in Google AI Studio)
-
-### Backup & Restore Issues
-
-**Error: "Tietokanta kuuluu eri käyttäjälle"**
-- Make sure you're importing a backup file that belongs to the currently logged-in user
-- Export creates user-specific backups
-
----
-
-Made with ❤️ for Jellyfin enthusiasts

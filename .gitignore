@@ -223,3 +223,35 @@ database.json.backup
 database.json.tmp
 GEMINI.md
 .vscode/settings.json
+.vscode
+
+# Recommended secret and key ignores
+# Private keys / certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.jks
+
+# Environment variants
+.env.*
+.env.local
+.env.production
+.env.test
+
+# Cloud / service account credentials
+.aws/
+*.service-account.json
+service-account-*.json
+google-credentials.json
+*.gcloud
+
+# SSH private keys (ignore private keys but allow public)
+.ssh/*
+!.ssh/*.pub
+
+# Other credential/config files
+.npmrc
+.netrc
+credentials

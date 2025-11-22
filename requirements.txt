@@ -1,6 +1,0 @@
-streamlit
-requests
-google-generativeai
-python-dotenv
-Pillow
-streamlit-autorefresh>=0.0.2

@@ -1,4 +1,4 @@
-﻿import os
+import os
 import requests
 import streamlit as st
 import json
@@ -50,7 +50,7 @@ except Exception as e:
     print(f"Warning: Could not configure logging to file: {e}")
 
 # --- Application Version ---
-APP_VERSION = "0.2.7"
+APP_VERSION = "0.2.6-alpha"
 
 # --- Rate Limiter for Gemini Recommendations ---
 # Prevents API spam and excessive costs using session state
@@ -233,7 +233,7 @@ def migrate_to_tmdb_ids():
         
         # Check if migration has already been run
         if db.get(MIGRATION_FLAG) == "completed":
-            logger.info("[MIGRATE] Migration has already been completed. Skipping.")
+            logger.debug("[MIGRATE] Migration has already been completed. Skipping.")
             return
             
         migration_log = {"success": [], "failed": []}
@@ -318,14 +318,14 @@ def migrate_to_tmdb_ids():
         
         # Log detailed results
         with open("migration_log.txt", "w", encoding="utf-8") as f:
-            f.write("--- TMDB ID Backfill Migration Log ---\n")
-            f.write(f"Completed at: {datetime.now()}\n\n")
-            f.write("--- Successful Migrations ---\n")
+            f.write("--- TMDB ID Backfill Migration Log ---\\n")
+            f.write(f"Completed at: {datetime.now()}\\n\\n")
+            f.write("--- Successful Migrations ---\\n")
             for line in migration_log["success"]:
-                f.write(f"{line}\n")
-            f.write("\n--- Failed Migrations (Could not find TMDB ID) ---\n")
+                f.write(f"{line}\\n")
+            f.write("\\n--- Failed Migrations (Could not find TMDB ID) ---\\n")
             for line in migration_log["failed"]:
-                f.write(f"{line}\n")
+                f.write(f"{line}\\n")
                 
     except Exception as e:
         logger.error(f"[MIGRATE] An unexpected error occurred during migration: {e}", exc_info=True)
@@ -628,7 +628,7 @@ def get_jellyfin_watched_titles():
         return []
     except requests.exceptions.HTTPError as e:
         logger.error(f"Jellyfin HTTP error fetching watch history: {e.response.status_code}")
-        st.error(f"❌ Jellyfin palautoi virheenumeron {e.response.status_code}.")
+        st.error(f"❌ Jellyfin palautti virheenumeron {e.response.status_code}.")
         return []
     except requests.exceptions.RequestException as e:
         logger.error(f"Jellyfin connection error during watch history fetch: {e}")
@@ -1201,7 +1201,7 @@ def request_on_jellyseerr(media_id, media_type):
             st.toast("❌ Jellyseerr-autentikointivirhe. Tarkista API-avain.", icon="🚨")
         else:
             logger.error(f"Jellyseerr HTTP error: {e.response.status_code}")
-            st.toast("❌ Jellyseerr palautoi virheenumeron. Yritä uudelleen.", icon="🚨")
+            st.toast("❌ Jellyseerr palautti virheenumeron. Yritä uudelleen.", icon="🚨")
         return False
     except requests.exceptions.Timeout:
         logger.warning("Jellyseerr request timeout")
@@ -2022,7 +2022,7 @@ st.markdown("""
             height: 20px;
         }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # Hide Streamlit branding
 hide_streamlit_style = """
@@ -2076,7 +2076,7 @@ else:
         if st.button("💾 Tiedot", width="stretch", key="btn_page_info"):
             st.session_state.current_page = "info"
         
-        st.divider()
+        st.divider()        
         
         # User info
         st.caption(f"👤 {username}")
@@ -2303,18 +2303,16 @@ else:
                         
                         # Check availability on Jellyseerr and add to available_but_unwatched if applicable
                         logger.debug("Checking Jellyseerr availability for recommendations...")
-                        jellyseerr_session = st.session_state.get("jellyseerr_requests_session")
-                        # Extract titles from full_watched_list (which are plain strings after combining jellyfin_titles + manual_watched)
+                        jellyfin_watched_titles = [title for title, _ in jellyfin_watched] if jellyfin_watched else []
                         for rec in enriched_recommendations:
                             if rec.get('media_id') and rec.get('media_type'):
                                 check_and_add_available_unwatched(
                                     title=rec['title'],
                                     media_type=rec['media_type'],
                                     tmdb_id=rec['media_id'],
-                                    jellyfin_watched=full_watched_list,
+                                    jellyfin_watched=jellyfin_watched_titles,
                                     db=db,
-                                    username=username,
-                                    session=jellyseerr_session
+                                    username=username
                                 )
                         
                         # Save database with updated available_but_unwatched entries
@@ -2601,7 +2599,7 @@ else:
                         st.write(f"• {wl_title}")
                     with col2:
                         if st.button("📥 Pyydä", key=f"request_watchlist_movie_{idx}",
-                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), width="stretch"):
+                                     on_click=handle_jellyseerr_request, args=({{"title": wl_title}},), width="stretch"):
                             pass  # Callback handles the request
                     with col3:
                         if st.button("✅ Katsottu", key=f"watched_watchlist_movie_{idx}",
@@ -2624,7 +2622,7 @@ else:
                         st.write(f"• {wl_title}")
                     with col2:
                         if st.button("📥 Pyydä", key=f"request_watchlist_series_{idx}",
-                                     on_click=handle_jellyseerr_request, args=({"title": wl_title},), width="stretch"):
+                                     on_click=handle_jellyseerr_request, args=({{"title": wl_title}},), width="stretch"):
                             pass  # Callback handles the request
                     with col3:
                         if st.button("✅ Katsottu", key=f"watched_watchlist_series_{idx}",
@@ -2947,12 +2945,12 @@ else:
                     log_file = f"migration_logs/restore_{timestamp}.log"
                     try:
                         with open(log_file, 'w', encoding='utf-8') as lf:
-                            lf.write(f"Restore run at: {datetime.now()}\n")
-                            lf.write(f"Selected backup: {selected}\n")
-                            lf.write(f"Pre-restore backup: {pre_restore_backup}\n")
-                            lf.write(f"Result: {'SUCCESS' if restored else 'FAILED'}\n")
+                            lf.write(f"Restore run at: {datetime.now()}\\n")
+                            lf.write(f"Selected backup: {selected}\\n")
+                            lf.write(f"Pre-restore backup: {pre_restore_backup}\\n")
+                            lf.write(f"Result: {'SUCCESS' if restored else 'FAILED'}\\n")
                             if restore_err:
-                                lf.write(f"Error: {restore_err}\n")
+                                lf.write(f"Error: {restore_err}\\n")
                         logger.info(f"[RESTORE] Restore log written to {log_file}")
                     except Exception as e:
                         logger.error(f"[RESTORE] Failed to write restore log: {e}")

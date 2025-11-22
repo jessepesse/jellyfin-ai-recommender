@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  createdAt DateTime @default(now())
+  
+  // Relations
+  media     UserMedia[]
+}
+
+model Media {
+  id          Int      @id @default(autoincrement())
+  tmdbId      Int      @unique
+  title       String
+  mediaType   String
+  posterUrl   String?
+  releaseYear String?
+  
+  // Relations
+  users       UserMedia[]
+}
+
+model UserMedia {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  mediaId   Int
+  status    MediaStatus
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  media     Media    @relation(fields: [mediaId], references: [id])
+
+  @@unique([userId, mediaId])
+}
+
+enum MediaStatus {
+  WATCHED
+  WATCHLIST
+  BLOCKED
+}
