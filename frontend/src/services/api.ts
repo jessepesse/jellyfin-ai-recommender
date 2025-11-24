@@ -8,8 +8,10 @@ const apiClient = axios.create({
 function authHeaders() {
     const token = localStorage.getItem('jellyfin_token');
     const user = localStorage.getItem('jellyfin_user');
+    const server = localStorage.getItem('jellyfin_server');
     const headers: Record<string, string> = {};
     if (token) headers['x-access-token'] = token;
+    if (server) headers['x-jellyfin-url'] = server;
     if (user) {
         try {
             const parsed = JSON.parse(user);
@@ -72,5 +74,50 @@ export const postActionBlock = async (item: any) => {
 
 export const postJellyseerrRequest = async (mediaId: number, mediaType: 'movie' | 'tv' = 'movie') => {
     const response = await apiClient.post('/jellyseerr/request', { mediaId, mediaType }, authHeaders());
+    return response.data;
+};
+
+export const postSettingsImport = async (jsonPayload: any) => {
+    // Accept either an object or a raw string. Backend will parse if provided as jsonContent string.
+    const body = typeof jsonPayload === 'string' ? { jsonContent: jsonPayload } : jsonPayload;
+    const response = await apiClient.post('/settings/import', body, authHeaders());
+    return response.data;
+};
+
+export const getSettingsExport = async (): Promise<Blob> => {
+    const response = await apiClient.get('/settings/export', {
+        ...authHeaders(),
+        responseType: 'blob'
+    });
+    return response.data;
+};
+
+export const getSystemStatus = async (): Promise<{ configured: boolean }> => {
+    const response = await apiClient.get('/system/status');
+    return response.data;
+};
+
+export const postSystemSetup = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
+    const response = await apiClient.post('/system/setup', payload);
+    return response.data;
+};
+
+export const postSystemVerify = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; geminiApiKey?: string }) => {
+    const response = await apiClient.post('/system/verify', payload);
+    return response.data;
+};
+
+export const getSystemSetupDefaults = async (): Promise<{ jellyfinUrl?: string | null; jellyseerrUrl?: string | null; jellyseerrApiKey?: string | null; geminiApiKey?: string | null; geminiModel?: string | null }> => {
+    const response = await apiClient.get('/system/setup-defaults');
+    return response.data;
+};
+
+export const getSystemConfigEditor = async (): Promise<{ ok: boolean; config: { jellyfinUrl: string; jellyseerrUrl: string; jellyseerrApiKey: string; geminiApiKey: string; geminiModel: string; isConfigured: boolean } }> => {
+    const response = await apiClient.get('/system/config-editor');
+    return response.data;
+};
+
+export const putSystemConfigEditor = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
+    const response = await apiClient.put('/system/config-editor', payload);
     return response.data;
 };
