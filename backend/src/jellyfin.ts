@@ -2,12 +2,34 @@ import axios from 'axios';
 import { JellyfinItem, JellyfinLibrary } from './types'; // Removed JellyfinAuthResponse, JellyfinUser as authenticateUser moved
 import ConfigService from './services/config';
 
+// Allow-list of valid Jellyfin server URLs. You may want to pull this from a config file/db in production.
+const ALLOWED_JELLYFIN_URLS = [
+    "https://jellyfin.example.com",
+    // Add other valid Jellyfin server URLs here
+];
+
+function sanitizeJellyfinUrl(override?: string): string | undefined {
+    if (!override || override === 'none' || override.length === 0) return undefined;
+    try {
+        // Only accept exact matches from the allow-list
+        const trimmed = override.trim().replace(/\/+$/, '');
+        if (ALLOWED_JELLYFIN_URLS.includes(trimmed)) {
+            return trimmed;
+        }
+        // Optionally log rejected URLs for audit
+        console.warn(`[Jellyfin SSRF] Rejected user-supplied Jellyfin server url: ${override}`);
+        return undefined;
+    } catch (_) {
+        return undefined;
+    }
+}
+
 export class JellyfinService {
 
     private static async getBaseUrl(override?: string): Promise<string | null> {
         // Treat "none" or empty string as no override (fallback to DB/env)
-        const validOverride = override && override !== 'none' && override.length > 0;
-        if (validOverride) return String(override).replace(/\/+$/, '');
+        const cleanOverride = sanitizeJellyfinUrl(override);
+        if (cleanOverride) return cleanOverride;
         
         try {
             const cfg = await ConfigService.getConfig();
