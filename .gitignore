@@ -255,3 +255,45 @@ google-credentials.json
 .npmrc
 .netrc
 credentials
+
+# Node & build
+node_modules/
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
+# TypeScript
+*.js.map
+
+# Database artifacts (SQLite)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+dev.db
+prisma/dev.db
+backend/prisma/dev.db
+backend/prisma/**/*.db
+backend/prisma/**/*.db-journal
+
+# Legacy backup folder
+legacy_backup/
+
+# Legacy data files (use API export instead)
+database.json
+database.json.backup
+database.json.tmp
+backend/database.json
+
+# Prisma generated client
+backend/src/generated/
+
+# Frontend build artifacts
+frontend/dist/
+frontend/build/
+
+# Lock files (optional - uncomment if team prefers to ignore)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
