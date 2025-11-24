@@ -1,57 +1,13 @@
 import axios from 'axios';
 import { JellyfinItem, JellyfinLibrary } from './types'; // Removed JellyfinAuthResponse, JellyfinUser as authenticateUser moved
 import ConfigService from './services/config';
-
-/**
- * SSRF Protection: Validates Jellyfin server URLs to prevent abuse
- * - Allows legitimate self-hosted servers (local IPs, domains)
- * - Blocks common SSRF attack vectors (cloud metadata endpoints, link-local)
- */
-function sanitizeJellyfinUrl(override?: string): string | undefined {
-    if (!override || override === 'none' || override.length === 0) return undefined;
-    
-    try {
-        const trimmed = override.trim().replace(/\/+$/, '');
-        const url = new URL(trimmed);
-        
-        // Only allow http/https protocols
-        if (!['http:', 'https:'].includes(url.protocol)) {
-            console.warn(`[SSRF] Blocked non-HTTP protocol: ${url.protocol}`);
-            return undefined;
-        }
-        
-        // Block cloud metadata endpoints (AWS, GCP, Azure)
-        const blockedHosts = [
-            '169.254.169.254', // AWS/Azure metadata
-            'metadata.google.internal', // GCP metadata
-            '100.100.100.200', // Alibaba Cloud
-            'fd00:ec2::254', // AWS IPv6 metadata
-        ];
-        
-        if (blockedHosts.includes(url.hostname.toLowerCase())) {
-            console.warn(`[SSRF] Blocked metadata endpoint: ${url.hostname}`);
-            return undefined;
-        }
-        
-        // Block link-local addresses (169.254.0.0/16) except the common Docker bridge
-        if (url.hostname.startsWith('169.254.') && url.hostname !== '169.254.169.254') {
-            console.warn(`[SSRF] Blocked link-local address: ${url.hostname}`);
-            return undefined;
-        }
-        
-        // Allow everything else (localhost, private IPs, domains)
-        return trimmed;
-    } catch (err) {
-        console.warn(`[SSRF] Invalid URL format: ${override}`);
-        return undefined;
-    }
-}
+import { sanitizeUrl } from './utils/ssrf-protection';
 
 export class JellyfinService {
 
     private static async getBaseUrl(override?: string): Promise<string | null> {
         // Treat "none" or empty string as no override (fallback to DB/env)
-        const cleanOverride = sanitizeJellyfinUrl(override);
+        const cleanOverride = sanitizeUrl(override);
         if (cleanOverride) return cleanOverride;
         
         try {

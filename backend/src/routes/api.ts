@@ -13,6 +13,7 @@ import { exportUserData } from '../services/export';
 import axios from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthService } from '../authService';
+import { sanitizeUrl } from '../utils/ssrf-protection';
 import { 
   validateUserAction, 
   validateRecommendationRequest, 
@@ -555,22 +556,11 @@ router.post('/system/verify', async (req, res) => {
         const jellyseerrApiKey = payload.jellyseerrApiKey as string | undefined;
         const geminiApiKey = payload.geminiApiKey as string | undefined;
 
-        // Helper: clean base URL similar to AuthService.cleanBaseUrl
-        const cleanBase = (u?: string) => {
-            if (!u) return '';
-            let s = String(u).trim();
-            // remove fragments
-            s = s.replace(/#.*$/, '');
-            // remove trailing slash
-            s = s.replace(/\/$/, '');
-            return s;
-        };
-
         // Jellyfin check
         const jellyfinCheck = (async () => {
             try {
-                const base = cleanBase(jellyfinUrlRaw);
-                if (!base) return { ok: false, message: 'No Jellyfin URL provided' };
+                const base = sanitizeUrl(jellyfinUrlRaw);
+                if (!base) return { ok: false, message: 'No Jellyfin URL provided or invalid' };
                 const url = `${base}/System/Info/Public`;
                 const resp = await axios.get(url, { timeout: 8000 });
                 if (resp.status === 200) {
@@ -587,8 +577,8 @@ router.post('/system/verify', async (req, res) => {
         // Jellyseerr check
         const jellyseerrCheck = (async () => {
             try {
-                const base = cleanBase(jellyseerrUrlRaw);
-                if (!base) return { ok: false, message: 'No Jellyseerr URL provided' };
+                const base = sanitizeUrl(jellyseerrUrlRaw);
+                if (!base) return { ok: false, message: 'No Jellyseerr URL provided or invalid' };
                 const url = `${base}/api/v1/status`;
                 const headers: any = {};
                 if (jellyseerrApiKey) headers['X-Api-Key'] = String(jellyseerrApiKey);
