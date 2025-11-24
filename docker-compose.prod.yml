@@ -14,9 +14,9 @@ services:
       # These should be configured via the Settings page in the UI after first login.
       # They will be stored in the SystemConfig table in the database.
     volumes:
-      # Mount only the database file, not the entire prisma directory
-      # This preserves schema.prisma and migrations in the container
-      - ./data/dev.db:/app/prisma/dev.db
+      # Mount the data directory for persistent database storage
+      # The database file will be created automatically by Prisma migrations
+      - ./data:/app/prisma
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s

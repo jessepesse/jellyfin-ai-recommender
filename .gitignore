@@ -277,6 +277,9 @@ backend/prisma/dev.db
 backend/prisma/**/*.db
 backend/prisma/**/*.db-journal
 
+# Docker volume data directory
+data/
+
 # Legacy backup folder
 legacy_backup/
 
