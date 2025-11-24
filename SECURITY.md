@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability, please report it by emailing the project maintainers or opening a private security advisory on GitHub.
+If you discover a security vulnerability, please report it by opening a private security advisory on GitHub.
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
