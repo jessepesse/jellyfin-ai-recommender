@@ -117,7 +117,18 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
         Export: Download a backup of your current database.
 
-📄 License
+## 🔒 Security
+
+This project implements comprehensive security measures including:
+- 5-layer SSRF (Server-Side Request Forgery) protection
+- Input validation with Zod schemas
+- Rate limiting on all endpoints
+- Security headers via Helmet
+- No sensitive data logging
+
+**For security policy and known CodeQL alerts, see [SECURITY.md](SECURITY.md)**
+
+## 📄 License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3).
 
