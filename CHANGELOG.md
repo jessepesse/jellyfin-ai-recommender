@@ -15,15 +15,17 @@ Critical security improvements and vulnerability fixes identified by GitHub Code
     Comprehensive SSRF Protection:
         Created centralized URL validation utility (backend/src/utils/ssrf-protection.ts)
         Added validateRequestUrl() for complete URL validation before HTTP requests
+        Added validateBaseUrl() for explicit axios instance baseURL validation
         Blocks cloud metadata endpoints (AWS, GCP, Azure, Alibaba Cloud)
         Blocks link-local addresses (169.254.0.0/16)
         Blocks non-HTTP protocols
-        Fixed 10 locations across all external HTTP requests:
+        Fixed 11 locations across all external HTTP requests:
           - 6 axios.get calls in jellyfin.ts (getLibraries, getItems, getUserHistory, getOwnedIds)
           - 2 verification endpoints in routes/api.ts (Jellyfin, Jellyseerr)
           - 1 axios.post in authService.ts (Jellyfin authentication)
-          - 1 axios.create in jellyseerr.ts (Jellyseerr API client)
-        Applied to all external HTTP requests (Jellyfin, Jellyseerr)
+          - 1 axios.create in jellyseerr.ts (Jellyseerr API client with validateBaseUrl)
+          - 1 posterUrl construction in routes/api.ts (JELLYSEERR_URL environment variable)
+        Applied to all external HTTP requests and URL constructions (Jellyfin, Jellyseerr)
 
     ReDoS Prevention:
         Fixed 2 polynomial regex complexity vulnerabilities
