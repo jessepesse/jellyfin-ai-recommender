@@ -1,7 +1,7 @@
 services:
   backend:
-    build: ./backend
-    image: ghcr.io/jessepesse/jellyfin-ai-recommender-backend:2.0.1
+    # Uses pre-built image from GitHub Container Registry (no local build)
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender-backend:latest
     container_name: jellyfin-ai-backend
     restart: unless-stopped
     ports:
@@ -27,11 +27,12 @@ services:
       - jair_net
 
   frontend:
-    build: ./frontend
-    image: ghcr.io/jessepesse/jellyfin-ai-recommender-frontend:2.0.1
+    # Uses pre-built image from GitHub Container Registry (no local build)
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender-frontend:latest
     container_name: jellyfin-ai-frontend
     restart: unless-stopped
     ports:
+      # Port 5173 on host maps to port 80 in container (Nginx)
       - "5173:80"
     depends_on:
       backend:
