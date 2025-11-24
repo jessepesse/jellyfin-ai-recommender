@@ -3,7 +3,7 @@
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**
 
-![Screenshot](frontend/public/screenshot.png)
+![Screenshot](images/Screenshot.png)
 
 ## ✨ Features
 
@@ -46,25 +46,14 @@ cd jellyfin-ai-recommender
 npm install
 npm run install:all
 
-3. Configuration (Two Options)
+### 3. Configuration (Two Options)
 
-Option A: Setup Wizard (Recommended) Just start the app! You will be greeted by a Setup Wizard in the browser to enter your URLs and Keys. They will be saved to the local database.
+**Option A: Setup Wizard (Recommended)** Just start the app! You will be greeted by a Setup Wizard in the browser to enter your URLs and Keys. They will be saved to the local database.
 
-Option B: Environment Variables (Advanced) Create a .env file in the backend/ directory to pre-configure the app:
+**Option B: Environment Variables (Advanced)** Copy `backend/.env.example` to `backend/.env` and fill in your values:
 
-PORT=3001
-DATABASE_URL="file:./dev.db"
-
-# Service URLs (No trailing slashes)
-JELLYFIN_URL="http://YOUR_JELLYFIN_IP:8096"
-JELLYSEERR_URL="http://YOUR_JELLYSEERR_IP:5055"
-
-# API Keys
-JELLYSEERR_API_KEY="your-jellyseerr-api-key"
-GEMINI_API_KEY="your-google-gemini-api-key"
-
-# AI Configuration
-GEMINI_MODEL="gemini-2.5-flash-lite"
+cp backend/.env.example backend/.env
+# Then edit backend/.env with your actual values
 
 4. Database Setup
 
@@ -87,12 +76,14 @@ Backend (API): http://localhost:3001
 
 🐳 Production (Docker)
 
-This repo includes a production-ready docker-compose.yml. It sets up the Node.js backend and serves the frontend via Nginx.
+This repo includes a production-ready `docker-compose.prod.yml`. It sets up the Node.js backend and serves the frontend via Nginx.
 
+```bash
 # Build and start containers
-docker-compose up -d --build
+docker-compose -f docker-compose.prod.yml up -d --build
+```
 
-Access: The app is available at http://localhost:5173 (default port).
+**Access:** The app is available at `http://localhost:3000` (default port).
 
     Persisted Data: The SQLite database is stored in a ./data folder in the project root.
 
