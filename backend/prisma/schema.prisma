@@ -14,6 +14,8 @@ model User {
   id        Int      @id @default(autoincrement())
   username  String   @unique
   createdAt DateTime @default(now())
+  movieProfile String?
+  tvProfile    String?
   
   // Relations
   media     UserMedia[]
@@ -25,6 +27,10 @@ model Media {
   title       String
   mediaType   String
   posterUrl   String?
+  overview    String?
+  backdropUrl String?
+  voteAverage Float?
+  language    String?
   releaseYear String?
   
   // Relations
@@ -42,6 +48,17 @@ model UserMedia {
   media     Media    @relation(fields: [mediaId], references: [id])
 
   @@unique([userId, mediaId])
+}
+
+// System configuration singleton for runtime settings editable via UI
+model SystemConfig {
+  id               Int     @id @default(1)
+  jellyfinUrl      String?
+  jellyseerrUrl    String?
+  jellyseerrApiKey String?
+  geminiApiKey     String?
+  geminiModel      String  @default("gemini-2.5-flash-lite")
+  isConfigured     Boolean @default(false)
 }
 
 enum MediaStatus {

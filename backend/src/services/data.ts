@@ -13,27 +13,46 @@ function parseTmdbId(item: any): number | null {
 export async function syncMediaItem(item: any) {
   const tmdbId = parseTmdbId(item);
   if (!tmdbId) throw new Error('Missing or invalid tmdbId for media');
+  // Normalize title: prefer common keys and fallbacks for TV (`name`) and originals
+  const validTitle = item?.title ?? item?.name ?? item?.originalTitle ?? item?.Title ?? 'Unknown Title';
 
-  const title = item?.title ?? item?.name ?? item?.Title ?? '';
-  const mediaTypeRaw = item?.media_type ?? item?.mediaType ?? item?.type ?? 'movie';
-  const mediaType = typeof mediaTypeRaw === 'string' && mediaTypeRaw.toLowerCase().startsWith('tv') ? 'tv' : 'movie';
+  // Normalize year/date: check multiple possible date/year fields and extract YYYY
+  const rawDate = item?.releaseYear ?? item?.release_year ?? item?.releaseDate ?? item?.release_date ?? item?.firstAirDate ?? item?.first_air_date ?? item?.year ?? null;
+  const validYear = rawDate && String(rawDate).length >= 4 ? String(rawDate).substring(0, 4) : null;
+
+  // Normalize media type into strict 'movie' or 'tv'
+  const mediaTypeRaw = item?.mediaType ?? item?.media_type ?? item?.type ?? 'movie';
+  const validType = typeof mediaTypeRaw === 'string' && mediaTypeRaw.toLowerCase().includes('tv') ? 'tv' : 'movie';
+
   const posterUrl = item?.posterUrl ?? item?.poster_url ?? item?.poster_path ?? null;
-  const releaseYear = item?.releaseYear ?? item?.release_year ?? (item?.year ? String(item.year) : null) ?? null;
+  const overview = item?.overview ?? item?.plot ?? item?.synopsis ?? null;
+  const backdropUrl = item?.backdropUrl ?? item?.backdrop_url ?? item?.backdrop_path ?? null;
+  const voteAverage = item?.voteAverage ?? item?.vote_average ?? item?.rating ?? null;
+  const language = item?.language ?? item?.originalLanguage ?? null;
 
   // Build update payload but avoid overwriting existing posterUrl with null/undefined
   const updateData: any = {
-    title,
-    mediaType,
-    releaseYear,
+    title: validTitle,
+    mediaType: validType,
   };
+  if (validYear) updateData.releaseYear = validYear;
   if (posterUrl) updateData.posterUrl = posterUrl;
+  // Persist rich metadata when provided to allow backfilling
+  if (overview !== null && overview !== undefined && overview !== '') updateData.overview = overview;
+  if (backdropUrl) updateData.backdropUrl = backdropUrl;
+  if (voteAverage !== null && voteAverage !== undefined) updateData.voteAverage = Number(voteAverage);
+  if (language) updateData.language = String(language);
 
   const createData: any = {
     tmdbId,
-    title,
-    mediaType,
+    title: validTitle,
+    mediaType: validType,
     posterUrl,
-    releaseYear,
+    releaseYear: validYear,
+    overview: overview ?? null,
+    backdropUrl: backdropUrl ?? null,
+    voteAverage: voteAverage !== null && voteAverage !== undefined ? Number(voteAverage) : null,
+    language,
   };
 
   const media = await prisma.media.upsert({
@@ -44,7 +63,7 @@ export async function syncMediaItem(item: any) {
 
   // If posterUrl is missing in DB but available from incoming item or Jellyseerr, try to persist it
   try {
-    if ((!media.posterUrl || media.posterUrl === null) && (item?.posterUrl || item?.title)) {
+    if ((!media.posterUrl || media.posterUrl === null) && (item?.posterUrl || validTitle)) {
       // Prefer incoming posterUrl
       const incomingPoster = item?.posterUrl ?? item?.poster_url ?? item?.poster_path ?? null;
       if (incomingPoster) {
@@ -53,18 +72,28 @@ export async function syncMediaItem(item: any) {
       } else if (item?.title) {
         // Attempt to search Jellyseerr for a poster
         try {
-          const candidates = await jellySearch(item.title);
+          const candidates = await jellySearch(validTitle);
           if (Array.isArray(candidates) && candidates.length > 0) {
             const first = candidates.find(c => c.tmdb_id && Number(c.tmdb_id) === tmdbId) || candidates[0];
-            const poster = first.posterUrl ?? null;
-            if (poster) {
-              await prisma.media.update({ where: { id: media.id }, data: { posterUrl: poster } });
-              media.posterUrl = poster;
-            }
+              const poster = first.posterUrl ?? null;
+              if (poster) {
+                await prisma.media.update({ where: { id: media.id }, data: { posterUrl: poster } });
+                media.posterUrl = poster;
+              }
+              // Backfill other rich fields from Jellyseerr candidate when available
+              const toUpdate: any = {};
+              if (first.overview) toUpdate.overview = first.overview;
+              if (first.backdropUrl) toUpdate.backdropUrl = first.backdropUrl;
+              if (first.voteAverage !== undefined && first.voteAverage !== null) toUpdate.voteAverage = Number(first.voteAverage);
+              if (first.language) toUpdate.language = String(first.language);
+              if (Object.keys(toUpdate).length > 0) {
+                await prisma.media.update({ where: { id: media.id }, data: toUpdate });
+                Object.assign(media, toUpdate);
+              }
           }
         } catch (inner) {
           // swallow search errors but log
-          console.warn('Jellyseerr search failed during poster backfill for', item?.title, inner);
+          console.warn('Jellyseerr search failed during poster backfill for', validTitle, inner);
         }
       }
     }
@@ -75,7 +104,9 @@ export async function syncMediaItem(item: any) {
   return media;
 }
 
-export async function updateMediaStatus(username: string, item: any, status: MediaStatus | string) {
+export async function updateMediaStatus(username: string, item: any, status: MediaStatus | string, accessToken?: string) {
+  // Do not log full item or access token here to avoid leaking user tokens or PII.
+
   if (!username) throw new Error('username required');
   const tmdbId = parseTmdbId(item);
   if (!tmdbId) throw new Error('tmdbId is required to update status');
@@ -89,6 +120,11 @@ export async function updateMediaStatus(username: string, item: any, status: Med
   const media = await syncMediaItem(item);
 
   const statusVal = (typeof status === 'string' ? (status as string).toUpperCase() : status) as MediaStatus;
+
+  // Minimal debug: log the user and tmdb id and intended status (no tokens or payloads)
+  try {
+    console.debug(`[DB Save] user=${username} tmdb=${tmdbId} status=${statusVal}`);
+  } catch {}
 
   const upserted = await prisma.userMedia.upsert({
     where: { userId_mediaId: { userId: user.id, mediaId: media.id } },
@@ -140,6 +176,10 @@ export async function getFullWatchlist(username: string) {
     tmdbId: e.media?.tmdbId ?? null,
     title: e.media?.title ?? '',
     posterUrl: e.media?.posterUrl ?? null,
+    overview: e.media?.overview ?? null,
+    backdropUrl: e.media?.backdropUrl ?? null,
+    voteAverage: e.media?.voteAverage ?? null,
+    language: e.media?.language ?? null,
     mediaType: e.media?.mediaType ?? 'movie',
     releaseYear: e.media?.releaseYear ?? '',
     status: e.status,

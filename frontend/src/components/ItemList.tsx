@@ -15,11 +15,11 @@ const ItemList: React.FC<Props> = ({ items, onSelectItem, isLoading = false, onR
     const skeletonCount = 8;
     // Debug: log incoming items to verify shape
     // eslint-disable-next-line no-console
-    console.log('ItemList items:', items?.length, items?.[0]);
+    // Intentionally not logging item contents to avoid exposing user data in console
 
     return (
         <div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-6">
                 {isLoading ? (
                     Array.from({ length: skeletonCount }).map((_, idx) => (
                         <SkeletonCard key={`skeleton-${idx}`} />

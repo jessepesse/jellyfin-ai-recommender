@@ -2,3 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .mask-linear-fade {
+    /* Narrow the fade stops so shadows near the edges are less clipped */
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 1%, black 98%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 1%, black 98%, transparent 100%);
+  }
+}
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0e1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Global background */
+body {
+  background-color: #0b0b15;
+}

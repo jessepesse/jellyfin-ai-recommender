@@ -1,10 +1,10 @@
-## Changelog
+Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-[2.0.0] - NOT RELEASED
+[2.0.0] - 2025-11-24
 
 🚀 The Great Migration Release
 
@@ -28,25 +28,41 @@ Complete rewrite of the application architecture from a monolithic Python script
 
         Created a Sidebar navigation drawer for mobile devices.
 
-        Added Optimistic UI updates: Cards disappear instantly upon action without waiting for server response.
+        Added Optimistic UI: Cards disappear instantly upon action without waiting for server response.
 
-        Added Rich Metadata: Media cards now display rating badges (⭐️ 7.8) and release years.
+        Rich Metadata: Media cards now display rating badges (⭐️ 7.8), release years, and posters via Jellyseerr proxy.
 
 🧠 AI & Intelligence Upgrades
 
-    "Trust No AI" Pipeline: Backend now strictly verifies every Gemini suggestion against Jellyseerr (Title + Year check) before displaying it. Prevents hallucinations and broken links.
+    "Trust No AI" Pipeline: Backend strictly verifies every Gemini suggestion against Jellyseerr (Title + Year check) before displaying it. Prevents hallucinations and broken links.
 
-    Dynamic Taste Profile: Implemented a background service that analyzes user watch history to generate a text-based "Taste Profile" for better context-aware recommendations.
+    Dynamic Taste Profile: Background service analyzes user watch history to generate a text-based "Taste Profile" for context-aware recommendations.
 
-    Semantic Filtering: Recommendation logic now understands "Positive" (Watchlist/History) vs "Negative" (Blocked) signals to avoid suggesting unwanted content.
+    Semantic Filtering: Recommendation logic understands "Positive" (Watchlist/History) vs "Negative" (Blocked) signals.
 
-    External Discovery Mode: Logic tuned to strictly exclude any content already present in the Jellyfin library to ensure new discoveries.
+    Smart Discovery: Logic tuned to strictly exclude content already present in the Jellyfin library.
 
-    Auto-Replenishment: Backend automatically loops requests to Gemini until 10 valid, non-duplicate items are found.
+    Auto-Replenishment: Backend loops requests to Gemini until 10 valid, non-duplicate items are found.
 
 🛠️ Functional Improvements
 
-    Robust Data Mapping: Standardized Media (Movie vs TV) handling across the entire stack (title/name, releaseDate/firstAirDate).
+    Jellyfin Watch History Sync:
+
+        New endpoint to bulk import watch history directly from Jellyfin.
+
+        Uses ProviderIds.Tmdb for 100% accurate matching.
+
+        Smart deduplication skips already synced items.
+
+    System Configuration Editor:
+
+        Manage API Keys, URLs, and AI Models directly from the Settings page.
+
+        Values are stored in the database, removing the need to edit .env files.
+
+        "Test Connections" button verifies services before saving.
+
+    Robust Data Mapping: Standardized Movie vs TV handling (title/name, releaseDate/firstAirDate) across the entire stack.
 
     Jellyseerr Integration:
 
@@ -54,86 +70,29 @@ Complete rewrite of the application architecture from a monolithic Python script
 
         Enforced strict payloads (seasons: [] for TV) to fix 500 errors.
 
-        Added caching (node-cache) for enrichment results to speed up repeated fetches.
+        Added caching for enrichment results.
 
-        **NEW:** Direct metadata lookup via `/api/v1/movie/{id}` and `/api/v1/tv/{id}` endpoints for faster enrichment.
+    Legacy Data Import: Non-destructive tool to migrate data from v1 database.json.
 
-    Authentication: Implemented user-centric auth where the Jellyfin Session Token is passed securely from Frontend to Backend APIs.
+🐛 Bug Fixes
 
-    Legacy Data Import: Added a non-destructive Import Tool in Settings to migrate data from the old v1 database.json.
+    Recommendation Logic: Fixed issue where watched movies appeared in recommendations by enforcing TMDB ID extraction from Jellyfin.
 
-    **NEW: Jellyfin Watch History Sync:**
+    Data Integrity: Fixed "Ghost Cards" by enforcing strict ID validation in the backend.
 
-        Added `POST /api/sync/jellyfin` endpoint to bulk import watch history from Jellyfin.
+    Metadata: Fixed bug where TV shows were saved without titles/years due to API field mismatches.
 
-        Extracts TMDB IDs from Jellyfin's `ProviderIds.Tmdb` field.
+    Styling: Fixed PostCSS/Tailwind configuration issues (downgraded to stable v3.4 for compatibility).
 
-        Enriches items with Jellyseerr metadata before saving to database.
+    Docker: Adjusted Dockerfiles to map frontend port to 3000 and ensure Prisma generation during build.
 
-        Smart deduplication: Only syncs new items not already in database.
-
-        Performance optimized: 100ms delay between items to avoid rate limiting.
-
-    **NEW: Jellyfin Data Normalization:**
-
-        Created `jellyfin-normalizer.ts` helper to extract TMDB IDs from Jellyfin's ProviderIds structure.
-
-        Recommendations now use extracted TMDB IDs as primary exclusion source.
-
-        Fixes issue where watched movies were appearing in recommendations.
-
-    **NEW: System Configuration Editor (Settings Page):**
-
-        Added `GET /api/system/config-editor` endpoint to fetch configuration with masked API keys.
-
-        Added `PUT /api/system/config-editor` endpoint to update configuration securely.
-
-        Created `ConfigEditor.tsx` component with glassmorphism styling.
-
-        Users can now update Jellyfin URL, Jellyseerr URL/API Key, Gemini API Key, and Gemini Model directly from the UI.
-
-        API keys are masked (e.g., `********1234`) to prevent exposure in browser network tabs.
-
-        "Test Connections" button verifies all services before saving.
-
-        Changes are persisted to the SystemConfig table in the database.
-
-        Eliminates need for manual `.env` file editing or container rebuilds.
-
-🐛 Fixes
-
-    Fixed "Ghost Cards" by enforcing strict ID validation in the backend.
-
-    Fixed "Missing Metadata" bugs where TV shows saved without titles/years.
-
-    Fixed Styling issues by correctly configuring PostCSS/Tailwind v3.4.
-
-    Fixed Database corruption risks by moving to atomic SQL transactions via Prisma.
-
-    Fix(frontend): Resolved React Hook ordering error in `App.tsx` that caused runtime crashes.
-    Fix(types): Corrected `ErrorBoundary` TypeScript import issues to allow successful builds.
-    Fix(css): Converted PostCSS/Tailwind configs to CommonJS and corrected plugin keys so Tailwind utilities generate correctly.
-    Fix(security): Removed noisy `console.log` calls that could leak sensitive tokens or PII during runtime.
-    Fix(config): Added DB-backed `SystemConfig` and `SetupWizard` UI; services now prefer DB config with env fallback.
-    Fix(backend): Runtime construction of Gemini/Jellyseerr clients, and safer Jellyfin base URL probing and persistence.
-    Fix(docker): Adjusted backend Dockerfile and `docker-compose.prod.yml` to run `prisma generate` during build and map frontend host port to `3000`.
-    **Fix(recommendations):** Watched items now properly excluded from recommendations by extracting TMDB IDs from Jellyfin's `ProviderIds.Tmdb` field.
-    **Fix(types):** Enhanced `JellyfinItem` interface with `Type`, `ProductionYear`, `ProviderIds`, and `UserData` fields for complete metadata support.
-
+    Authentication: Fixed logic to prioritize User Session Tokens over global API keys to prevent 401 errors.
 
 🧪 Developer Experience
 
-    **NEW: Testing Scripts:**
+    Testing Scripts: Added scripts (test_sync.js, test_exclusions.js) for validating data integrity.
 
-        `test_sync.js` - Interactive test for Jellyfin watch history sync with detailed statistics.
-
-        `test_with_login.js` - Interactive test that prompts for credentials and shows watch history.
-
-        `test_exclusions.js` - Verifies watched items are properly excluded from recommendations.
-
-    **Cleanup:** Removed 18 obsolete development scripts (config management, redundant API tests, validation scripts).
-
-    **Maintained:** Kept 6 essential scripts for database maintenance and feature testing.
+    Cleanup: Removed obsolete Python scripts and configuration files.
 
 Tag: v2.0.0 | Date: 2025-11-24 | Type: Major Release
 
@@ -141,119 +100,115 @@ Tag: v2.0.0 | Date: 2025-11-24 | Type: Major Release
 
 🎯 Overview
 
-Small patch release addressing a migration UX issue and cleaning up ephemeral migration artifacts created during the TMDB ID backfill.
+Small patch release addressing a migration UX issue and cleaning up ephemeral migration artifacts.
 
 ✨ What's New
 
-    feat(migration): TMDB ID backfill migration UI and safety
+    TMDB ID Backfill: UI for migrating legacy data to include TMDB IDs.
 
-    Dry-run mode and Apply mode for migrations.
-
-    Safety features: persistent migration flag and rollback on error.
+    Safety: Dry-run mode and automatic backups before migration.
 
 [0.2.6-alpha] - 2025-11-21 (Legacy Python)
 
 🎯 Overview
 
-Minor improvements to the Gemini integration and prompt engineering, plus infrastructure CI fixes.
+Improvements to Gemini integration and infrastructure.
 
 ✨ What's New
 
-    feat: Switch Gemini model to gemini-2.5-flash-lite.
+    Model Update: Switched to gemini-2.5-flash-lite.
 
-    feat(prompt): Rewrite prompts to English for better model compliance.
+    Prompt Engineering: Rewrote prompts to English for better compliance.
 
-    ci: Fixed Docker Buildx issues and added automatic release workflows.
+    CI: Fixed Docker Buildx workflows.
 
 [0.2.5-alpha] - 2025-11-16 (Legacy Python)
 
 🎯 Overview
 
-Comprehensive TMDB ID and media_type storage for all media entries.
+Comprehensive TMDB ID storage and rate limiting.
 
 ✨ What's New
 
-    TMDB ID Storage: Extended database schema to store IDs for all lists.
-
-    Jellyseerr Sync: Automatic syncing of available content.
+    Schema Update: All media lists now store objects with tmdb_id.
 
     Rate Limiting: Added cooldowns to prevent API spam.
+
+    Availability Sync: Automatic tracking of available content on Jellyseerr.
 
 [0.2.4-alpha] - 2025-11-16 (Legacy Python)
 
 🎯 Overview
 
-Major UI/UX improvements focusing on navigation restructuring.
+Major UI/UX improvements focusing on navigation.
 
 ✨ What's New
 
-    Sidebar Navigation: Replaced tabs with a proper sidebar.
+    Sidebar: Replaced tabs with a proper sidebar navigation.
 
-    Visual Polish: Improved spacing, icons, and responsive layout.
+    Visual Polish: Improved layout, icons, and responsiveness.
 
 [0.2.3-alpha] - 2025-11-13 (Legacy Python)
 
 🎯 Overview
 
-Added parallel processing for faster enrichment and fixed session state bugs.
+Added parallel processing and fixed session state bugs.
 
 ✨ What's New
 
-    Parallel Enrichment: Used ThreadPoolExecutor for API calls.
+    Performance: Used ThreadPoolExecutor for faster API calls.
 
-    Watched Button: Added "Mark as Watched" directly to watchlist items.
+    Features: Added "Mark as Watched" button to watchlist.
 
 [0.2.2-alpha] - 2025-11-13 (Legacy Python)
 
 🎯 Overview
 
-Added manual search functionality via Jellyseerr integration.
+Added manual search functionality.
 
 ✨ What's New
 
-    Manual Search: Query Jellyseerr to add items to history/watchlist manually.
+    Manual Search: Query Jellyseerr to add items manually.
 
-    Result Caching: Improved performance for repeated searches.
+    Caching: Improved search performance.
 
 [0.2.1-alpha] - 2025-11-13 (Legacy Python)
 
 🎯 Overview
 
-Introduced the tabbed interface structure and basic statistics.
+Introduced tabbed interface and statistics.
 
 ✨ What's New
 
-    Tabs: Reorganized UI into logical sections.
+    Tabs: Organized UI into logical sections.
 
-    Statistics: Added counts for movies/series/blocked items.
+    Statistics: Added counts for movies/series.
 
 [0.2.0-alpha] - 2025-11-12 (Legacy Python)
 
 🎯 Overview
 
-Added comprehensive error handling and logging infrastructure.
+Added comprehensive error handling and logging.
 
 ✨ What's New
 
-    Logging: Centralized app.log with rotation.
+    Logging: Centralized log file with rotation.
 
     Retry Logic: Exponential backoff for API calls.
-
-    Error UI: User-friendly error messages in Streamlit.
 
 [0.1.0-alpha] (Legacy Python)
 
 🎯 Overview
 
-Initial alpha release with core features.
+Initial alpha release.
 
 ✨ Features
 
-    Jellyfin Integration (History)
+    Jellyfin Integration
 
-    AI Recommendations (Gemini)
+    AI Recommendations
 
-    Jellyseerr Integration (Requests)
+    Jellyseerr Integration
 
     JSON Database
 

@@ -13,6 +13,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   token: string | null;
+  serverUrl: string | null;
   login: (username: string, password: string, serverUrl?: string) => Promise<boolean>;
   logout: () => void;
 }
@@ -25,15 +26,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [serverUrl, setServerUrl] = useState<string | null>(null);
 
   // Attempt to load auth state from local storage on initial render
   useEffect(() => {
     const storedToken = localStorage.getItem('jellyfin_token');
     const storedUser = localStorage.getItem('jellyfin_user');
+    const storedServer = localStorage.getItem('jellyfin_server');
     if (storedToken && storedUser) {
       setToken(storedToken);
       try {
         setUser(JSON.parse(storedUser));
+        if (storedServer) setServerUrl(storedServer);
         setIsAuthenticated(true);
       } catch (e) {
         console.error("Failed to parse stored user data:", e);
@@ -59,14 +63,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           name: jellyfinAuth.User.Name,
         };
         const newToken = jellyfinAuth.AccessToken;
+        // Priority: backend-verified URL > user-provided > env var
+        // Backend returns the working URL after testing candidates
+        const newServer = response.data.serverUrl || serverUrl || import.meta.env.VITE_JELLYFIN_URL || null;
 
         setUser(newUser);
         setToken(newToken);
         setIsAuthenticated(true);
+        setServerUrl(newServer);
 
         // Store in local storage for persistence
         localStorage.setItem('jellyfin_token', newToken);
         localStorage.setItem('jellyfin_user', JSON.stringify(newUser));
+        // Always store server URL (backend ensures we have a working one)
+        if (newServer) {
+          localStorage.setItem('jellyfin_server', newServer);
+        }
         
         return true;
       } else {
@@ -84,14 +96,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setToken(null);
     setIsAuthenticated(false);
+    setServerUrl(null);
     localStorage.removeItem('jellyfin_token');
     localStorage.removeItem('jellyfin_user');
+    localStorage.removeItem('jellyfin_server');
   };
 
   const authContextValue: AuthContextType = {
     user,
     isAuthenticated,
     token,
+    serverUrl,
     login,
     logout,
   };

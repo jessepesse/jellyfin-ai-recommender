@@ -5,11 +5,15 @@ import { getRecommendations } from '../services/api';
 import WatchlistView from './WatchlistView';
 import ManualSearchView from './ManualSearchView';
 import SettingsView from './SettingsView';
+import Footer from './Footer';
+import SegmentedControl from './SegmentedControl';
+import FilterGroup from './FilterGroup';
+import HeroButton from './HeroButton';
 
 const GENRES = ['Action','Comedy','Drama','Sci-Fi','Horror','Romance','Documentary','Animation','Thriller'];
 
 interface Props {
-  currentView?: 'recommendations' | 'watchlist' | 'search' | 'settings';
+  currentView?: 'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
 }
 
 const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
@@ -28,10 +32,16 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     setIsLoading(true);
       try {
       const genreParam = selectedGenres.join(',') || undefined;
-      // Do not send targetItemId or libraryId by default — general recommendations from user history
-      const recs = await getRecommendations('', '', { type: selectedType, genre: genreParam });
+      // Build params object conditionally so we don't send undefined/null path/query values
+      const params: any = {};
+      if (selectedType) params.type = selectedType;
+      if (genreParam) params.genre = genreParam;
+
+      // getRecommendations signature is (targetItemId, libraryId, options)
+      // We intentionally omit targetItemId and libraryId for general recommendations.
+      const recs = await getRecommendations('', '', params);
       // Log raw API response for debugging in browser console
-      console.log('RAW API RESPONSE:', recs);
+      // Avoid logging raw API responses in production (may contain PII)
 
       // Backend guarantees strict items with tmdbId and posterUrl. Use them directly.
       let itemsArray: any[] = [];
@@ -47,64 +57,75 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
   };
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Jellyfin AI Recommender</h1>
-          <p className="text-sm text-gray-400">Personalized recommendations for your library</p>
-        </div>
-      </header>
-
-      {currentView === 'recommendations' && (
-      <section className="bg-gray-800 p-4 rounded-lg mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-6">
-          <div className="flex items-center space-x-3">
-            <label className="text-sm text-gray-300">Content Type</label>
-            <div className="inline-flex bg-gray-700 p-1 rounded-md">
-              <button onClick={() => setSelectedType('movie')} className={`px-3 py-1 rounded ${selectedType === 'movie' ? 'bg-indigo-600 text-white' : 'text-gray-300'}`}>Movies</button>
-              <button onClick={() => setSelectedType('tv')} className={`ml-1 px-3 py-1 rounded ${selectedType === 'tv' ? 'bg-indigo-600 text-white' : 'text-gray-300'}`}>TV Series</button>
-            </div>
+    <div className="flex-1 p-4 md:p-8 overflow-y-auto flex flex-col h-full pb-30">
+      <div className="flex-grow">
+        <header className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400">
+              Jellyfin AI Recommender
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">Personalized recommendations for your library</p>
           </div>
+        </header>
 
-          <div className="mt-4 sm:mt-0">
-            <label className="text-sm text-gray-300 mb-2 block">Genres</label>
-            <div className="flex flex-wrap gap-2">
-              {GENRES.map(g => (
-                <button key={g} onClick={() => toggleGenre(g)} className={`px-3 py-1 rounded-full text-sm ${selectedGenres.includes(g) ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 sm:mt-0 ml-auto">
-            <button onClick={handleGetRecommendations} className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-2 rounded-md font-semibold text-white">
-              {isLoading ? 'Getting Recommendations...' : 'Get Recommendations'}
-            </button>
-          </div>
-        </div>
-      </section>
-      )}
-
-      <section>
         {currentView === 'recommendations' && (
-          <>
-            {error && <div className="mb-4 text-red-400">{error}</div>}
-            <ItemList items={recommendations} onSelectItem={() => {}} isLoading={isLoading} onRemove={(tmdbId) => {
-              if (!tmdbId && tmdbId !== 0) return;
-              setRecommendations(prev => prev.filter(i => {
-                const id = Number((i as any).tmdbId ?? (i as any).tmdb_id ?? (i as any).id);
-                return id !== Number(tmdbId);
-              }));
-            }} />
-          </>
+        <section className="bg-slate-800/30 backdrop-blur-md border border-white/5 p-6 rounded-2xl mb-6 overflow-visible">
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm text-slate-400 mb-3 block">Content Type</label>
+              <SegmentedControl
+                options={[
+                  { id: 'movie', label: 'Movies' },
+                  { id: 'tv', label: 'TV Series' }
+                ]}
+                value={selectedType}
+                onChange={(value) => setSelectedType(value as 'movie' | 'tv')}
+                ariaLabel="Select content type"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-slate-400 mb-3 block">Genres</label>
+              <FilterGroup
+                chips={GENRES.map(g => ({ id: g, label: g, active: selectedGenres.includes(g) }))}
+                onToggle={toggleGenre}
+              />
+            </div>
+
+            <div className="flex justify-center pt-2 pb-10">
+              <HeroButton onClick={handleGetRecommendations} disabled={isLoading}>
+                {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
+              </HeroButton>
+            </div>
+          </div>
+        </section>
         )}
 
-        {currentView === 'watchlist' && <WatchlistView />}
-        {currentView === 'search' && <ManualSearchView />}
-        {currentView === 'settings' && <SettingsView />}
-      </section>
-      
+        <section>
+          {currentView === 'recommendations' && (
+            <>
+              {error && <div className="mb-4 text-red-400">{error}</div>}
+              <ItemList items={recommendations} onSelectItem={() => {}} isLoading={isLoading} onRemove={(tmdbId) => {
+                if (!tmdbId && tmdbId !== 0) return;
+                setRecommendations(prev => prev.filter(i => {
+                  const id = Number((i as any).tmdbId ?? (i as any).tmdb_id ?? (i as any).id);
+                  return id !== Number(tmdbId);
+                }));
+              }} />
+            </>
+          )}
+
+          {currentView === 'watchlist' && <WatchlistView />}
+          {(currentView === 'search' || currentView === 'mark-watched') && <ManualSearchView />}
+          {currentView === 'settings' && <SettingsView />}
+        </section>
+      </div>
+
+      <div className="sticky bottom-0 mt-6 bg-[#0b0b15]">
+        <div className="border-t border-white/5 pt-4">
+          <Footer />
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,23 +1,26 @@
 import axios from 'axios';
-import dotenv from 'dotenv';
 import NodeCache from 'node-cache';
 
-dotenv.config();
 
-const JELLYSEERR_URL = process.env.JELLYSEERR_URL;
-const JELLYSEERR_API_KEY = process.env.JELLYSEERR_API_KEY;
+// NOTE: Do not rely on process.env at module-evaluation time for runtime-configured
+// values. Use `ConfigService.getConfig()` via `getClient()` so the in-app SetupWizard
+// (DB-backed) values are respected when the app is running.
 
-if (!JELLYSEERR_URL) {
-  console.warn('JELLYSEERR_URL not set; Jellyseerr enrichment will be disabled');
+import ConfigService from './config';
+
+// Create an axios client using runtime configuration (DB values preferred, then env)
+async function getClient(): Promise<import('axios').AxiosInstance> {
+  const cfg = await ConfigService.getConfig();
+  const rawBase = cfg && cfg.jellyseerrUrl ? String(cfg.jellyseerrUrl) : (process.env.JELLYSEERR_URL || '');
+  const rawKey = cfg && cfg.jellyseerrApiKey ? String(cfg.jellyseerrApiKey) : (process.env.JELLYSEERR_API_KEY || '');
+  const base = rawBase ? rawBase.trim().replace(/\/+$/, '') : '';
+  const key = rawKey ? rawKey.trim() : '';
+  if (!base) {
+    throw new Error('Jellyseerr URL not configured');
+  }
+  // Return axios client with runtime base URL and sanitized API key header
+  return axios.create({ baseURL: base, headers: { 'X-Api-Key': key }, timeout: 10000 });
 }
-
-const client = axios.create({
-  baseURL: JELLYSEERR_URL,
-  headers: {
-    'X-Api-Key': JELLYSEERR_API_KEY || '',
-  },
-  timeout: 10000,
-});
 
 // Cache TTL: 12 hours
 const CACHE_TTL_SECONDS = 60 * 60 * 12;
@@ -29,6 +32,9 @@ export type Enriched = {
   tmdb_id?: number;
   posterUrl?: string;
   overview?: string;
+  backdropUrl?: string;
+  voteAverage?: number;
+  language?: string;
   releaseDate?: string;
 };
 
@@ -43,11 +49,31 @@ function normalizeTitle(str: string | undefined): string {
   return s;
 }
 
-function constructPosterUrl(partialPath: string | undefined) {
+/**
+ * Strict encode: ensures characters that `encodeURIComponent` leaves unescaped
+ * (like ! ' ( ) *) are percent-encoded in uppercase hex, matching strict
+ * validators such as Jellyseerr's.
+ */
+function strictEncode(str: string): string {
+  return encodeURIComponent(str).replace(/[!'()*]/g, function (c) {
+    return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+  });
+}
+
+async function constructPosterUrl(partialPath: string | undefined) {
   if (!partialPath) return undefined;
-  const baseUrl = (JELLYSEERR_URL || '').replace(/\/$/, '');
-  // Keep same sizing used previously
+  const cfg = await ConfigService.getConfig();
+  const baseUrl = (cfg.jellyseerrUrl || process.env.JELLYSEERR_URL || '').replace(/\/$/, '');
+  if (!baseUrl) return undefined;
   return `${baseUrl}/imageproxy/tmdb/t/p/w300_and_h450_face${partialPath}`;
+}
+
+async function constructBackdropUrl(partialPath: string | undefined) {
+  if (!partialPath) return undefined;
+  const cfg = await ConfigService.getConfig();
+  const baseUrl = (cfg.jellyseerrUrl || process.env.JELLYSEERR_URL || '').replace(/\/$/, '');
+  if (!baseUrl) return undefined;
+  return `${baseUrl}/imageproxy/tmdb/t/p/w1280_and_h720_multi_faces${partialPath}`;
 }
 
 /**
@@ -55,23 +81,35 @@ function constructPosterUrl(partialPath: string | undefined) {
  * Returns Enriched or null when no strict match found
  */
 export async function searchAndVerify(queryTitle: string, queryYear: string | number | undefined, queryType: string | undefined): Promise<Enriched | null> {
-  if (!JELLYSEERR_URL || !JELLYSEERR_API_KEY) return null;
-
   const yearStr = queryYear ? String(queryYear).trim() : '';
   const typeStr = queryType ? String(queryType).toLowerCase() : '';
   const cacheKey = `${cacheKeyForTitle(queryTitle)}_verify_${yearStr}_${typeStr}`;
   const cached = cache.get<Enriched | null>(cacheKey);
   if (cached !== undefined) return cached; // could be null
 
-  try {
-    const resp = await client.get('/api/v1/search', { params: { query: queryTitle } });
+    try {
+      // Manually encode the query to guarantee compliance with Jellyseerr's strict URL rules.
+    const encodedQuery = strictEncode(String(queryTitle));
+    let client;
+    try {
+      client = await getClient();
+    } catch (cfgErr) {
+      console.warn('Jellyseerr not configured; skipping verification', (cfgErr as any)?.message || String(cfgErr));
+      return null;
+    }
+    const resp = await client.get(`/api/v1/search?query=${encodedQuery}&page=1`);
     const data = resp.data;
     const results = Array.isArray(data) ? data : (data.results || []);
 
     const normQuery = normalizeTitle(queryTitle);
 
-    const match = (results || []).find((candidate: any) => {
-      // Type check
+    // Filter out non-media results (persons, etc.)
+    const candidates = (results || []).filter((c: any) => {
+      const ct = (c.mediaType || c.media_type || c.type || '').toString().toLowerCase();
+      return ct === 'movie' || ct === 'tv';
+    });
+
+    const match = candidates.find((candidate: any) => {
       const candidateTypeRaw = candidate.mediaType || candidate.media_type || candidate.type || (candidate.isMovie ? 'movie' : candidate.isTv ? 'tv' : undefined);
       const candidateType = candidateTypeRaw ? String(candidateTypeRaw).toLowerCase() : '';
       if (typeStr && candidateType !== typeStr) return false;
@@ -85,32 +123,52 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
       const candTitle = candidate.title || candidate.name || candidate.originalTitle || candidate.original_name || '';
       const normCand = normalizeTitle(candTitle);
       if (!normCand || !normQuery) return false;
-      // allow inclusion both ways to tolerate articles and minor variants
       return normCand.includes(normQuery) || normQuery.includes(normCand);
     });
 
     if (match) {
-      const tmdb_id = match.id || match.tmdbId || match.tmdb_id || match.tmdb || undefined;
+      const id = match.id ?? match.tmdbId ?? match.tmdb_id ?? match.tmdb;
+      const tmdb_id = id !== undefined && id !== null ? Number(id) : undefined;
       const partialPath = match.posterPath || match.poster_path || match.poster || match.thumb || match.posterUrl || undefined;
-      const posterUrl = constructPosterUrl(partialPath);
-      const overview = match.overview || match.plot || match.synopsis;
-      const media_type = match.mediaType || match.media_type || match.type || (match.isMovie ? 'movie' : match.isTv ? 'tv' : 'movie');
+      const posterUrl = await constructPosterUrl(partialPath);
+      const backdropPartial = match.backdropPath || match.backdrop_path || match.backdrop || undefined;
+      const backdropUrl = await constructBackdropUrl(backdropPartial);
+      const overview = match.overview || match.plot || match.synopsis || null;
+      const voteAverage = match.voteAverage ?? match.vote_average ?? match.rating ?? match.vote ?? undefined;
+      const language = match.originalLanguage ?? match.language ?? match.lang ?? undefined;
+      const media_type = (match.mediaType || match.media_type || match.type || (match.isMovie ? 'movie' : match.isTv ? 'tv' : 'movie')) as any;
+      const title = match.title || match.name || queryTitle;
+      const releaseDate = match.releaseDate || match.firstAirDate || match.year || match.release_date || match.first_air_date || undefined;
 
       const enriched: Enriched = {
-        title: match.title || match.name || queryTitle,
-        overview,
-        posterUrl,
+        title,
+        overview: overview || undefined,
+        posterUrl: posterUrl || undefined,
+        backdropUrl: backdropUrl || undefined,
+        voteAverage: voteAverage !== undefined && voteAverage !== null ? Number(voteAverage) : undefined,
+        language: language ? String(language) : undefined,
         tmdb_id: tmdb_id ? Number(tmdb_id) : undefined,
         media_type,
-        releaseDate: match.releaseDate || match.firstAirDate || match.year || match.release_date || match.first_air_date,
+        releaseDate: releaseDate,
       };
 
       cache.set(cacheKey, enriched);
-      console.log(`[Verify] Match Found: "${enriched.title}" (tmdb:${enriched.tmdb_id}) for "${queryTitle}" (${yearStr})`);
+      // Detailed audit log for verification success
+      try {
+        console.debug(`[Jellyseerr Verify] SUCCESS: Found "${match.title || match.name || title}" | Type: ${match.mediaType || match.media_type || match.type || media_type} | Year: ${match.releaseDate || match.firstAirDate || releaseDate}`);
+      } catch (logErr) {
+        // swallow logging errors
+        console.debug('[Jellyseerr Verify] SUCCESS: (log failed)', logErr);
+      }
       return enriched;
     }
 
-    console.warn(`[Verify] Dropped "${queryTitle}" (${yearStr}). No exact year/type match found.`);
+    // Audit when no match found
+    try {
+      console.debug(`[Jellyseerr Verify] FAILED: No match found for query "${queryTitle}" (${yearStr})`);
+    } catch (logErr) {
+      console.warn('[Jellyseerr Verify] FAILED: (log failed)', logErr);
+    }
     cache.set(cacheKey, null);
     return null;
   } catch (e: any) {
@@ -123,23 +181,41 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
  * Search Jellyseerr directly and map results to Enriched[]
  */
 export async function search(query: string): Promise<Enriched[]> {
-  if (!JELLYSEERR_URL || !JELLYSEERR_API_KEY) return [];
+  let client;
   try {
-    const resp = await client.get('/api/v1/search', { params: { query } });
+    client = await getClient();
+  } catch (cfgErr) {
+    console.warn('Jellyseerr not configured; search skipped', (cfgErr as any)?.message || String(cfgErr));
+    return [];
+  }
+  try {
+    // Manually encode the query to guarantee compliance with Jellyseerr's strict URL rules.
+    const encodedQuery = strictEncode(String(query));
+    const resp = await client.get(`/api/v1/search?query=${encodedQuery}&page=1`);
     const data = resp.data;
     const results = Array.isArray(data) ? data : (data.results || []);
-    return (results || []).map((r: any) => {
+    const out: Enriched[] = [];
+    for (const r of (results || [])) {
       const tmdb_id = r.id || r.tmdbId || r.tmdb_id || r.tmdb || undefined;
       const partialPath = r.posterPath || r.poster_path || r.poster || r.thumb || r.posterUrl || undefined;
-      return {
+      const backdropPartial = r.backdropPath || r.backdrop_path || r.backdrop || undefined;
+      const voteAverage = r.voteAverage ?? r.vote_average ?? r.rating ?? r.vote;
+      const language = r.originalLanguage ?? r.language ?? r.lang;
+      const posterUrl = partialPath ? await constructPosterUrl(partialPath) : undefined;
+      const backdropUrl = backdropPartial ? await constructBackdropUrl(backdropPartial) : undefined;
+      out.push({
         title: r.title || r.name || r.originalTitle || r.original_name || '',
         media_type: (r.mediaType || r.media_type || r.type || (r.isMovie ? 'movie' : r.isTv ? 'tv' : 'movie')) as any,
         tmdb_id: tmdb_id ? Number(tmdb_id) : undefined,
-        posterUrl: partialPath ? constructPosterUrl(partialPath) : undefined,
+        posterUrl: posterUrl || undefined,
+        backdropUrl: backdropUrl || undefined,
+        voteAverage: voteAverage ? Number(voteAverage) : undefined,
+        language: language ? String(language) : undefined,
         overview: r.overview || r.plot || r.synopsis,
         releaseDate: r.releaseDate || r.firstAirDate || r.year || r.release_date || r.first_air_date,
-      } as Enriched;
-    });
+      } as Enriched);
+    }
+    return out;
   } catch (e: any) {
     console.error('Jellyseerr search error', e?.response?.data || e.message || e);
     return [];
@@ -152,28 +228,96 @@ function cacheKeyForTitle(title: string) {
 
 export async function searchAndEnrich(title: string, targetMediaType?: string, releaseYear?: string | number): Promise<Enriched | null> {
   // If Jellyseerr not configured, return minimal info
-  if (!JELLYSEERR_URL || !JELLYSEERR_API_KEY) {
-    if (!JELLYSEERR_URL) console.warn('Jellyseerr not configured: skipping enrichment');
+  let client;
+  try {
+    client = await getClient();
+  } catch (cfgErr) {
+    console.warn('Jellyseerr not configured: skipping enrichment', (cfgErr as any)?.message || String(cfgErr));
     return { title, media_type: 'movie' };
   }
   // Use strict verification logic: require exact year and type, fuzzy title
   try {
     const verified = await searchAndVerify(title, releaseYear, targetMediaType);
-    if (verified) {
-      // also cache under old-style key for compatibility
-      const key = `${cacheKeyForTitle(title)}_${String(releaseYear || '')}`;
-      cache.set(key, verified);
-      return verified;
-    }
-    return null;
+    // Ask Jellyseerr/Overseerr to request media by TMDB id when requested by the user
+    // (searchAndEnrich only attempts verification/enrichment, it does not perform requests)
+    return verified;
   } catch (e: any) {
     console.error('Jellyseerr search error for', title, e?.response?.data || e.message || e);
     return null;
   }
 }
 
+/**
+ * Get media details directly by TMDB ID (no search required)
+ * @param tmdbId - TMDB ID (numeric)
+ * @param mediaType - 'movie' or 'tv'
+ * @returns Enriched object with full metadata or null if not found
+ */
+export async function getMediaDetails(tmdbId: string | number, mediaType: 'movie' | 'tv'): Promise<Enriched | null> {
+  const id = Number(tmdbId);
+  if (!Number.isFinite(id) || id <= 0) {
+    console.warn('[Jellyseerr] Invalid TMDB ID:', tmdbId);
+    return null;
+  }
+
+  const cacheKey = `jellyseerr_details_${mediaType}_${id}`;
+  const cached = cache.get<Enriched | null>(cacheKey);
+  if (cached !== undefined) return cached;
+
+  let client;
+  try {
+    client = await getClient();
+  } catch (cfgErr) {
+    console.warn('Jellyseerr not configured; skipping details lookup', (cfgErr as any)?.message || String(cfgErr));
+    return null;
+  }
+
+  try {
+    const endpoint = mediaType === 'movie' ? `/api/v1/movie/${id}` : `/api/v1/tv/${id}`;
+    const resp = await client.get(endpoint);
+    const data = resp.data;
+
+    if (!data) {
+      cache.set(cacheKey, null);
+      return null;
+    }
+
+    const partialPath = data.posterPath || data.poster_path || data.poster || undefined;
+    const backdropPartial = data.backdropPath || data.backdrop_path || data.backdrop || undefined;
+    const posterUrl = await constructPosterUrl(partialPath);
+    const backdropUrl = await constructBackdropUrl(backdropPartial);
+
+    const enriched: Enriched = {
+      title: data.title || data.name || data.originalTitle || data.original_name || '',
+      media_type: mediaType,
+      tmdb_id: id,
+      posterUrl: posterUrl || undefined,
+      backdropUrl: backdropUrl || undefined,
+      overview: data.overview || data.plot || data.synopsis || undefined,
+      voteAverage: data.voteAverage ?? data.vote_average ?? data.rating ?? undefined,
+      language: data.originalLanguage ?? data.language ?? undefined,
+      releaseDate: data.releaseDate || data.firstAirDate || data.release_date || data.first_air_date || undefined,
+    };
+
+    cache.set(cacheKey, enriched);
+    console.debug(`[Jellyseerr] Details fetched for ${mediaType} ${id}: ${enriched.title}`);
+    return enriched;
+  } catch (e: any) {
+    if (e.response?.status === 404) {
+      console.debug(`[Jellyseerr] Media not found: ${mediaType} ${id}`);
+      cache.set(cacheKey, null);
+      return null;
+    }
+    console.error(`[Jellyseerr] Error fetching details for ${mediaType} ${id}:`, e?.response?.data || e.message || e);
+    return null;
+  }
+}
+
 export async function requestMediaByTmdb(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<any> {
-  if (!JELLYSEERR_URL || !JELLYSEERR_API_KEY) {
+  let client;
+  try {
+    client = await getClient();
+  } catch (cfgErr) {
     throw new Error('Jellyseerr not configured');
   }
   try {
@@ -187,8 +331,8 @@ export async function requestMediaByTmdb(tmdbId: number, mediaType: 'movie' | 't
       payload.seasons = [];
     }
 
-    // Log exact payload for debugging
-    console.log('[Jellyseerr] Request payload:', payload);
+    // Debug: avoid logging full request payloads; log minimal identifying fields only
+    console.debug('[Jellyseerr] Request payload built', { mediaType: payload.mediaType, mediaId: payload.mediaId });
 
     const resp = await client.post('/api/v1/request', payload);
     return resp.data;
@@ -197,3 +341,4 @@ export async function requestMediaByTmdb(tmdbId: number, mediaType: 'movie' | 't
     throw e;
   }
 }
+ 

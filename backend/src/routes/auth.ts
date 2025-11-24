@@ -14,9 +14,18 @@ authRouter.post('/login', async (req, res) => {
 
         const jellyfinAuth = await authService.authenticateUser(username, password, serverUrl);
 
-        // For now, return the JellyfinAuthResponse directly.
-        // Future security enhancements might involve HTTP-only cookies or server-side sessions.
-        res.json({ success: true, jellyfinAuth } as LoginResponse);
+        // After successful auth, read back the config to get the working URL that was persisted
+        const ConfigServiceModule = await import('../services/config');
+        const ConfigService = ConfigServiceModule.default;
+        const cfg = await ConfigService.getConfig();
+        const workingUrl = cfg.jellyfinUrl;
+
+        // Return the auth response + the working server URL for frontend storage
+        res.json({ 
+            success: true, 
+            jellyfinAuth,
+            serverUrl: workingUrl 
+        } as LoginResponse);
 
     } catch (error: any) {
         if (error instanceof z.ZodError) {

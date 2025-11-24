@@ -1,14 +1,26 @@
 export interface JellyfinItem {
     Id: string;
     Name: string;
+    Type?: string;
     Genres?: string[];
     CommunityRating?: number;
     Overview?: string;
     PremiereDate?: string;
+    ProductionYear?: number;
     ImageTags?: {
         Primary?: string;
     };
     imageUrl?: string;
+    ProviderIds?: {
+        Tmdb?: string | number;
+        tmdb?: string | number;
+        Imdb?: string;
+        imdb?: string;
+    };
+    UserData?: {
+        Played?: boolean;
+        LastPlayedDate?: string;
+    };
 }
 
 export interface JellyfinLibrary {
@@ -30,18 +42,7 @@ export interface LoginResponse {
     success: boolean;
     message?: string;
     jellyfinAuth?: JellyfinAuthResponse;
-}
-export interface JellyfinItem {
-    Id: string;
-    Name: string;
-    Genres?: string[];
-    CommunityRating?: number;
-    Overview?: string;
-    PremiereDate?: string;
-    ImageTags?: {
-        Primary?: string;
-    };
-    imageUrl?: string;
+    serverUrl?: string;  // The working Jellyfin URL (after candidate testing)
 }
 
 export interface JellyfinLibrary {
@@ -58,10 +59,4 @@ export interface JellyfinAuthResponse {
     AccessToken: string;
     User: JellyfinUser;
     // Potentially add other relevant auth properties if needed, e.g., ServerId, SessionId
-}
-
-export interface LoginResponse {
-    success: boolean;
-    message?: string;
-    jellyfinAuth?: JellyfinAuthResponse;
 }

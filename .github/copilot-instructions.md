@@ -1,78 +1,92 @@
 # Jellyfin AI Recommender: Copilot & Agent Instructions
 
 ## 1. System Role & Objective
-**Role:** Senior Full-Stack Migration Architect (TypeScript/Node.js/React).
-**Context:** We are in the middle of migrating a legacy Python (Streamlit) application to a modern T3-style stack (Node/Express + React/Vite).
-**Objective:** Port features from `app.py` to the new architecture while maintaining data compatibility and business logic.
+**Role:** Senior Full-Stack Engineer (TypeScript/Node.js/React/Prisma).
+**Context:** The project has successfully migrated from Python (Streamlit) to a modern T3-style stack. We are now in the **Optimization & Feature Hardening** phase.
+**Objective:** Maintain the application, ensure data integrity via strict verification, and optimize the AI recommendation pipeline.
 
 ## 2. Architecture & Source of Truth
 
-### A. Legacy Reference (Static / Read-Only)
+### A. Legacy Reference (Logic Only)
 * **File:** `app.py`
-* **Status:** **DO NOT RUN.** Treat this file as static documentation.
-* **Usage:** Analyze this file to understand authentication flows, Gemini prompts, and data filtering logic.
+* **Status:** **READ-ONLY / DEPRECATED.**
+* **Usage:** Refer to this ONLY for understanding the original business logic (e.g., "how did the prompt look?"). **Do not** use it for data structure references anymore.
 
-### B. The New Stack (Active Development)
-* **Root:** Monorepo structure using `concurrently` for unified startup.
-* **Backend (`/backend`):** Node.js, Express, TypeScript, Zod.
-    * *Responsibility:* API Proxies (Jellyfin/Jellyseerr), AI Logic, Database I/O.
-* **Frontend (`/frontend`):** React, Vite, Tailwind CSS, TypeScript.
-    * *Responsibility:* UI Rendering, State Management (Context/Hooks).
-* **Data (`database.json`):** Shared persistence file. The Node backend must read/write this exact schema.
+### B. The Modern Stack (Active)
+* **Root:** Monorepo using `concurrently`.
+* **Backend (`/backend`):** Node.js, Express, **Prisma (SQLite)**, Zod, Google AI SDK.
+    * *Responsibility:* API Proxies, strict data verification, database management, AI orchestration.
+* **Frontend (`/frontend`):** React, Vite, Tailwind CSS (v3.4), TypeScript.
+    * *Responsibility:* UI Rendering, Optimistic UI updates, Client-side filtering/sorting.
+* **Data (`backend/prisma/dev.db`):** SQLite database managed via Prisma. **`database.json` is obsolete and should be ignored.**
 
 ## 3. Core Directives
 
-### Language & Terminology
-* **Code & Comments:** English only.
-* **User Interface:** **English only.** (Ignore Finnish text in `app.py`. Use standard terms: "Watchlist", "Recommendations", "Mark as Watched").
+### "Trust No AI" Philosophy (CRITICAL)
+1.  **No ID Hallucinations:** Never trust TMDB IDs provided by Gemini. They are often hallucinated.
+2.  **Strict Verification:** All AI suggestions must be verified against Jellyseerr (Title + Year match) before being returned to the Frontend.
+3.  **Normalization:** All data entering the DB or Frontend must be normalized via `JellyseerrService.normalize()` to ensure consistent fields (`tmdbId`, `mediaType`, `releaseYear`).
 
 ### Development Standards
-* **Strict Types:** No `any`. Use Interfaces for external APIs.
-* **Validation:** Use **Zod** for all backend inputs and LLM outputs.
-* **Styling:** Use **Tailwind CSS** for all UI components (Dark mode, Glassmorphism aesthetic).
-* **Icons:** Use `lucide-react`.
+* **Database:** Use **Prisma ORM** for all data operations. Never write to files directly.
+* **Styling:** Use **Tailwind CSS** utility classes. Ensure config matches v3 standards.
+* **Validation:** Use **Zod** for API inputs/outputs.
+* **Language:** Code & Comments in **English**. UI Text in **English**.
 
-## 4. Developer Workflow (Static Analysis Loop)
+## 4. Developer Workflow
 
-When asked to implement a feature (e.g., "Add Watchlist support"):
+When implementing features or fixing bugs:
 
-1.  **Analyze (`app.py`):** Locate the Python logic (e.g., `handle_watchlist_add`). Identify how it manipulates the JSON structure.
-2.  **Implement Service (`backend/`):** Write the TypeScript service to perform the same logic safely.
-3.  **Build UI (`frontend/`):** Create the React component to trigger this API call.
-4.  **Verify:** Ensure `database.json` updates match the legacy schema structure.
+1.  **Check Logic:** Does this feature exist in `app.py`? If so, replicate the *intent*, not the code.
+2.  **Database Schema:** If data needs to change, update `backend/prisma/schema.prisma` and run `npm run db:migrate`.
+3.  **Backend Service:** Implement logic in `services/`, ensuring strict type safety and normalization.
+4.  **Frontend:** Update UI components to match the backend's strict data contract (`JellyfinItem` interface).
 
 ## 5. Operational Commands
 
-| Action | Command | Location |
-| :--- | :--- | :--- |
-| **Start All (Recommended)** | `npm run dev` | **Root** (Runs both via `concurrently`) |
-| Start Backend Only | `npm run dev` | `/backend` |
-| Start Frontend Only | `npm run dev` | `/frontend` |
-| Type-Check Backend | `npm run build` | `/backend` |
-| Type-Check Frontend | `npm run build` | `/frontend` |
+### General
+* **Start All (Dev):** `npm run dev` (Runs backend & frontend via concurrently)
 
-## 6. Implementation Status & Roadmap
+### Backend
+* **Start Backend:** `cd backend && npm run dev`
+* **Prisma Migrate:** `npm run db:migrate` (Use this instead of npx to ensure .env loading via dotenv-cli)
+* **Prisma Generate:** `npm run db:generate` (Refresh TypeScript types)
+* **Prisma Studio:** `npm run db:studio` (GUI to view database data)
 
-### ✅ Completed
-* **Auth:** Per-user login via Jellyfin (Token stored in localStorage/Context).
-* **Core Logic:** Real Jellyfin History fetch + Gemini Analysis + Jellyseerr Enrichment.
-* **Performance:** Caching implemented for Jellyseerr lookups (`node-cache`).
-* **UI Base:** Modern "Netflix-style" dark UI with Grid layout.
+### Frontend
+* **Start Frontend:** `cd frontend && npm run dev`
+* **Build:** `cd frontend && npm run build`
 
-### 🚧 In Progress / Next Steps
-* **Dashboard Parity:** Recreating the Sidebar + Filter Controls (Genre/Type) to match Streamlit functionality.
-* **Interactive Actions:** Wiring up "Add to Watchlist" and "Mark as Watched" buttons in the `MediaCard`.
+## 6. Implementation Status
+
+### ✅ Completed & Stable
+* **Auth:** User-centric authentication (Jellyfin Token passed from Frontend to Backend).
+* **Database:** SQLite + Prisma integration (User, Media, UserMedia tables).
+* **Core Logic:**
+    * **Gemini:** Context-aware prompts with "Taste Profile".
+    * **Verification:** Strict "Title + Year" matching against Jellyseerr.
+    * **Loop:** Backend loops until 10 valid, non-duplicate items are found.
+* **UI:** Modern Dark Mode Dashboard, Sidebar, Watchlist, Search.
+* **Actions:** Watched, Watchlist, Block, Request (all with Optimistic UI updates).
+
+### 🧩 Key Logic Patterns
+* **Taste Profile:** `TasteService` analyzes history to generate a text profile for Gemini to improve recommendations.
+* **External Discovery:** The logic is tuned to find *new* content, strictly filtering out existing library items using `JellyfinService.getOwnedIds`.
+* **JIT Lookup:** DataService attempts to fetch missing IDs via Jellyseerr before saving if the Frontend payload is incomplete.
 
 ## 7. Key File Mappings
 
-| Feature | Legacy (Python) | New (TypeScript) |
-| :--- | :--- | :--- |
-| **Auth** | `jellyfin_login()` | `backend/src/services/auth.ts` |
-| **AI Prompt** | `build_prompt()` | `backend/src/services/gemini.ts` |
-| **Enrichment** | `search_jellyseerr()` | `backend/src/services/jellyseerr.ts` |
-| **DB I/O** | `json.load()` | `backend/src/services/data.ts` |
+| Logic | File Location |
+| :--- | :--- |
+| **AI Prompting** | `backend/src/services/gemini.ts` |
+| **Data/Prisma** | `backend/src/services/data.ts` |
+| **External API** | `backend/src/services/jellyseerr.ts` |
+| **Auth Logic** | `backend/src/services/jellyfin.ts` |
+| **Taste Analysis**| `backend/src/services/taste.ts` |
+| **API Routes** | `backend/src/routes/api.ts` |
 
-## 8. Troubleshooting & Gotchas
-* **Env Variables:** Backend requires `.env` in `backend/.env`. Ensure `JELLYFIN_URL`, `GEMINI_API_KEY`, and `JELLYSEERR_API_KEY` are set.
-* **CORS:** Backend is configured to accept credentials from `localhost:5173`.
-* **Imports:** Frontend must use `import type` for shared interfaces to avoid runtime bundling errors.
+## 8. Troubleshooting Cheat Sheet
+* **Frontend Style Missing:** Check `frontend/postcss.config.js`. It must use CJS format compatible with Tailwind v3.
+* **Database Error:** "tmdbId is required" -> Check `jellyseerr.ts` normalization logic and Frontend `MediaCard` payload.
+* **Prisma Error:** "Missing DATABASE_URL" -> Always use `npm run db:migrate` (it uses `dotenv-cli` to force load `.env`).
+* **Jellyseerr 404:** Ensure the endpoint is `/api/v1/request` (singular, not plural) and the query is `encodeURIComponent`'d properly in `jellyseerr.ts`.
