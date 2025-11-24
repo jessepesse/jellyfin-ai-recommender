@@ -1,13 +1,16 @@
 {
   "name": "backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:migrate": "dotenv -e .env -- npx prisma migrate dev",
+    "db:generate": "dotenv -e .env -- npx prisma generate",
+    "db:studio": "dotenv -e .env -- npx prisma studio"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +24,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "node-cache": "^5.1.2",
+    "node-cron": "^3.0.2",
     "zod": "^4.1.12",
     "zod-to-json-schema": "^3.25.0"
   },
@@ -28,6 +32,8 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/node": "^24.10.1",
+    "@types/node-cron": "^3.0.11",
+    "dotenv-cli": "^11.0.0",
     "nodemon": "^3.1.11",
     "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
