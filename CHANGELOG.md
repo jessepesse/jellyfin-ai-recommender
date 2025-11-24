@@ -74,6 +74,10 @@ Complete rewrite of the application architecture from a monolithic Python script
 
     Legacy Data Import: Non-destructive tool to migrate data from v1 database.json.
 
+    Gemini Thinking Models: Updated to support Gemini 2.5+ and 3.0+ thinking capabilities with automatic dynamic reasoning adjustment.
+
+    Model Selection: Dropdown with current Google AI models (gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro, gemini-3-pro-preview).
+
 🐛 Bug Fixes
 
     Recommendation Logic: Fixed issue where watched movies appeared in recommendations by enforcing TMDB ID extraction from Jellyfin.
@@ -87,6 +91,10 @@ Complete rewrite of the application architecture from a monolithic Python script
     Docker: Adjusted Dockerfiles to map frontend port to 3000 and ensure Prisma generation during build.
 
     Authentication: Fixed logic to prioritize User Session Tokens over global API keys to prevent 401 errors.
+
+    UI Shadow Clipping: Fixed gradient shadow cutoff on filter buttons and hero buttons by removing mask utilities and adding proper padding.
+
+    CORS Issues: Updated backend to accept requests from any localhost port during development for flexibility.
 
 🧪 Developer Experience
 
