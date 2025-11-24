@@ -75,3 +75,18 @@ export function requireSafeUrl(url: string, label: string = 'URL'): string {
     }
     return sanitized;
 }
+
+/**
+ * Validates a complete URL immediately before an HTTP request
+ * This ensures CodeQL recognizes the sanitization even after string concatenation
+ * @param fullUrl - Complete URL to validate (including path)
+ * @returns Validated URL string
+ * @throws Error if URL is invalid or blocked
+ */
+export function validateRequestUrl(fullUrl: string): string {
+    const validated = sanitizeUrl(fullUrl);
+    if (!validated) {
+        throw new Error(`Request URL is invalid or blocked for security reasons: ${fullUrl}`);
+    }
+    return validated;
+}

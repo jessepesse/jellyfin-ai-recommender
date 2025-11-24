@@ -13,7 +13,7 @@ import { exportUserData } from '../services/export';
 import axios from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthService } from '../authService';
-import { sanitizeUrl } from '../utils/ssrf-protection';
+import { sanitizeUrl, validateRequestUrl } from '../utils/ssrf-protection';
 import { 
   validateUserAction, 
   validateRecommendationRequest, 
@@ -561,7 +561,7 @@ router.post('/system/verify', async (req, res) => {
             try {
                 const base = sanitizeUrl(jellyfinUrlRaw);
                 if (!base) return { ok: false, message: 'No Jellyfin URL provided or invalid' };
-                const url = `${base}/System/Info/Public`;
+                const url = validateRequestUrl(`${base}/System/Info/Public`);
                 const resp = await axios.get(url, { timeout: 8000 });
                 if (resp.status === 200) {
                     const ver = (resp.data && (resp.data.Version || resp.data.ServerVersion || resp.data.version)) || '';
@@ -579,7 +579,7 @@ router.post('/system/verify', async (req, res) => {
             try {
                 const base = sanitizeUrl(jellyseerrUrlRaw);
                 if (!base) return { ok: false, message: 'No Jellyseerr URL provided or invalid' };
-                const url = `${base}/api/v1/status`;
+                const url = validateRequestUrl(`${base}/api/v1/status`);
                 const headers: any = {};
                 if (jellyseerrApiKey) headers['X-Api-Key'] = String(jellyseerrApiKey);
                 const resp = await axios.get(url, { headers, timeout: 8000 });
