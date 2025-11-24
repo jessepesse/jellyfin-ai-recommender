@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.2] - 2025-11-24
+
+🔧 Network & Deployment Fixes
+
+Critical fixes for remote server deployments and Docker production environments.
+
+🐛 Bug Fixes
+
+    Fixed Network Error on Remote Deployments:
+        Changed frontend to use relative API paths (/api) instead of hardcoded localhost
+        Updated frontend/src/services/api.ts to use BASE_URL = '/api'
+        Removed VITE_BACKEND_URL environment variable fallback logic
+        Now works correctly on any IP address, domain, or port (ZimaOS, NAS, remote servers)
+
+    Fixed Docker Volume Mount Issue:
+        Changed docker-compose.prod.yml volume mount from ./data:/app/prisma to ./data:/app/data
+        Updated DATABASE_URL to file:/app/data/dev.db
+        Prevents volume mount from overwriting container's Prisma schema and migrations
+        Fixes "Prisma Schema not found" error in production Docker deployments
+
+    Fixed Nginx 405 Method Not Allowed Error:
+        Updated frontend/nginx.conf with strict API proxy configuration
+        Added X-Real-IP and X-Forwarded-For headers for proper backend logging
+        Removed try_files fallback from /api/ location (now returns 502 if backend is down)
+        Prevents Nginx from serving static HTML for API POST requests
+
+    Fixed Docker Images for GitHub Actions:
+        Updated docker-compose.prod.yml to use :latest tags instead of version-specific tags
+        Images now automatically pulled from ghcr.io/jessepesse/jellyfin-ai-recommender-*:latest
+        Simplifies production deployment workflow
+
+📝 Configuration
+
+    Created .env.example files:
+        backend/.env.example with DATABASE_URL and optional service URLs
+        frontend/.env.example with VITE_BACKEND_URL documentation
+        Updated .gitignore to allow .env.example files
+
+🚀 Deployment
+
+    Production deployment now fully working on Docker with correct networking
+    Supports local development, remote servers, and containerized environments
+    All API requests use relative paths for maximum portability
+
 [2.0.1] - 2025-11-24
 
 🔒 Security Hardening Release
