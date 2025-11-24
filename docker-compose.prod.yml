@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    image: jellyfin-ai-recommender-backend:v2.0.0
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender-backend:2.0.0
     container_name: jellyfin-ai-backend
     restart: unless-stopped
     ports:
@@ -28,7 +28,7 @@ services:
 
   frontend:
     build: ./frontend
-    image: jellyfin-ai-recommender-frontend:v2.0.0
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender-frontend:2.0.0
     container_name: jellyfin-ai-frontend
     restart: unless-stopped
     ports:
