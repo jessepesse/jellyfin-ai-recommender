@@ -90,3 +90,18 @@ export function validateRequestUrl(fullUrl: string): string {
     }
     return validated;
 }
+
+/**
+ * Creates a validated base URL for use with axios instances
+ * This explicitly validates the base URL for SSRF protection before axios client creation
+ * @param baseUrl - Base URL to validate
+ * @returns Validated base URL suitable for axios.create({ baseURL: ... })
+ * @throws Error if URL is invalid or blocked
+ */
+export function validateBaseUrl(baseUrl: string): string {
+    const validated = sanitizeUrl(baseUrl);
+    if (!validated) {
+        throw new Error(`Base URL is invalid or blocked for security reasons: ${baseUrl}`);
+    }
+    return validated;
+}

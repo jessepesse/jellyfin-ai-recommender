@@ -7,19 +7,17 @@ import NodeCache from 'node-cache';
 // (DB-backed) values are respected when the app is running.
 
 import ConfigService from './config';
-import { sanitizeUrl } from '../utils/ssrf-protection';
+import { validateBaseUrl } from '../utils/ssrf-protection';
 
 // Create an axios client using runtime configuration (DB values preferred, then env)
 async function getClient(): Promise<import('axios').AxiosInstance> {
   const cfg = await ConfigService.getConfig();
   const rawBase = cfg && cfg.jellyseerrUrl ? String(cfg.jellyseerrUrl) : (process.env.JELLYSEERR_URL || '');
   const rawKey = cfg && cfg.jellyseerrApiKey ? String(cfg.jellyseerrApiKey) : (process.env.JELLYSEERR_API_KEY || '');
-  const base = sanitizeUrl(rawBase);
+  // Explicit SSRF validation for baseURL
+  const base = validateBaseUrl(rawBase);
   const key = rawKey ? rawKey.trim() : '';
-  if (!base) {
-    throw new Error('Jellyseerr URL not configured or invalid');
-  }
-  // Return axios client with runtime base URL and sanitized API key header
+  // Return axios client with validated runtime base URL and sanitized API key header
   return axios.create({ baseURL: base, headers: { 'X-Api-Key': key }, timeout: 10000 });
 }
 

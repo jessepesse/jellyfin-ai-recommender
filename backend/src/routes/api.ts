@@ -41,7 +41,8 @@ function toFrontendItem(item: any) {
     let posterUrl: string | null = null;
     if (item.posterUrl) posterUrl = item.posterUrl;
     else if (item.poster_path || item.poster) {
-        const base = (process.env.JELLYSEERR_URL || '').replace(/\/$/, '');
+        const rawBase = process.env.JELLYSEERR_URL || '';
+        const base = sanitizeUrl(rawBase);
         posterUrl = base ? `${base}/imageproxy/tmdb/t/p/w300_and_h450_face${item.poster_path || item.poster}` : null;
     }
     const voteAverage = item.voteAverage ?? item.vote_average ?? item.rating ?? 0;
