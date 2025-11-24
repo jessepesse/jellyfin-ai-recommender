@@ -7,16 +7,16 @@ services:
     ports:
       - "3001:3001"
     environment:
-      # Database location for Prisma
-      - DATABASE_URL=file:/app/prisma/dev.db
+      # Database location - points to mounted data directory
+      - DATABASE_URL=file:/app/data/dev.db
       - PORT=3001
       # NOTE: Do NOT pre-configure JELLYFIN_URL, JELLYSEERR_URL, JELLYSEERR_API_KEY, or GEMINI_API_KEY here.
       # These should be configured via the Settings page in the UI after first login.
       # They will be stored in the SystemConfig table in the database.
     volumes:
-      # Mount the data directory for persistent database storage
-      # The database file will be created automatically by Prisma migrations
-      - ./data:/app/prisma
+      # Mount data directory for persistent database storage
+      # This preserves schema.prisma and migrations in the container
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s
