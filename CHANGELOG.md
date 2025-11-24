@@ -14,19 +14,24 @@ Critical security improvements and vulnerability fixes identified by GitHub Code
 
     Comprehensive SSRF Protection:
         Created centralized URL validation utility (backend/src/utils/ssrf-protection.ts)
+        Added validateRequestUrl() for complete URL validation before HTTP requests
         Blocks cloud metadata endpoints (AWS, GCP, Azure, Alibaba Cloud)
         Blocks link-local addresses (169.254.0.0/16)
         Blocks non-HTTP protocols
-        Applied to all external HTTP requests (Jellyfin, Jellyseerr verification)
+        Fixed 8 locations: 6 axios.get calls + 2 verification endpoints
+        Applied to all external HTTP requests (Jellyfin, Jellyseerr)
 
     ReDoS Prevention:
-        Fixed polynomial regex complexity vulnerabilities
-        Replaced ambiguous /\/+$/ patterns with safe string operations
+        Fixed 2 polynomial regex complexity vulnerabilities
+        Replaced /\/+$/ with safe while loops
+        Replaced /#.*$/ with indexOf() + slice()
         Prevents exponential backtracking on malicious input strings
 
     Format String Injection:
-        Fixed externally-controlled format string in error logging
-        Uses parameterized logging to prevent injection attacks
+        Fixed 2 externally-controlled format strings in error logging
+        backend/src/jellyfin.ts:97 (getItems libraryId)
+        backend/src/jellyfin.ts:133 (getUserHistory userId)
+        Uses parameterized logging (%s placeholders) to prevent injection attacks
 
     Sensitive Data Logging:
         Removed all API key logging (even masked) from gemini.ts and config.ts
