@@ -96,7 +96,7 @@ export class JellyfinService {
 
         } catch (error) {
             const err: any = error;
-            console.error(`Error fetching items from library ${libraryId}:`, err?.response?.status, err?.response?.data ?? err?.message ?? err);
+            console.error('Error fetching items from library %s: status=%s', libraryId, err?.response?.status, err?.response?.data ?? err?.message ?? err);
             throw error;
         }
     }
