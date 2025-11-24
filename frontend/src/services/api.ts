@@ -1,10 +1,10 @@
 import axios from 'axios';
 import type { JellyfinItem, JellyfinLibrary } from '../types';
 
-// HARDCODE: Always use relative path.
+// HARDCODE: Always use relative path /api
 // This ensures requests go to the current origin + /api
 // Docker/Nginx (or Vite proxy) will handle routing to the backend.
-const BASE_URL = '';
+const BASE_URL = '/api';
 
 const apiClient = axios.create({
     baseURL: BASE_URL,
