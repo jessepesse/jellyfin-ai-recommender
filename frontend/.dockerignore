@@ -1,0 +1,69 @@
+# Node dependencies (will be installed in container)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Build outputs (will be built in container)
+dist
+dist-ssr
+build
+*.local
+*.tsbuildinfo
+
+# Development files
+.env
+.env.*
+.env.local
+.env.production
+.env.test
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Editor
+.vscode
+!.vscode/extensions.json
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Testing
+coverage
+.nyc_output
+
+# Documentation
+README.md
+CHANGELOG.md
+TODO.md
+*.md
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.circleci
+
+# Logs
+logs
+*.log
+
+# Development images
+public/dev-*
+images/
