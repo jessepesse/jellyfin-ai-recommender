@@ -20,15 +20,17 @@ Critical security improvements and vulnerability fixes identified by GitHub Code
         Blocks link-local addresses (169.254.0.0/16)
         Blocks non-HTTP protocols
         Fixed CRITICAL vulnerability in getBaseUrl() - was returning unsanitized URLs
-        Fixed 13+ locations across all external HTTP requests:
-          - jellyfin.ts: getBaseUrl() now validates all URLs from config/env (CRITICAL FIX)
+        Fixed CRITICAL vulnerability in ConfigService.saveConfig() - was storing unvalidated URLs
+        Fixed 14+ locations with defense-in-depth (write-time, read-time, use-time validation):
+          - config.ts: saveConfig() now validates URLs BEFORE saving to database (CRITICAL FIX)
+          - jellyfin.ts: getBaseUrl() validates all URLs from config/env (CRITICAL FIX)
           - 6 axios.get calls in jellyfin.ts (getLibraries, getItems, getUserHistory, getOwnedIds)
           - 2 verification endpoints in routes/api.ts (Jellyfin, Jellyseerr)
           - 1 axios.post in authService.ts (Jellyfin authentication)
           - 1 axios.create in jellyseerr.ts (Jellyseerr API client with validateBaseUrl)
           - 1 posterUrl construction in routes/api.ts (JELLYSEERR_URL environment variable)
           - 2 URL construction functions in jellyseerr.ts (constructPosterUrl, constructBackdropUrl)
-        Applied to all external HTTP requests and URL constructions (Jellyfin, Jellyseerr)
+        Applied defense-in-depth: validation at entry point (database writes), storage reads, and HTTP usage
 
     ReDoS Prevention:
         Fixed 2 polynomial regex complexity vulnerabilities
