@@ -142,7 +142,7 @@ const SettingsView: React.FC = () => {
       </div>
 
       <GlassCard>
-        <h3 className="text-lg font-semibold mb-4 text-slate-300">Legacy database.json Import</h3>
+        <h3 className="text-lg font-semibold mb-4 text-slate-300">Legacy & New database.json Import</h3>
         
         {/* File Upload Zone */}
         {!selectedFile ? (
@@ -160,7 +160,7 @@ const SettingsView: React.FC = () => {
           >
             <UploadCloud className="w-16 h-16 text-slate-500 mb-4" />
             <p className="text-slate-300 font-medium mb-2">
-              Click to upload database.json
+              Click to upload a database.json (legacy or new)
             </p>
             <p className="text-sm text-slate-500">
               or drag and drop your file here
