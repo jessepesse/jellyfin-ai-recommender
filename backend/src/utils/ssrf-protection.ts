@@ -26,7 +26,15 @@ export function sanitizeUrl(url?: string): string | undefined {
     if (!url || url === 'none' || url.length === 0) return undefined;
     
     try {
-        const trimmed = url.trim().replace(/\/+$/, '').replace(/#.*$/, '');
+        // Remove trailing slashes and fragments safely (avoid ReDoS)
+        let trimmed = url.trim();
+        while (trimmed.endsWith('/')) {
+            trimmed = trimmed.slice(0, -1);
+        }
+        const hashIndex = trimmed.indexOf('#');
+        if (hashIndex !== -1) {
+            trimmed = trimmed.slice(0, hashIndex);
+        }
         const parsed = new URL(trimmed);
         
         // Only allow http/https protocols
