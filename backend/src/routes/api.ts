@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { Recommender } from '../recommender';
 import { JellyfinService } from '../jellyfin';
 import { JellyfinItem, JellyfinAuthResponse, LoginResponse } from '../types'; // Updated import
@@ -13,6 +13,13 @@ import { exportUserData } from '../services/export';
 import axios from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthService } from '../authService';
+import { 
+  validateUserAction, 
+  validateRecommendationRequest, 
+  validateJellyfinSync,
+  validateConfigUpdate,
+  validateMediaRequest
+} from '../middleware/validators';
 
 const router = Router();
 // Simple in-memory buffer cache for recommendation buffers (per user+type+genre)
@@ -411,7 +418,7 @@ router.get('/recommendations', async (req, res) => {
 });
 
 // Actions: watched / watchlist / block
-router.post('/actions/watched', async (req, res) => {
+router.post('/actions/watched', validateUserAction, async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
@@ -429,7 +436,7 @@ router.post('/actions/watched', async (req, res) => {
     }
 });
 
-router.post('/actions/watchlist', async (req, res) => {
+router.post('/actions/watchlist', validateUserAction, async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
@@ -466,7 +473,7 @@ router.post('/actions/watchlist/remove', async (req, res) => {
     }
 });
 
-router.post('/actions/block', async (req, res) => {
+router.post('/actions/block', validateUserAction, async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
@@ -485,7 +492,7 @@ router.post('/actions/block', async (req, res) => {
 });
 
 // Jellyseerr request
-router.post('/jellyseerr/request', async (req, res) => {
+router.post('/jellyseerr/request', validateMediaRequest, async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const payload = req.body;
@@ -701,7 +708,7 @@ router.get('/system/config-editor', async (req, res) => {
 });
 
 // PUT /api/system/config-editor - Update config from Settings UI
-router.put('/system/config-editor', async (req, res) => {
+router.put('/system/config-editor', validateConfigUpdate, async (req: Request, res: Response) => {
     try {
         const payload = req.body || {};
         
@@ -801,7 +808,7 @@ router.get('/settings/export', async (req, res) => {
 });
 
 // POST /api/sync/jellyfin - Sync watch history from Jellyfin to local database
-router.post('/sync/jellyfin', async (req, res) => {
+router.post('/sync/jellyfin', validateJellyfinSync, async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;

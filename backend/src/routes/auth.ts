@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthService, LoginSchema } from '../authService';
 import { LoginResponse } from '../types';
+import { validateLogin } from '../middleware/validators';
 
 const authRouter = Router();
 const authService = new AuthService();
 
 // POST /api/auth/login
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', validateLogin, async (req, res) => {
     try {
         // Zod validation
         const { username, password, serverUrl } = LoginSchema.parse(req.body);

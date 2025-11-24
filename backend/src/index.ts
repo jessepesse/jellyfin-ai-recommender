@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
 import apiRouter from './routes/api';
@@ -11,6 +13,20 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+// Security headers with Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for React
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"], // Allow images from HTTPS sources
+      connectSrc: ["'self'", "http://localhost:*"], // Allow API calls in dev
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow embedding in iframes if needed
+}));
 
 // Allow frontend on any localhost port for development flexibility
 const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174'];
@@ -33,6 +49,37 @@ app.use(cors({
   }, 
   credentials: true 
 }));
+
+// Rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per 15 minutes per IP
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 login attempts per 15 minutes
+  message: 'Too many login attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const recommendationLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10, // 10 recommendation requests per 5 minutes
+  message: 'Too many recommendation requests, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiters
+app.use('/api/auth', authLimiter);
+app.use('/api/recommendations', recommendationLimiter);
+app.use('/api', generalLimiter); // General limiter for all other endpoints
+
 app.use(express.json({ limit: '50mb' })); // Increased limit for large backup imports
 
 // Lightweight health endpoint (no DB access) for Docker and load-balancers
