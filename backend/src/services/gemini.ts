@@ -18,12 +18,8 @@ async function buildClientAndModel(): Promise<{ client: any; model: any; modelNa
     throw new Error('Gemini API key not configured');
   } else {
     try {
-      const mask = (k: string) => {
-        if (!k) return '***';
-        if (k.length <= 8) return '****';
-        return `${k.slice(0,4)}...${k.slice(-4)}`;
-      };
-      console.info(`Gemini key source: ${source}; key (masked): ${mask(apiKey)}`);
+      // Log source only, never log API keys (even masked) to prevent timing attacks
+      console.info(`Gemini key source: ${source}`);
     } catch (e) {
       // best-effort logging only
     }

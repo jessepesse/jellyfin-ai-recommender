@@ -134,7 +134,8 @@ export class JellyfinService {
                 });
             } catch (error) {
                 const err: any = error;
-                console.error('Error fetching user history from Jellyfin:', err?.response?.status, err?.response?.data ?? err?.message ?? err);
+                // Use parameterized logging to prevent format string injection
+                console.error('Error fetching user history from Jellyfin: status=%s', err?.response?.status, err?.response?.data ?? err?.message ?? err);
                 return [];
             }
         }

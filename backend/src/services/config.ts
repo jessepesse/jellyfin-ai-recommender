@@ -64,12 +64,8 @@ class ConfigService {
     try {
       const savedKey = (payload && payload.geminiApiKey) ? String(payload.geminiApiKey) : (result && result.geminiApiKey ? String(result.geminiApiKey) : null);
       if (savedKey) {
-        const mask = (k: string) => {
-          if (!k) return '***';
-          if (k.length <= 8) return '****';
-          return `${k.slice(0,4)}...${k.slice(-4)}`;
-        };
-        console.info(`SystemConfig: Gemini API key saved (masked): ${mask(savedKey)} — will be used at runtime.`);
+        // Never log API keys (even masked) to prevent timing attacks and log analysis
+        console.info('SystemConfig: Gemini API key saved — will be used at runtime.');
       }
     } catch (e) {
       // Never throw because of logging; best-effort only
