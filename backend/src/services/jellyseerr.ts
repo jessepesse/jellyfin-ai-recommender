@@ -62,16 +62,18 @@ function strictEncode(str: string): string {
 async function constructPosterUrl(partialPath: string | undefined) {
   if (!partialPath) return undefined;
   const cfg = await ConfigService.getConfig();
-  const baseUrl = (cfg.jellyseerrUrl || process.env.JELLYSEERR_URL || '').replace(/\/$/, '');
-  if (!baseUrl) return undefined;
+  const rawBase = cfg.jellyseerrUrl || process.env.JELLYSEERR_URL || '';
+  // SSRF Protection: validate base URL
+  const baseUrl = validateBaseUrl(rawBase);
   return `${baseUrl}/imageproxy/tmdb/t/p/w300_and_h450_face${partialPath}`;
 }
 
 async function constructBackdropUrl(partialPath: string | undefined) {
   if (!partialPath) return undefined;
   const cfg = await ConfigService.getConfig();
-  const baseUrl = (cfg.jellyseerrUrl || process.env.JELLYSEERR_URL || '').replace(/\/$/, '');
-  if (!baseUrl) return undefined;
+  const rawBase = cfg.jellyseerrUrl || process.env.JELLYSEERR_URL || '';
+  // SSRF Protection: validate base URL
+  const baseUrl = validateBaseUrl(rawBase);
   return `${baseUrl}/imageproxy/tmdb/t/p/w1280_and_h720_multi_faces${partialPath}`;
 }
 

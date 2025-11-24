@@ -13,22 +13,16 @@ export class JellyfinService {
         try {
             const cfg = await ConfigService.getConfig();
             const raw = cfg && cfg.jellyfinUrl ? String(cfg.jellyfinUrl) : (process.env.JELLYFIN_URL || '');
-            let clean = raw ? String(raw).trim() : '';
-            // Remove trailing slashes safely (avoid ReDoS)
-            while (clean.endsWith('/')) {
-                clean = clean.slice(0, -1);
-            }
-            if (!clean) throw new Error('Jellyfin URL not configured');
-            return clean;
+            // SSRF Protection: validate URL before use
+            const validated = sanitizeUrl(raw);
+            if (!validated) throw new Error('Jellyfin URL not configured or invalid');
+            return validated;
         } catch (e) {
             const raw = process.env.JELLYFIN_URL || '';
-            let clean = raw ? String(raw).trim() : '';
-            // Remove trailing slashes safely (avoid ReDoS)
-            while (clean.endsWith('/')) {
-                clean = clean.slice(0, -1);
-            }
-            if (!clean) throw new Error('Jellyfin URL not configured');
-            return clean;
+            // SSRF Protection: validate URL before use
+            const validated = sanitizeUrl(raw);
+            if (!validated) throw new Error('Jellyfin URL not configured or invalid');
+            return validated;
         }
     }
 
