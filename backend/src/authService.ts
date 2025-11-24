@@ -3,6 +3,7 @@ import { z } from 'zod';
 import axios from 'axios';
 import ConfigService from './services/config';
 import { JellyfinAuthResponse } from './types';
+import { sanitizeUrl, validateRequestUrl } from './utils/ssrf-protection';
 
 // Zod schema for login request body
 export const LoginSchema = z.object({
@@ -14,13 +15,10 @@ export const LoginSchema = z.object({
 export class AuthService {
     private static cleanBaseUrl(inputUrl: string): string {
         if (!inputUrl) return '';
-        let clean = String(inputUrl).trim();
-        // Remove hash fragments and anything after (e.g. #/home)
-        clean = clean.replace(/#.*$/, '');
+        const sanitized = sanitizeUrl(inputUrl);
+        if (!sanitized) return '';
         // Remove /web and anything after it (common client path)
-        clean = clean.split('/web')[0];
-        // Remove trailing slashes
-        clean = clean.replace(/\/+$/, '');
+        const clean = sanitized.split('/web')[0];
         return clean;
     }
     public async authenticateUser(username: string, password: string, serverUrl?: string): Promise<JellyfinAuthResponse> {
@@ -48,7 +46,7 @@ export class AuthService {
         let lastError: any = null;
 
         for (const candidate of candidates) {
-            const endpoint = `${candidate}/Users/AuthenticateByName`;
+            const endpoint = validateRequestUrl(`${candidate}/Users/AuthenticateByName`);
             try {
                 console.debug(`[Auth] Attempting login to: ${endpoint}`);
                 const response = await axios.post<JellyfinAuthResponse>(endpoint, authBody, { headers: authHeaders, timeout: 10000 });
