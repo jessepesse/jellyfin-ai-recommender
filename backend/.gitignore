@@ -7,10 +7,11 @@ pnpm-debug.log*
 
 # Environment variables - CRITICAL: Never commit secrets
 .env
-.env.*
 .env.local
 .env.production
 .env.test
+# BUT allow .env.example for documentation
+!.env.example
 
 # Build outputs
 dist/
