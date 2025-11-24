@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.1] - 2025-11-24
+
+🔒 Security Hardening Release
+
+Critical security improvements and vulnerability fixes identified by GitHub CodeQL security scanning.
+
+🛡️ Security Fixes
+
+    Comprehensive SSRF Protection:
+        Created centralized URL validation utility (backend/src/utils/ssrf-protection.ts)
+        Blocks cloud metadata endpoints (AWS, GCP, Azure, Alibaba Cloud)
+        Blocks link-local addresses (169.254.0.0/16)
+        Blocks non-HTTP protocols
+        Applied to all external HTTP requests (Jellyfin, Jellyseerr verification)
+
+    ReDoS Prevention:
+        Fixed polynomial regex complexity vulnerabilities
+        Replaced ambiguous /\/+$/ patterns with safe string operations
+        Prevents exponential backtracking on malicious input strings
+
+    Format String Injection:
+        Fixed externally-controlled format string in error logging
+        Uses parameterized logging to prevent injection attacks
+
+    Sensitive Data Logging:
+        Removed all API key logging (even masked) from gemini.ts and config.ts
+        Prevents timing attacks and log analysis vulnerabilities
+
+    Security Headers (Helmet):
+        Added XSS protection headers
+        Added clickjacking protection (X-Frame-Options)
+        Added MIME type sniffing protection
+        Content Security Policy configured for React
+
+    Rate Limiting:
+        Authentication: 5 attempts per 15 minutes
+        Recommendations: 10 requests per 5 minutes
+        General API: 100 requests per 15 minutes
+
+    Input Validation (Express-Validator):
+        Centralized validation middleware for all critical endpoints
+        Validates user actions (watched, watchlist, block)
+        Validates media requests, config updates, Jellyfin sync
+
+🐛 Bug Fixes
+
+    Restored Missing Files:
+        backend/Dockerfile (multi-stage Node.js build)
+        backend/.dockerignore (prevents secrets in images)
+        backend/.gitignore (prevents committing secrets)
+        backend/nodemon.json (development server config)
+
+    Removed .vite cache from git tracking
+    Fixed .env file handling (now managed via setup wizard only)
+
+📦 Dependencies
+
+    Added: helmet, express-rate-limit, express-validator
+    Backend lockfile generated (0 npm vulnerabilities)
+    Frontend updated: esbuild and vite to latest (fixed moderate vulnerability)
+
+Tag: v2.0.1 | Date: 2025-11-24 | Type: Security Patch
+
 [2.0.0] - 2025-11-24
 
 🚀 The Great Migration Release
