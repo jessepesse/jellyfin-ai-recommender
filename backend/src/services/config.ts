@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { sanitizeUrl } from '../utils/ssrf-protection';
 
 const prisma = new PrismaClient();
 
@@ -43,10 +44,22 @@ class ConfigService {
   }
 
   public static async saveConfig(payload: Partial<SystemConfig>) {
+    // SSRF Protection: Validate URLs before saving to database
+    const validatedJellyfinUrl = payload.jellyfinUrl ? sanitizeUrl(payload.jellyfinUrl) : undefined;
+    const validatedJellyseerrUrl = payload.jellyseerrUrl ? sanitizeUrl(payload.jellyseerrUrl) : undefined;
+    
+    // Throw error if URL validation fails
+    if (payload.jellyfinUrl && !validatedJellyfinUrl) {
+      throw new Error('Invalid or blocked Jellyfin URL provided');
+    }
+    if (payload.jellyseerrUrl && !validatedJellyseerrUrl) {
+      throw new Error('Invalid or blocked Jellyseerr URL provided');
+    }
+    
     // Upsert singleton row with id=1
     const data: any = {
-      jellyfinUrl: payload.jellyfinUrl ?? undefined,
-      jellyseerrUrl: payload.jellyseerrUrl ?? undefined,
+      jellyfinUrl: validatedJellyfinUrl ?? undefined,
+      jellyseerrUrl: validatedJellyseerrUrl ?? undefined,
       jellyseerrApiKey: payload.jellyseerrApiKey ?? undefined,
       geminiApiKey: payload.geminiApiKey ?? undefined,
       geminiModel: payload.geminiModel ?? undefined,
