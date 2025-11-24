@@ -29,11 +29,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Vaihe 1.5: Extract version from app.py
-      - name: Extract version from app.py
+      # Vaihe 1.5: Extract version from package.json
+      - name: Extract version from package.json
         id: version
         run: |
-          VERSION=$(grep "APP_VERSION = " app.py | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(jq -r '.version' package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version extracted: $VERSION"
 
@@ -46,23 +46,42 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Vaihe 3: Rakennetaan ja työnnetään Docker-image rekisteriin
-      # Pushaa sekä 'latest' että versionäkijä (esim. v0.2.5-alpha)
-      - name: Build and push Docker image
+      # Vaihe 3: Build backend Docker image
+      - name: Build and push backend Docker image
         uses: docker/build-push-action@v5
         with:
-          # Kerrotaan, että haluamme myös työntää imagen rekisteriin
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
-          # Määritellään imagen nimet ja tagit (molemmat: latest ja versio)
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}-backend:latest
+            ghcr.io/${{ github.repository }}-backend:${{ steps.version.outputs.version }}
           labels: |
-            org.opencontainers.image.title=Jellyfin AI Recommender
-            org.opencontainers.image.description=AI-powered movie and TV show recommendations using Google Gemini, integrated with Jellyfin and Jellyseerr
+            org.opencontainers.image.title=Jellyfin AI Recommender - Backend
+            org.opencontainers.image.description=Backend API service for Jellyfin AI Recommender (Node.js + Express + Prisma)
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.authors=jessepesse
             org.opencontainers.image.url=https://github.com/jessepesse/jellyfin-ai-recommender
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=AGPL-3.0
+
+      # Vaihe 4: Build frontend Docker image
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-frontend:latest
+            ghcr.io/${{ github.repository }}-frontend:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=Jellyfin AI Recommender - Frontend
+            org.opencontainers.image.description=Frontend web application for Jellyfin AI Recommender (React + Vite + Tailwind CSS)
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.authors=jessepesse
+            org.opencontainers.image.url=https://github.com/jessepesse/jellyfin-ai-recommender
+            org.opencontainers.image.licenses=AGPL-3.0
