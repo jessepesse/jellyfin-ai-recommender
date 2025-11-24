@@ -65,7 +65,9 @@ function toFrontendItem(item: any) {
 router.get('/debug/jellyfin', async (req, res) => {
     const accessToken = req.headers['x-access-token'] as string;
     const userId = req.headers['x-user-id'] as string;
-    const jellyfinServer = req.headers['x-jellyfin-url'] as string | undefined;
+    // SSRF Protection: Validate user-controlled URL from header at entry point
+    const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
+    const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 
     if (!accessToken || !userId) {
         return res.status(401).json({ error: 'Unauthorized: Access token or User ID missing' });
@@ -102,7 +104,9 @@ router.get('/debug/jellyfin', async (req, res) => {
 // Endpoint to get user views (libraries)
 router.get('/libraries', async (req, res) => {
     const accessToken = req.headers['x-access-token'] as string; // Assuming token in header
-    const jellyfinServer = req.headers['x-jellyfin-url'] as string | undefined;
+    // SSRF Protection: Validate user-controlled URL from header at entry point
+    const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
+    const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 
     if (!accessToken) {
         return res.status(401).json({ error: 'Unauthorized: Access token missing' });
@@ -122,7 +126,9 @@ router.get('/items', async (req, res) => {
     const { libraryId, searchTerm } = req.query;
     const accessToken = req.headers['x-access-token'] as string;
     const userId = req.headers['x-user-id'] as string;
-    const jellyfinServer = req.headers['x-jellyfin-url'] as string | undefined;
+    // SSRF Protection: Validate user-controlled URL from header at entry point
+    const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
+    const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 
     if (!accessToken || !userId) {
         return res.status(401).json({ error: 'Unauthorized: Access token or User ID missing' });
@@ -199,7 +205,9 @@ router.get('/recommendations', async (req, res) => {
     const accessToken = req.headers['x-access-token'] as string;
     const userId = req.headers['x-user-id'] as string;
     const userName = req.headers['x-user-name'] as string;
-    const jellyfinServer = req.headers['x-jellyfin-url'] as string | undefined;
+    // SSRF Protection: Validate user-controlled URL from header at entry point
+    const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
+    const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 
     // Log incoming auth headers (masked) to help debug 401s during development
     try {
@@ -804,7 +812,9 @@ router.post('/sync/jellyfin', validateJellyfinSync, async (req: Request, res: Re
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
         const accessToken = req.headers['x-access-token'] as string;
-        const jellyfinUrl = req.headers['x-jellyfin-url'] as string | undefined;
+        // SSRF Protection: Validate user-controlled URL from header at entry point
+        const jellyfinUrlRaw = req.headers['x-jellyfin-url'] as string | undefined;
+        const jellyfinUrl = jellyfinUrlRaw ? sanitizeUrl(jellyfinUrlRaw) : undefined;
 
         if (!userId || !userName || !accessToken) {
             return res.status(401).json({ error: 'Unauthorized - Missing auth headers' });
