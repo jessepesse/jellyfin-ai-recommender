@@ -83,7 +83,7 @@ This repo includes a production-ready `docker-compose.prod.yml`. It sets up the 
 docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
-**Access:** The app is available at `http://localhost:3000` (default port).
+**Access:** The app is available at `http://localhost:5173` (frontend) and the backend API at `http://localhost:3001`.
 
     Persisted Data: The SQLite database is stored in a ./data folder in the project root.
 
