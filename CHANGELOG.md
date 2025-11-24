@@ -19,12 +19,15 @@ Critical security improvements and vulnerability fixes identified by GitHub Code
         Blocks cloud metadata endpoints (AWS, GCP, Azure, Alibaba Cloud)
         Blocks link-local addresses (169.254.0.0/16)
         Blocks non-HTTP protocols
-        Fixed 11 locations across all external HTTP requests:
+        Fixed CRITICAL vulnerability in getBaseUrl() - was returning unsanitized URLs
+        Fixed 13+ locations across all external HTTP requests:
+          - jellyfin.ts: getBaseUrl() now validates all URLs from config/env (CRITICAL FIX)
           - 6 axios.get calls in jellyfin.ts (getLibraries, getItems, getUserHistory, getOwnedIds)
           - 2 verification endpoints in routes/api.ts (Jellyfin, Jellyseerr)
           - 1 axios.post in authService.ts (Jellyfin authentication)
           - 1 axios.create in jellyseerr.ts (Jellyseerr API client with validateBaseUrl)
           - 1 posterUrl construction in routes/api.ts (JELLYSEERR_URL environment variable)
+          - 2 URL construction functions in jellyseerr.ts (constructPosterUrl, constructBackdropUrl)
         Applied to all external HTTP requests and URL constructions (Jellyfin, Jellyseerr)
 
     ReDoS Prevention:
