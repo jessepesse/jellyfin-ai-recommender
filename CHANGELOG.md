@@ -70,6 +70,21 @@ Critical security improvements and vulnerability fixes identified by GitHub Code
 
 🐛 Bug Fixes
 
+    Fixed Network Error on Remote Deployments (BREAKING FIX):
+        Removed hardcoded http://localhost:3001 references from frontend
+        Frontend now uses relative /api paths (works on any server IP/domain)
+        Added Vite proxy configuration for development (/api → http://localhost:3001)
+        Updated AuthContext.tsx and api.ts to use relative paths
+        Fixed "Network Error" when deploying to ZimaOS, NAS, or remote servers
+        No rebuild required when changing server IP/domain
+        frontend/.env now optional (VITE_BACKEND_URL only for custom overrides)
+
+    Fixed Docker Database Volume Mount:
+        Changed volume mount from file (./data/dev.db) to directory (./data:/app/prisma)
+        Allows Prisma to create database file automatically on first run
+        Fixed 500 errors in Setup Wizard caused by empty directory mount
+        Added data/ to .gitignore for persistent storage
+
     Fixed DATABASE_URL Missing Error:
         Created backend/.env.example with required DATABASE_URL configuration
         Updated backend/.gitignore to allow .env.example while still ignoring .env
