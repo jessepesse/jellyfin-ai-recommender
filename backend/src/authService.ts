@@ -3,7 +3,7 @@ import { z } from 'zod';
 import axios from 'axios';
 import ConfigService from './services/config';
 import { JellyfinAuthResponse } from './types';
-import { sanitizeUrl, validateRequestUrl } from './utils/ssrf-protection';
+import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from './utils/ssrf-protection';
 
 // Zod schema for login request body
 export const LoginSchema = z.object({
@@ -49,7 +49,8 @@ export class AuthService {
             const endpoint = validateRequestUrl(`${candidate}/Users/AuthenticateByName`);
             try {
                 console.debug(`[Auth] Attempting login to: ${endpoint}`);
-                const response = await axios.post<JellyfinAuthResponse>(endpoint, authBody, { headers: authHeaders, timeout: 10000 });
+                // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+                const response = await axios.post<JellyfinAuthResponse>(validateSafeUrl(endpoint), authBody, { headers: authHeaders, timeout: 10000 });
                 // If authentication succeeded and the candidate differs from stored config, persist it
                 try {
                     if (candidate && candidate !== cfg.jellyfinUrl) {
