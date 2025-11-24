@@ -1,12 +1,43 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
+import ConfigService from './config';
 
-// Hardcoded model name (clean ID, no "models/" prefix)
+// Default model with thinking support enabled
+// Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
+// Thinking dynamically adjusts based on prompt complexity
 const modelName = 'gemini-2.5-flash-lite';
-console.log('⚠️ USING HARDCODED MODEL:', modelName);
+console.debug('Using Gemini model:', modelName);
 
-// Initialize SDK client with API key from env (constructor accepts api key string)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// Construct SDK client at runtime and return both the raw client, the generative model instance, and the resolved model name
+async function buildClientAndModel(): Promise<{ client: any; model: any; modelName: string }> {
+  const cfg = await ConfigService.getConfig();
+  const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
+  const apiKey = rawKey ? rawKey.trim() : '';
+  const source = (cfg && cfg.geminiApiKey) ? 'DB' : (process.env.GEMINI_API_KEY ? 'ENV' : 'NONE');
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured');
+  } else {
+    try {
+      const mask = (k: string) => {
+        if (!k) return '***';
+        if (k.length <= 8) return '****';
+        return `${k.slice(0,4)}...${k.slice(-4)}`;
+      };
+      console.info(`Gemini key source: ${source}; key (masked): ${mask(apiKey)}`);
+    } catch (e) {
+      // best-effort logging only
+    }
+  }
+
+  // Instantiate SDK client (pass API key as string directly)
+  const client = new GoogleGenerativeAI(apiKey);
+
+  // Obtain the model object from the client
+  const modelNameFromCfg = cfg && cfg.geminiModel ? String(cfg.geminiModel).trim() : modelName;
+  const model = client.getGenerativeModel({ model: modelNameFromCfg });
+  
+  return { client, model, modelName: modelNameFromCfg };
+}
 
 // Zod schema for validated AI output
 // NOTE: Gemini must NOT return any IDs. We only accept title, media_type, release_year and reason.
@@ -20,102 +51,119 @@ const RecommendationSchema = z.array(z.object({
 
 export class GeminiService {
   // Build prompt similar to legacy implementation
+  /**
+   * Formats a list of items into a compact table:
+   * | Title | Year |
+   */
+  private static formatTable(list: any[]): string {
+    if (!list || list.length === 0) return '(none)';
 
-  private static buildPrompt(username: string, userData: any, candidates: any[], filters?: { type?: string; genre?: string }): string {
-    // Prefer Jellyfin history if available (contains titles). Otherwise fall back to empty lists.
-    const history = Array.isArray(userData?.jellyfin_history) ? userData.jellyfin_history : [];
-    const watched = history.map((m: any) => `${m.Name || m.title || m.name || '(unknown)'} (${m.MediaType || m.media_type || 'movie'})`).join('\n');
+    const uniqueEntries = new Set<string>();
+    const rows: string[] = [];
 
-    // userData may contain only tmdb ID arrays (watchedIds/watchlistIds/blockedIds). We can't resolve titles here,
-    // so include counts to give Gemini context without exposing raw IDs.
-    const watchlistCount = Array.isArray(userData?.watchlistIds) ? userData.watchlistIds.length : 0;
-    const blacklistCount = Array.isArray(userData?.blockedIds) ? userData.blockedIds.length : 0;
+    list.forEach(item => {
+      let title = '';
+      let year = '';
 
-    const watchlist = watchlistCount ? `${watchlistCount} items in watchlist` : '(none)';
-    const blacklist = blacklistCount ? `${blacklistCount} items blacklisted` : '(none)';
-
-    // Exclude any candidates that are already watched, in watchlist, or blocked according to userData IDs.
-    const watchedIds = Array.isArray(userData?.watchedIds) ? new Set(userData.watchedIds.map((i: any) => Number(i))) : new Set<number>();
-    const watchlistIds = Array.isArray(userData?.watchlistIds) ? new Set(userData.watchlistIds.map((i: any) => Number(i))) : new Set<number>();
-    const blockedIds = Array.isArray(userData?.blockedIds) ? new Set(userData.blockedIds.map((i: any) => Number(i))) : new Set<number>();
-
-    const normalize = (s: string) => (s || '').toString().toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\bthe |\ba /g, '').trim();
-    const watchedTitlesNormalized = new Set(history.map((m: any) => normalize(m.Name || m.title || m.name || '')).filter(Boolean));
-
-    const filteredCandidates = (candidates || []).filter((m: any) => {
-      const tmdb = Number((m as any).tmdb_id ?? (m as any).tmdbId ?? 0) || 0;
-      const titleNorm = normalize(m?.Name ?? m?.title ?? m?.name ?? '');
-      // Exclude by trusted TMDB id
-      if (tmdb) {
-        if (watchedIds.has(tmdb) || watchlistIds.has(tmdb) || blockedIds.has(tmdb)) return false;
+      if (typeof item === 'string') {
+        title = item;
+      } else {
+        title = item.title || item.Name || item.name || '';
+        year = item.release_year || item.ProductionYear || item.releaseDate || item.year || '';
+        if (typeof year !== 'string') year = String(year || '');
       }
-      // Exclude by title match to user's history/watchlist titles
-      if (titleNorm && watchedTitlesNormalized.has(titleNorm)) return false;
-      return true;
+
+      title = String(title).replace(/\|/g, '').trim();
+      year = (year || '').toString().substring(0, 4);
+
+      if (title) {
+        const entryKey = `${title.toLowerCase()}:${year}`;
+        if (!uniqueEntries.has(entryKey)) {
+          uniqueEntries.add(entryKey);
+          rows.push(`| ${title} | ${year} |`);
+        }
+      }
     });
 
-    const candidateList = filteredCandidates.slice(0, 100).map(m => `${m.Name || m.title || m.name || 'Unknown'} (${m.MediaType || m.media_type || 'movie'})`).join('\n');
-
-    const system = `You are an assistant that suggests movies and TV series for a user. Respond ONLY with a JSON array. For each recommendation, include exactly: {"title": string, "media_type": "movie"|"tv", "release_year": number|string, "reason": string}. Do NOT include any TMDB IDs or other identifiers. Do not include any extra text.`;
-
-    const filterNotes: string[] = [];
-    if (filters?.type) filterNotes.push(`Only recommend content of type: ${filters.type}`);
-    if (filters?.genre) filterNotes.push(`Prefer only the following genres: ${filters.genre}`);
-
-    // Build explicit exclusion lists (titles) from explicit Jellyfin history when available.
-    const watchedTitles = history.map((m: any) => (m.Name || m.title || m.name || '').trim()).filter(Boolean);
-
-    const prompt = [
-      system,
-      `User: ${username}`,
-      `Watched (most relevant first):\n${watched || '(none)'} `,
-      `Watchlist:\n${watchlist} `,
-      `Do not recommend (blacklist):\n${blacklist} `,
-      `Candidate pool (only consider these):\n${candidateList || '(none)'} `,
-      // Also explicitly tell Gemini to never recommend titles we already know the user has seen or listed.
-      watchedTitles.length ? `Do NOT recommend these exact titles (user has watched or already listed):\n${watchedTitles.slice(0,50).join('\n')}` : '',
-      `Return up to 10 recommendations in JSON. Filter out anything already watched or blacklisted. Prefer high-rated, recent, and genre-similar items.`,
-      ...(filterNotes.length ? [`Constraints: ${filterNotes.join('; ')}`] : []),
-    ].join('\n\n');
-
-    return prompt;
+    return rows.join('\n');
   }
 
-  public static async getRecommendations(username: string, userData: any, candidates: any[], filters?: { type?: string; genre?: string }): Promise<any[]> {
-    const prompt = this.buildPrompt(username, userData, candidates, filters);
+  private static buildPrompt(username: string, userData: any, likedItems: any[], dislikedItems: any[], filters?: { type?: string; genre?: string }): string {
+    // Backwards-compatible buildPrompt that can accept a precomputed tasteProfile and an exclusionTable
+    return (username && userData) ? this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters) : '';
+  }
+
+  // New prompt builder that prefers a provided taste profile and an explicit exclusion table
+  private static buildPromptWithProfile(username: string, userData: any, likedItems: any[], dislikedItems: any[], filters?: { type?: string; genre?: string }, tasteProfile?: string, exclusionTable?: string) {
+    const mediaType = filters?.type ? String(filters.type).toUpperCase() : 'MOVIE OR TV SERIES';
+    const genreNote = filters?.genre ? `Focus strictly on the genre: "${filters.genre}".` : 'Recommend diverse genres that match the user\'s taste.';
+
+    const hasProfile = !!tasteProfile && String(tasteProfile).trim().length > 10;
+    const fallbackProfile = `No explicit taste profile is available for this user.\nFor the purposes of recommendation, assume a broadly-curated, mainstream taste that prefers well-rated, accessible titles across popular genres (drama, action, comedy, thriller, family).\nProvide diverse suggestions (mix of recent and classic titles) that would suit a general audience.\nEven if user history is empty, you MUST provide recommendations immediately. Do not ask clarifying questions.`;
+    const profileSection = hasProfile ? tasteProfile as string : `${fallbackProfile}\n\nSeed Titles:\n${this.formatTable(Array.isArray(likedItems) ? likedItems.slice(0, 100) : [])}`;
+    const exclusionSection = exclusionTable && exclusionTable.length > 0 ? exclusionTable : this.formatTable(Array.isArray(dislikedItems) ? dislikedItems : []);
+
+    return `\n### 🧠 USER TASTE ANALYSIS\n${profileSection}\n\n### ⛔ EXCLUSION DATABASE (DO NOT SUGGEST THESE ITEMS)\n| Title | Year |\n|---|---|\n${exclusionSection}\n\n### TASK\nBased on the "Taste Analysis", recommend exactly 30 NEW items.\nStrictly avoid items in the "Exclusion Database".\n- TYPE: ${mediaType}\n- GENRE: ${genreNote}\n\n### IMPORTANT INSTRUCTIONS\n- Even if the user has no history or the profile is empty, you MUST produce recommendations immediately. Do not ask clarifying questions or for additional information.\n- DO NOT output any external IDs (TMDB, IMDB, etc.). Only return titles, type, year, and a short reason.\n\n### OUTPUT FORMAT\nRespond ONLY with a JSON array of objects with keys: title, media_type (movie|tv), release_year (YYYY), reason.\n`;
+  }
+
+  // Summarize a user's taste profile using Gemini (compact text)
+  // Thinking is automatically enabled for 2.5+ and 3.0+ models
+  public static async summarizeProfile(username: string, seedItems: any[], type: 'movie' | 'tv'): Promise<string> {
+    try {
+      const { client: genAIClient, model, modelName: runtimeModelName } = await buildClientAndModel();
+      const titles = (seedItems || []).slice(0, 80).map((s: any) => typeof s === 'string' ? s : (s.title || s.Name || s.name || '')).filter(Boolean).slice(0, 80);
+      const prompt = `Summarize the user's ${type} taste in 2-3 concise bullet points based on these titles:\n${titles.join('\n')}`;
+      
+      // Use modern API with thinking support
+      const resp = await model.generateContent({ contents: prompt });
+      let text = '';
+      try {
+        const body = resp?.response;
+        if (body && typeof body.text === 'function') {
+          const maybe = body.text();
+          text = (maybe instanceof Promise) ? await maybe : maybe;
+        } else if (typeof resp?.response === 'string') {
+          text = resp.response;
+        } else {
+          text = String(resp);
+        }
+      } catch (e) {
+        text = String(resp);
+      }
+      return (text || '').trim().substring(0, 2000);
+    } catch (e) {
+      console.warn('summarizeProfile failed', e);
+      return '';
+    }
+  }
+
+  public static async getRecommendations(username: string, userData: any, likedItems: any[], dislikedItems: any[], filters?: { type?: string; genre?: string }, tasteProfile?: string, exclusionTable?: string): Promise<any[]> {
+    const prompt = this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters, tasteProfile, exclusionTable);
 
     try {
-      console.log('Attempting to call Gemini via official SDK with model:', modelName);
-      console.log('GEMINI_API_KEY present:', !!process.env.GEMINI_API_KEY);
+      console.debug('Attempting to call Gemini via official SDK with model:', modelName);
 
-      const model: any = genAI.getGenerativeModel({ model: modelName });
+      const { client: genAIClient, model, modelName: runtimeModelName } = await buildClientAndModel();
       // Ensure prompt is a string
       const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
 
-      // Prefer structured JSON response via zod->JSON Schema when available.
-      // This reduces parsing errors and enforces our expected schema on the model output.
+      // Use modern Gemini API with thinking support (for 2.5+ and 3.0+ models)
+      // Thinking is automatically enabled for supported models and adjusts dynamically based on prompt complexity
       let response: any;
       try {
         const { zodToJsonSchema } = await import('zod-to-json-schema');
         // Cast to any to avoid TypeScript incompatibilities between zod versions/types.
         const schema = (zodToJsonSchema as any)(RecommendationSchema as any);
-        // Try the higher-level API on the SDK if present (some SDK versions expose `models.generateContent`)
-        if ((genAI as any)?.models && typeof (genAI as any).models.generateContent === 'function') {
-          response = await (genAI as any).models.generateContent({
-            model: modelName,
-            contents: promptText,
-            config: { responseMimeType: 'application/json', responseJsonSchema: schema },
-          });
-        } else {
-          // Fall back to model instance method but pass a config object if it accepts one
-          // (older SDKs accept a plain string; we try an object and fall back if it errors)
-          try {
-            response = await model.generateContent({ contents: promptText, config: { responseMimeType: 'application/json', responseJsonSchema: schema } });
-          } catch (inner) {
-            // If the SDK doesn't support structured response, fall back to simple call
-            response = await model.generateContent(promptText);
+        
+        // Modern API call structure for thinking models
+        // Use model.generateContent with proper request format
+        response = await model.generateContent({
+          contents: promptText,
+          generationConfig: { 
+            responseMimeType: 'application/json', 
+            responseSchema: schema 
           }
-        }
+        });
       } catch (e) {
         // If zod-to-json-schema isn't available or something went wrong, fall back to existing behavior
         response = await model.generateContent(promptText);
@@ -179,7 +227,7 @@ export class GeminiService {
 
     // Fallback heuristic
     try {
-      const scored = (candidates || []).slice().sort((a: any, b: any) => (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0));
+      const scored = (likedItems || []).slice().sort((a: any, b: any) => (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0));
       return scored.slice(0, 10).map((s: any) => ({ title: s.Name || s.title || 'Unknown', media_type: s.MediaType || s.media_type || 'movie', tmdb_id: s.tmdb_id }));
     } catch (e) {
       console.error('Fallback recommender error:', e);

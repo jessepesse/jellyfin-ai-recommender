@@ -528,7 +528,7 @@ router.get('/system/setup-defaults', async (req, res) => {
             jellyseerrUrl: process.env.JELLYSEERR_URL || (dbCfg && dbCfg.jellyseerrUrl) || null,
             jellyseerrApiKey: process.env.JELLYSEERR_API_KEY || (dbCfg && dbCfg.jellyseerrApiKey) || null,
             geminiApiKey: process.env.GEMINI_API_KEY || (dbCfg && dbCfg.geminiApiKey) || null,
-            geminiModel: process.env.GEMINI_MODEL || (dbCfg && dbCfg.geminiModel) || 'gemini-2.5-flash',
+            geminiModel: process.env.GEMINI_MODEL || (dbCfg && dbCfg.geminiModel) || 'gemini-2.5-flash-lite',
         };
 
         res.json(defaults);

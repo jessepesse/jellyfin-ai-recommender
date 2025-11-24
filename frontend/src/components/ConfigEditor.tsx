@@ -210,8 +210,8 @@ const ConfigEditor: React.FC = () => {
           >
             <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (Recommended)</option>
             <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+            <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
           </select>
         </div>
       </div>
