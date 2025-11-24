@@ -70,6 +70,12 @@ Critical security improvements and vulnerability fixes identified by GitHub Code
 
 🐛 Bug Fixes
 
+    Fixed DATABASE_URL Missing Error:
+        Created backend/.env.example with required DATABASE_URL configuration
+        Updated backend/.gitignore to allow .env.example while still ignoring .env
+        Resolves PrismaClientInitializationError on startup
+        Users can now copy: cp backend/.env.example backend/.env
+
     Restored Missing Files:
         backend/Dockerfile (multi-stage Node.js build)
         backend/.dockerignore (prevents secrets in images)
