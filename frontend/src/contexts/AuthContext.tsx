@@ -48,9 +48,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (username: string, password: string, serverUrl?: string): Promise<boolean> => {
     try {
-      // Use VITE_BACKEND_URL from environment variables for the frontend
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-      const response = await axios.post(`${backendUrl}/api/auth/login`, {
+      // Use relative path /api (proxied by Vite in dev, Nginx in production)
+      // Or use VITE_BACKEND_URL if explicitly set for custom backend
+      const baseUrl = import.meta.env.VITE_BACKEND_URL 
+        ? import.meta.env.VITE_BACKEND_URL + '/api'
+        : '/api';
+      const response = await axios.post(`${baseUrl}/auth/login`, {
         username,
         password,
         serverUrl,

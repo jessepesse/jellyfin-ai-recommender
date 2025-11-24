@@ -1,8 +1,15 @@
 import axios from 'axios';
 import type { JellyfinItem, JellyfinLibrary } from '../types';
 
+// Use relative path for production (Nginx proxy) or VITE_BACKEND_URL for dev override
+// In production: Nginx proxies /api to backend container
+// In development: Vite dev server proxies /api to http://localhost:3001
+const BASE_URL = import.meta.env.VITE_BACKEND_URL 
+    ? import.meta.env.VITE_BACKEND_URL + '/api'
+    : '/api';
+
 const apiClient = axios.create({
-    baseURL: (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001') + '/api',
+    baseURL: BASE_URL,
 });
 
 function authHeaders() {
