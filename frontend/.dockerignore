@@ -64,6 +64,5 @@ docker-compose*.yml
 logs
 *.log
 
-# Development images
+# Development images (but keep public/images for logo/favicon)
 public/dev-*
-images/
