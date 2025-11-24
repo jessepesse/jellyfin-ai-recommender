@@ -6,12 +6,13 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
-    env_file:
-      - backend/.env
     environment:
-      # Varmistetaan, että Prisma löytää kannan kontin sisällä
+      # Database location for Prisma
       - DATABASE_URL=file:/app/prisma/dev.db
       - PORT=3001
+      # NOTE: Do NOT pre-configure JELLYFIN_URL, JELLYSEERR_URL, JELLYSEERR_API_KEY, or GEMINI_API_KEY here.
+      # These should be configured via the Settings page in the UI after first login.
+      # They will be stored in the SystemConfig table in the database.
     volumes:
       # Mount only the database file, not the entire prisma directory
       # This preserves schema.prisma and migrations in the container
