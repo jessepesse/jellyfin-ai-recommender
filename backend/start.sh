@@ -6,13 +6,17 @@ echo "================================================"
 
 # Configuration
 DATA_DIR="${DATA_DIR:-/app/data}"
+IMAGE_DIR="${IMAGE_DIR:-/app/images}"
 DB_PATH="$DATA_DIR/dev.db"
 BACKUP_STARTUP="$DATA_DIR/dev.db.backup_startup"
 PRISMA_DIR="/app/prisma"
 
-# Ensure data directory exists
-echo "📁 Ensuring data directory exists: $DATA_DIR"
+# Ensure required directories exist
+echo "📁 Ensuring required directories exist..."
 mkdir -p "$DATA_DIR"
+mkdir -p "$IMAGE_DIR"
+echo "   ✓ Data directory: $DATA_DIR"
+echo "   ✓ Image cache directory: $IMAGE_DIR"
 
 # Step 1: Raw Database Backup (if database exists)
 if [ -f "$DB_PATH" ]; then
