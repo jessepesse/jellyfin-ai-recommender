@@ -41,6 +41,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
         - Log format: `[Filter] DROP: "Title" (Reason)` and `[Filter] ACCEPT: "Title"`
         - Enables debugging and optimization of verification strictness
 
+✨ Features
+
+    **Automatic Token Refresh**:
+        - Implemented axios interceptor to automatically refresh expired Jellyfin tokens
+        - On 401 errors, system attempts re-authentication using stored credentials
+        - Password stored in sessionStorage (cleared on tab close for security)
+        - Queues concurrent requests during refresh to avoid duplicate login attempts
+        - Maintains Jellyfin sync functionality without manual re-login
+        - Gracefully falls back to manual login if automatic refresh fails
+
 [2.0.7] - 2025-11-25
 
 🔒 Security Patch

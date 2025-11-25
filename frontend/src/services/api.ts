@@ -10,6 +10,85 @@ const apiClient = axios.create({
     baseURL: BASE_URL,
 });
 
+// Track if we're currently refreshing to avoid multiple simultaneous refresh attempts
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+function onTokenRefreshed(token: string) {
+    refreshSubscribers.forEach(callback => callback(token));
+    refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(callback: (token: string) => void) {
+    refreshSubscribers.push(callback);
+}
+
+// Response interceptor to handle 401 errors and token refresh
+apiClient.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const originalRequest = error.config;
+
+        // If error is 401 and we haven't tried refreshing yet
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            if (isRefreshing) {
+                // Wait for the ongoing refresh to complete
+                return new Promise((resolve) => {
+                    addRefreshSubscriber((token: string) => {
+                        originalRequest.headers['x-access-token'] = token;
+                        resolve(apiClient(originalRequest));
+                    });
+                });
+            }
+
+            originalRequest._retry = true;
+            isRefreshing = true;
+
+            try {
+                // Attempt to refresh the token by re-authenticating
+                const storedUser = localStorage.getItem('jellyfin_user');
+                const storedServer = localStorage.getItem('jellyfin_server');
+                const jellyfinPassword = sessionStorage.getItem('jellyfin_password');
+
+                if (storedUser && storedServer && jellyfinPassword) {
+                    const user = JSON.parse(storedUser);
+                    const response = await axios.post(`${BASE_URL}/auth/login`, {
+                        username: user.name,
+                        password: jellyfinPassword,
+                        serverUrl: storedServer,
+                    });
+
+                    if (response.data.success && response.data.jellyfinAuth) {
+                        const newToken = response.data.jellyfinAuth.AccessToken;
+                        localStorage.setItem('jellyfin_token', newToken);
+                        
+                        // Update original request with new token
+                        originalRequest.headers['x-access-token'] = newToken;
+                        
+                        // Notify all waiting requests
+                        onTokenRefreshed(newToken);
+                        isRefreshing = false;
+
+                        // Retry the original request
+                        return apiClient(originalRequest);
+                    }
+                }
+
+                // If refresh failed, clear auth and reject
+                isRefreshing = false;
+                localStorage.removeItem('jellyfin_token');
+                return Promise.reject(error);
+            } catch (refreshError) {
+                isRefreshing = false;
+                localStorage.removeItem('jellyfin_token');
+                return Promise.reject(refreshError);
+            }
+        }
+
+        return Promise.reject(error);
+    }
+);
+
 function authHeaders() {
     const token = localStorage.getItem('jellyfin_token');
     const user = localStorage.getItem('jellyfin_user');

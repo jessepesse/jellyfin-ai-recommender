@@ -83,6 +83,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           localStorage.setItem('jellyfin_server', newServer);
         }
         
+        // Store password in sessionStorage for automatic token refresh
+        // sessionStorage is cleared when browser tab is closed (more secure than localStorage)
+        sessionStorage.setItem('jellyfin_password', password);
+        
         return true;
       } else {
         console.error('Login failed:', response.data.message);
@@ -103,6 +107,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('jellyfin_token');
     localStorage.removeItem('jellyfin_user');
     localStorage.removeItem('jellyfin_server');
+    sessionStorage.removeItem('jellyfin_password');
   };
 
   const authContextValue: AuthContextType = {
