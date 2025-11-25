@@ -15,6 +15,11 @@ services:
       # 🔒 SECURITY: If exposing to public internet, uncomment and set your domain here.
       # This prevents other websites from hijacking your API.
       # - CORS_ORIGIN=https://ai.yourdomain.com
+      
+      # 🔒 SSRF PROTECTION: If your Jellyseerr/Jellyfin uses custom domains (not localhost),
+      # uncomment and add them here (comma-separated, no http://, no paths):
+      # - ALLOWED_IMAGE_DOMAINS=myjellyseerr.example.com,myjellyfin.example.com
+      
       # NOTE: Do NOT pre-configure JELLYFIN_URL, JELLYSEERR_URL, JELLYSEERR_API_KEY, or GEMINI_API_KEY here.
       # These should be configured via the Settings page in the UI after first login.
       # They will be stored in the SystemConfig table in the database.

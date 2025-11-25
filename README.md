@@ -111,7 +111,22 @@ environment:
 
 **Why this matters:** By default, the app only allows private networks (LAN IPs like 192.168.x.x). Without setting `CORS_ORIGIN`, public domains will be blocked. Setting this variable allows your specific domain while still blocking malicious sites.
 
-### 2. Update Reverse Proxy
+### 2. Allow Custom Jellyseerr/Jellyfin Domains (SSRF Protection)
+
+If your Jellyseerr or Jellyfin is hosted on a **custom domain** (not localhost or standard TMDB domains), you need to allowlist it to bypass SSRF protection:
+
+```yaml
+# In docker-compose.prod.yml, add to backend environment:
+environment:
+  - ALLOWED_IMAGE_DOMAINS=myjellyseerr.example.com,myjellyfin.example.com
+```
+
+**Format:** Comma-separated list of domains (no `http://`, no paths)  
+**Default allowed:** `image.tmdb.org`, `themoviedb.org`, `localhost`, `127.0.0.1`, Docker network hosts
+
+**Why this is needed:** The app has strict SSRF (Server-Side Request Forgery) protection that only allows requests to trusted domains. If you see errors like `[SSRF] Blocked request to non-allowlisted domain`, add your domain to this list.
+
+### 3. Update Reverse Proxy
 Ensure your reverse proxy (Nginx, Cloudflare, etc.) forwards the correct headers:
 - `X-Real-IP`
 - `X-Forwarded-For`
