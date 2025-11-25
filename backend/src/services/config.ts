@@ -13,7 +13,7 @@ export type SystemConfig = {
 };
 
 class ConfigService {
-  // Return config, preferring environment variables when present
+  // Return config, prioritizing database values when isConfigured is true
   public static async getConfig(): Promise<SystemConfig> {
     // Read DB row (singleton id=1)
     let dbConfig: any = null;
@@ -23,21 +23,32 @@ class ConfigService {
       // If table doesn't exist yet or DB not ready, ignore and fall back to envs
     }
 
-    // Prefer values stored in the database (set via the Setup Wizard) and fall back
-    // to environment variables only when a DB value is not present. This allows the
-    // runtime to reflect in-app configuration without being overridden by empty or
-    // stale environment values.
+    // CRITICAL FIX: If database is marked as configured, ALWAYS prefer DB values
+    // over environment variables. This ensures UI changes persist and take effect.
+    // Only fall back to env vars if DB value is null/empty OR system not configured yet.
+    const isDbConfigured = Boolean(dbConfig && dbConfig.isConfigured);
+    
     const config: SystemConfig = {
-      jellyfinUrl: (dbConfig && dbConfig.jellyfinUrl) ? dbConfig.jellyfinUrl : (process.env.JELLYFIN_URL || null),
-      jellyseerrUrl: (dbConfig && dbConfig.jellyseerrUrl) ? dbConfig.jellyseerrUrl : (process.env.JELLYSEERR_URL || null),
-      jellyseerrApiKey: (dbConfig && dbConfig.jellyseerrApiKey) ? dbConfig.jellyseerrApiKey : (process.env.JELLYSEERR_API_KEY || null),
-      geminiApiKey: (dbConfig && dbConfig.geminiApiKey) ? dbConfig.geminiApiKey : (process.env.GEMINI_API_KEY || null),
-      geminiModel: (dbConfig && dbConfig.geminiModel) ? dbConfig.geminiModel : (process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'),
+      jellyfinUrl: isDbConfigured && dbConfig.jellyfinUrl 
+        ? dbConfig.jellyfinUrl 
+        : (dbConfig?.jellyfinUrl || process.env.JELLYFIN_URL || null),
+      jellyseerrUrl: isDbConfigured && dbConfig.jellyseerrUrl 
+        ? dbConfig.jellyseerrUrl 
+        : (dbConfig?.jellyseerrUrl || process.env.JELLYSEERR_URL || null),
+      jellyseerrApiKey: isDbConfigured && dbConfig.jellyseerrApiKey 
+        ? dbConfig.jellyseerrApiKey 
+        : (dbConfig?.jellyseerrApiKey || process.env.JELLYSEERR_API_KEY || null),
+      geminiApiKey: isDbConfigured && dbConfig.geminiApiKey 
+        ? dbConfig.geminiApiKey 
+        : (dbConfig?.geminiApiKey || process.env.GEMINI_API_KEY || null),
+      geminiModel: isDbConfigured && dbConfig.geminiModel 
+        ? dbConfig.geminiModel 
+        : (dbConfig?.geminiModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'),
       // CRITICAL: only consider the system configured when the DB row explicitly
       // marks `isConfigured` true. Presence of environment variables should NOT
       // cause the application to treat the system as configured — the Setup
       // Wizard must always be shown until the DB is explicitly marked configured.
-      isConfigured: Boolean(dbConfig && dbConfig.isConfigured),
+      isConfigured: isDbConfigured,
     };
 
     return config;

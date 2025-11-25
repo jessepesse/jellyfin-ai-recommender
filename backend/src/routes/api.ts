@@ -27,6 +27,67 @@ const router = Router();
 const BufferCache: Map<string, any[]> = new Map();
 const jellyfinService = new JellyfinService();
 
+// Image Proxy Endpoint - Routes images through backend to avoid 403 from external Jellyseerr
+router.get('/proxy/image', async (req, res) => {
+    try {
+        const path = req.query.path as string;
+        if (!path) {
+            return res.status(400).json({ error: 'Missing path parameter' });
+        }
+
+        // Get Jellyseerr config (supports dynamic runtime config)
+        const config = await ConfigService.getConfig();
+        const jellyseerrUrl = config.jellyseerrUrl;
+        
+        if (!jellyseerrUrl) {
+            return res.status(503).json({ error: 'Jellyseerr URL not configured' });
+        }
+
+        // Validate and sanitize the Jellyseerr URL
+        const baseUrl = sanitizeUrl(jellyseerrUrl);
+        if (!baseUrl) {
+            return res.status(500).json({ error: 'Invalid Jellyseerr URL configuration' });
+        }
+
+        // Construct full image URL
+        const imageUrl = `${baseUrl}/imageproxy/tmdb/t/p/w300_and_h450_face${path}`;
+        
+        // SSRF Protection: Validate the full URL before making request
+        const validatedUrl = validateRequestUrl(imageUrl);
+        
+        // Fetch image from Jellyseerr with API key if available
+        const headers: any = {};
+        if (config.jellyseerrApiKey) {
+            headers['X-Api-Key'] = config.jellyseerrApiKey;
+        }
+
+        const response = await axios.get(validateSafeUrl(validatedUrl), {
+            responseType: 'arraybuffer',
+            headers,
+            timeout: 10000
+        });
+
+        // Set appropriate headers
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+        
+        // Send image data
+        res.send(response.data);
+    } catch (error: any) {
+        console.error('Image proxy error:', error?.message || error);
+        
+        // Return appropriate error status
+        if (error?.response?.status) {
+            res.status(error.response.status).json({ 
+                error: `Failed to fetch image: ${error.response.status}` 
+            });
+        } else {
+            res.status(500).json({ error: 'Failed to fetch image' });
+        }
+    }
+});
+
 // Standard mapper to normalize varied backend shapes to frontend contract
 function toFrontendItem(item: any) {
     if (!item) return null;
@@ -37,16 +98,29 @@ function toFrontendItem(item: any) {
     const mediaTypeRaw = item.mediaType ?? item.media_type ?? item.type ?? item.MediaType ?? 'movie';
     const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.toLowerCase() : 'movie';
     const releaseYear = item.releaseYear ?? (item.releaseDate ? String(item.releaseDate).substring(0,4) : (item.firstAirDate ? String(item.firstAirDate).substring(0,4) : '')) ?? '';
-    // Poster resolution: prefer absolute posterUrl, otherwise construct from Jellyseerr base if a poster path exists
+    // Poster resolution: Use local proxy to avoid 403 errors from external Jellyseerr
     let posterUrl: string | null = null;
-    if (item.posterUrl) posterUrl = item.posterUrl;
-    else if (item.poster_path || item.poster) {
-        const rawBase = process.env.JELLYSEERR_URL || '';
-        const base = sanitizeUrl(rawBase);
-        posterUrl = base ? `${base}/imageproxy/tmdb/t/p/w300_and_h450_face${item.poster_path || item.poster}` : null;
+    if (item.posterUrl && item.posterUrl.startsWith('http')) {
+        // If absolute URL already provided, keep it (for backward compatibility)
+        posterUrl = item.posterUrl;
+    } else if (item.poster_path || item.poster) {
+        // Route through our proxy to bypass Cloudflare/WAF protections
+        const posterPath = item.poster_path || item.poster;
+        posterUrl = `/api/proxy/image?path=${encodeURIComponent(posterPath)}`;
     }
+    
     const voteAverage = item.voteAverage ?? item.vote_average ?? item.rating ?? 0;
-    const backdropUrl = item.backdropUrl ?? item.backdrop_url ?? null;
+    
+    // Backdrop resolution: Use local proxy as well
+    let backdropUrl: string | null = null;
+    if (item.backdropUrl && item.backdropUrl.startsWith('http')) {
+        backdropUrl = item.backdropUrl;
+    } else if (item.backdrop_path || item.backdrop) {
+        const backdropPath = item.backdrop_path || item.backdrop;
+        backdropUrl = `/api/proxy/image?path=${encodeURIComponent(backdropPath)}`;
+    } else {
+        backdropUrl = item.backdropUrl ?? item.backdrop_url ?? null;
+    }
     return {
         tmdbId,
         title,
