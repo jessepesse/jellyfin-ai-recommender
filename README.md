@@ -87,6 +87,28 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
     Persisted Data: The SQLite database is stored in a ./data folder in the project root.
 
+## 🌐 Public Deployment & Security
+
+If you plan to expose this application to the public internet (e.g., via Cloudflare Tunnel or Nginx Proxy Manager), you **must** configure the CORS policy to prevent security risks.
+
+### 1. Set Allowed Domain
+Edit your `docker-compose.prod.yml` and uncomment the `CORS_ORIGIN` line in the backend service:
+
+```yaml
+environment:
+  - CORS_ORIGIN=https://ai.yourdomain.com
+```
+
+**Why this matters:** By default, the app only allows private networks (LAN IPs like 192.168.x.x). Without setting `CORS_ORIGIN`, public domains will be blocked. Setting this variable allows your specific domain while still blocking malicious sites.
+
+### 2. Update Reverse Proxy
+Ensure your reverse proxy (Nginx, Cloudflare, etc.) forwards the correct headers:
+- `X-Real-IP`
+- `X-Forwarded-For`
+- `X-Forwarded-Proto`
+
+See `frontend/nginx.conf` for a reference configuration.
+
 📝 Usage Guide
 
     Login: Use your Jellyfin credentials. The app authenticates against your server.

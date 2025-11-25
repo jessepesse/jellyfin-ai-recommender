@@ -11,6 +11,9 @@ services:
       - DATABASE_URL=file:/app/data/dev.db
       - DATA_DIR=/app/data
       - PORT=3001
+      # 🔒 SECURITY: If exposing to public internet, uncomment and set your domain here.
+      # This prevents other websites from hijacking your API.
+      # - CORS_ORIGIN=https://ai.yourdomain.com
       # NOTE: Do NOT pre-configure JELLYFIN_URL, JELLYSEERR_URL, JELLYSEERR_API_KEY, or GEMINI_API_KEY here.
       # These should be configured via the Settings page in the UI after first login.
       # They will be stored in the SystemConfig table in the database.
