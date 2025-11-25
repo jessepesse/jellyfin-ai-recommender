@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import stream from 'stream';
+import { validateRequestUrl, validateSafeUrl } from '../utils/ssrf-protection';
 
 const pipeline = promisify(stream.pipeline);
 
@@ -96,10 +97,12 @@ export class ImageService {
                 downloadUrl = `${backendUrl}${url}`;
             }
 
+            // SSRF Protection: Validate URL before making request
+            const validatedUrl = validateRequestUrl(downloadUrl);
             console.log(`[ImageService] Downloading: ${downloadUrl} -> ${filename}`);
 
             // Download image stream
-            const response = await axios.get(downloadUrl, {
+            const response = await axios.get(validateSafeUrl(validatedUrl), {
                 responseType: 'stream',
                 headers: headers || {},
                 timeout: 30000, // 30 second timeout
@@ -111,7 +114,9 @@ export class ImageService {
             console.log(`[ImageService] Successfully downloaded: ${filename}`);
             return `/images/${filename}`;
         } catch (error: any) {
-            console.error(`[ImageService] Failed to download ${url}:`, error?.message || error);
+            // Security: Sanitize error message to prevent format string injection
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`[ImageService] Failed to download ${url}:`, errorMsg);
             return null;
         }
     }
