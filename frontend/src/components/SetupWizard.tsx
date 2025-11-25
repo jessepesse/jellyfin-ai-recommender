@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { postSystemSetup, postSystemVerify, getSystemSetupDefaults } from '../services/api';
+import axios from 'axios';
 
 type ServiceStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -17,6 +18,9 @@ const SetupWizard: React.FC = () => {
   const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash-lite');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreSuccess, setRestoreSuccess] = useState(false);
 
   const [testResults, setTestResults] = useState<any>(defaultTests);
 
@@ -61,6 +65,65 @@ const SetupWizard: React.FC = () => {
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setRestoreFile(file);
+      setRestoreSuccess(false);
+      setError(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!restoreFile) {
+      setError('Please select a backup file');
+      return;
+    }
+
+    setIsRestoring(true);
+    setError(null);
+
+    try {
+      // Read file content
+      const fileContent = await restoreFile.text();
+      let parsed: any;
+
+      try {
+        parsed = JSON.parse(fileContent);
+      } catch (e) {
+        setError('Invalid JSON file. Please select a valid backup file.');
+        setIsRestoring(false);
+        return;
+      }
+
+      // Extract system config if available (for multi-user backups)
+      if (parsed.system_config) {
+        if (parsed.system_config.jellyfinUrl) setJellyfinUrl(parsed.system_config.jellyfinUrl);
+        if (parsed.system_config.jellyseerrUrl) setJellyseerrUrl(parsed.system_config.jellyseerrUrl);
+        if (parsed.system_config.jellyseerrApiKey) setJellyseerrApiKey(parsed.system_config.jellyseerrApiKey);
+        if (parsed.system_config.geminiApiKey) setGeminiApiKey(parsed.system_config.geminiApiKey);
+        if (parsed.system_config.geminiModel) setGeminiModel(parsed.system_config.geminiModel);
+      }
+      // Legacy single-user format compatibility
+      else if (parsed.data) {
+        // Extract from legacy database.json format if needed
+        const legacyData = parsed.data;
+        if (legacyData.jellyfinUrl) setJellyfinUrl(legacyData.jellyfinUrl);
+        if (legacyData.jellyseerrUrl) setJellyseerrUrl(legacyData.jellyseerrUrl);
+        if (legacyData.jellyseerrApiKey) setJellyseerrApiKey(legacyData.jellyseerrApiKey);
+        if (legacyData.geminiApiKey) setGeminiApiKey(legacyData.geminiApiKey);
+        if (legacyData.geminiModel) setGeminiModel(legacyData.geminiModel);
+      }
+
+      setRestoreSuccess(true);
+      setError('✅ Backup file loaded! Configuration fields have been pre-filled. You can now test connections and save.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to read backup file');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -91,10 +154,44 @@ const SetupWizard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0b0b15] text-white">
+    <div className="min-h-screen flex items-center justify-center bg-[#0b0b15] text-white p-4">
       <div className="w-full max-w-xl bg-slate-900/80 backdrop-blur-md rounded-2xl p-6 shadow-lg border border-white/5">
         <h2 className="text-2xl font-semibold mb-4">Welcome — Setup</h2>
         <p className="text-sm text-slate-300 mb-6">Enter your Jellyfin and external service configuration. Power users can still use .env; this wizard stores values in the local database.</p>
+        
+        {/* Restore from Backup Section */}
+        <div className="mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+          <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
+            <span>💾</span>
+            <span>Restore from Backup</span>
+          </h3>
+          <p className="text-sm text-slate-400 mb-3">
+            Restoring from a previous installation? Upload your backup.json file to automatically pre-fill configuration and restore watch history.
+          </p>
+          <div className="flex flex-col gap-3">
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={handleFileSelect}
+              className="p-2 rounded bg-slate-800 border border-slate-700 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-cyan-600 file:text-white hover:file:bg-cyan-700"
+            />
+            <button
+              type="button"
+              onClick={handleRestore}
+              disabled={!restoreFile || isRestoring}
+              className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed px-4 py-2 rounded transition-colors text-sm font-medium"
+            >
+              {isRestoring ? 'Loading Backup...' : 'Load Backup File'}
+            </button>
+            {restoreSuccess && (
+              <div className="text-sm text-green-400 flex items-center gap-2">
+                <span>✅</span>
+                <span>Backup loaded successfully! Configuration fields updated below.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {error && <div className="mb-4 text-red-400">{error}</div>}
         <form onSubmit={handleSave}>
           <div className="grid grid-cols-1 gap-4">

@@ -1,3 +1,17 @@
+/**
+ * ⚠️ CRITICAL ARCHITECTURE NOTE: BACKWARD COMPATIBILITY ⚠️
+ * 
+ * This service is the bridge between legacy JSON data and the current Database Schema.
+ * 
+ * RULES FOR MODIFYING THIS FILE:
+ * 1. If you change `schema.prisma` (e.g. rename 'tmdbId' to 'externalId'), 
+ *    you MUST update the mapping logic here to handle BOTH keys.
+ *    Example: `const id = jsonItem.externalId || jsonItem.tmdbId;`
+ * 
+ * 2. NEVER remove support for the v1/v2 JSON structure. Users rely on this 
+ *    to migrate their data across versions.
+ */
+
 import prisma from './data';
 import { searchAndEnrich } from './jellyseerr';
 import { updateMediaStatus } from './data';

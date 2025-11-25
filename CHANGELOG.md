@@ -4,6 +4,70 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.3] - 2025-11-25
+
+🔧 CORS & Network Fixes + Backup/Recovery System
+
+Critical fixes for LAN deployments and comprehensive disaster recovery implementation.
+
+🐛 Bug Fixes
+
+    Fixed CORS Error on LAN Access:
+        Updated backend CORS configuration to allow all origins (`origin: true`)
+        Enables access from any LAN IP address (e.g., http://192.168.1.62:5173)
+        Removed restrictive localhost-only whitelist
+        Essential for self-hosted deployments on ZimaOS, NAS, or local network servers
+
+✨ New Features: Backup & Recovery System
+
+    Bulletproof Startup Sequence (`backend/start.sh`):
+        Automatic database backup before schema changes (`dev.db.backup_startup`)
+        Self-healing schema sync with `prisma db push` (fixes "Table not found" errors)
+        Automatic JSON export on every boot for portable backups
+        Proper error handling and logging at each step
+
+    Database Backup Script (`backend/scripts/backup_db.ts`):
+        Exports complete database state to JSON
+        Includes system configuration and all user data
+        Creates both `backup_latest.json` and timestamped backups
+        Compatible with legacy import format
+        Manual backup: `npm run db:backup`
+
+    Setup Wizard Restore Feature:
+        "Restore from Backup" section in Setup Wizard
+        Upload backup JSON to pre-fill configuration
+        Automatic extraction of Jellyfin, Jellyseerr, and Gemini settings
+        Ready for watch history restoration after first login
+        Supports both new multi-user and legacy single-user backup formats
+
+🔧 Infrastructure
+
+    Updated Dockerfile:
+        Changed CMD to use `start.sh` instead of direct node command
+        Kept devDependencies for ts-node (required by backup script)
+        Made start.sh executable in build process
+
+    Docker Compose Updates:
+        Added `DATA_DIR=/app/data` environment variable
+        Ensures backup script knows where to write files
+
+    New Documentation:
+        Added comprehensive `BACKUP_RECOVERY.md` guide
+        Covers all disaster recovery scenarios
+        Includes troubleshooting and best practices
+
+📦 Package Scripts
+
+    Added `db:backup` script to backend package.json
+    Enables manual database backups: `npm run db:backup`
+
+🚀 Deployment
+
+    Production deployment now fully working on local network IPs
+    Self-healing database initialization on first startup
+    Automatic backups protect against data loss during upgrades
+    Complete disaster recovery workflow for migrations
+
 [2.0.2] - 2025-11-24
 
 🔧 Network & Deployment Fixes

@@ -1,92 +1,86 @@
-# Jellyfin AI Recommender: Copilot & Agent Instructions
+# Jellyfin AI Recommender: Copilot System Instructions
 
 ## 1. System Role & Objective
 **Role:** Senior Full-Stack Engineer (TypeScript/Node.js/React/Prisma).
-**Context:** The project has successfully migrated from Python (Streamlit) to a modern T3-style stack. We are now in the **Optimization & Feature Hardening** phase.
-**Objective:** Maintain the application, ensure data integrity via strict verification, and optimize the AI recommendation pipeline.
+**Project Phase:** Production Release & Maintenance (v2.0.0).
+**Objective:** Maintain the application, ensure data integrity via strict verification, and uphold the "Product-First" architecture (User Experience + Robustness).
 
 ## 2. Architecture & Source of Truth
 
 ### A. Legacy Reference (Logic Only)
 * **File:** `app.py`
 * **Status:** **READ-ONLY / DEPRECATED.**
-* **Usage:** Refer to this ONLY for understanding the original business logic (e.g., "how did the prompt look?"). **Do not** use it for data structure references anymore.
+* **Usage:** Refer to this ONLY for understanding original business logic intent.
 
 ### B. The Modern Stack (Active)
-* **Root:** Monorepo using `concurrently`.
+* **Root:** Monorepo using `concurrently` for dev, Docker for production.
 * **Backend (`/backend`):** Node.js, Express, **Prisma (SQLite)**, Zod, Google AI SDK.
     * *Responsibility:* API Proxies, strict data verification, database management, AI orchestration.
 * **Frontend (`/frontend`):** React, Vite, Tailwind CSS (v3.4), TypeScript.
-    * *Responsibility:* UI Rendering, Optimistic UI updates, Client-side filtering/sorting.
-* **Data (`backend/prisma/dev.db`):** SQLite database managed via Prisma. **`database.json` is obsolete and should be ignored.**
+    * *Responsibility:* UI Rendering, Optimistic UI updates, **Relative API paths**.
+* **Data (`/data/dev.db`):** SQLite database. Persisted via Docker volume.
 
-## 3. Core Directives
+## 3. Core Directives (The "Memory Bank")
 
-### "Trust No AI" Philosophy (CRITICAL)
-1.  **No ID Hallucinations:** Never trust TMDB IDs provided by Gemini. They are often hallucinated.
-2.  **Strict Verification:** All AI suggestions must be verified against Jellyseerr (Title + Year match) before being returned to the Frontend.
-3.  **Normalization:** All data entering the DB or Frontend must be normalized via `JellyseerrService.normalize()` to ensure consistent fields (`tmdbId`, `mediaType`, `releaseYear`).
+### 🛑 Rule #1: "Trust No AI" (Absolute Verification)
+* **Never** trust IDs provided by Gemini prompts. They are often hallucinations.
+* **Always** verify titles against Jellyseerr API (`JellyseerrService.searchAndVerify`) before accepting them.
+* **Flow:** Gemini Suggests Title -> Backend Searches Jellyseerr -> Backend Matches Title & Year -> Backend saves trusted TMDB ID.
 
-### Development Standards
-* **Database:** Use **Prisma ORM** for all data operations. Never write to files directly.
-* **Styling:** Use **Tailwind CSS** utility classes. Ensure config matches v3 standards.
-* **Validation:** Use **Zod** for API inputs/outputs.
-* **Language:** Code & Comments in **English**. UI Text in **English**.
+### 🛑 Rule #2: Data Normalization & Persistence
+* **Single Source of Truth:** All media data entering the DB MUST be normalized via `JellyseerrService.normalize()`.
+* **Rich Data:** We persist `overview`, `voteAverage`, and `backdropUrl` in SQLite to avoid re-fetching.
+* **Action Handling:** The Frontend MUST send the full payload (including `tmdbId`, `mediaType`, `releaseYear`) to the Backend.
 
-## 4. Developer Workflow
+### 🛑 Rule #3: Layered Configuration (DB + Env)
+* **Source:** Settings are stored in SQLite (`SystemConfig`), but can be overridden/pre-filled by `.env`.
+* **Setup Wizard:** If config is missing, the UI must prompt the user.
+* **Dynamic Loading:** Services (`Gemini`, `Jellyseerr`) must fetch config at **runtime**, not static startup time.
 
-When implementing features or fixing bugs:
+### 🛑 Rule #4: Backward Compatibility (Backups)
+* **JSON Contract:** The Export/Import JSON structure (`{ movies: [], watchlist: ... }`) corresponds to the Legacy format.
+* **Schema Changes:** If `schema.prisma` changes, `ImportService` MUST be updated to map old JSON keys to new schema fields. **Never break the ability to restore old backups.**
 
-1.  **Check Logic:** Does this feature exist in `app.py`? If so, replicate the *intent*, not the code.
-2.  **Database Schema:** If data needs to change, update `backend/prisma/schema.prisma` and run `npm run db:migrate`.
-3.  **Backend Service:** Implement logic in `services/`, ensuring strict type safety and normalization.
-4.  **Frontend:** Update UI components to match the backend's strict data contract (`JellyfinItem` interface).
+### 🛑 Rule #5: Docker & Networking
+* **Relative Paths:** Frontend API calls MUST use relative paths (`/api/...`) to support reverse proxies (Nginx/ZimaOS). **Never hardcode localhost.**
+* **Self-Healing:** The backend `start.sh` script is responsible for running `db push` and backups on boot.
 
-## 5. Operational Commands
+## 4. Developer Workflow & Commands
 
-### General
-* **Start All (Dev):** `npm run dev` (Runs backend & frontend via concurrently)
+| Action | Command | Notes |
+| :--- | :--- | :--- |
+| **Start All** | `npm run dev` | Runs backend & frontend concurrently. |
+| **DB Migration** | `npm run db:migrate` | Updates schema (uses dotenv-cli). |
+| **DB Studio** | `npm run db:studio` | View data GUI. |
+| **Docker Prod** | `docker-compose up -d` | Uses GHCR images (No build required). |
 
-### Backend
-* **Start Backend:** `cd backend && npm run dev`
-* **Prisma Migrate:** `npm run db:migrate` (Use this instead of npx to ensure .env loading via dotenv-cli)
-* **Prisma Generate:** `npm run db:generate` (Refresh TypeScript types)
-* **Prisma Studio:** `npm run db:studio` (GUI to view database data)
+## 5. Feature Implementation Guidelines
 
-### Frontend
-* **Start Frontend:** `cd frontend && npm run dev`
-* **Build:** `cd frontend && npm run build`
+### When modifying the Backend:
+1.  **Check `api.ts`:** Ensure response mapping uses `toFrontendItem`.
+2.  **Check `jellyseerr.ts`:** Ensure strict encoding (`encodeURIComponent`) for queries.
+3.  **Check `data.ts`:** Ensure `updateMediaStatus` handles nested payloads robustly ("Smart Unwrap").
+
+### When modifying the Frontend:
+1.  **Check `api.ts`:** Ensure `BASE_URL` is empty (`''`) to force relative paths.
+2.  **Check `MediaCard.tsx`:** Ensure actions pass the FULL payload to prevent data loss.
+3.  **Styles:** Use Tailwind classes (v3). Do not upgrade to v4 alpha.
 
 ## 6. Implementation Status
 
-### ✅ Completed & Stable
-* **Auth:** User-centric authentication (Jellyfin Token passed from Frontend to Backend).
-* **Database:** SQLite + Prisma integration (User, Media, UserMedia tables).
-* **Core Logic:**
-    * **Gemini:** Context-aware prompts with "Taste Profile".
-    * **Verification:** Strict "Title + Year" matching against Jellyseerr.
-    * **Loop:** Backend loops until 10 valid, non-duplicate items are found.
-* **UI:** Modern Dark Mode Dashboard, Sidebar, Watchlist, Search.
-* **Actions:** Watched, Watchlist, Block, Request (all with Optimistic UI updates).
+* ✅ **Core:** Migration from Python -> Node.js complete.
+* ✅ **Database:** JSON -> SQLite + Prisma complete.
+* ✅ **Safety:** "Trust No AI" pipeline & Strict ID verification active.
+* ✅ **Features:**
+    * Setup Wizard & Config Editor.
+    * Legacy Import & Universal JSON Export.
+    * Jellyfin History Sync (ID-based).
+    * Dynamic Taste Profile.
+* ✅ **Infrastructure:** Self-healing Docker container & ZimaOS support.
 
-### 🧩 Key Logic Patterns
-* **Taste Profile:** `TasteService` analyzes history to generate a text profile for Gemini to improve recommendations.
-* **External Discovery:** The logic is tuned to find *new* content, strictly filtering out existing library items using `JellyfinService.getOwnedIds`.
-* **JIT Lookup:** DataService attempts to fetch missing IDs via Jellyseerr before saving if the Frontend payload is incomplete.
+## 7. Troubleshooting Common Issues
 
-## 7. Key File Mappings
-
-| Logic | File Location |
-| :--- | :--- |
-| **AI Prompting** | `backend/src/services/gemini.ts` |
-| **Data/Prisma** | `backend/src/services/data.ts` |
-| **External API** | `backend/src/services/jellyseerr.ts` |
-| **Auth Logic** | `backend/src/services/jellyfin.ts` |
-| **Taste Analysis**| `backend/src/services/taste.ts` |
-| **API Routes** | `backend/src/routes/api.ts` |
-
-## 8. Troubleshooting Cheat Sheet
-* **Frontend Style Missing:** Check `frontend/postcss.config.js`. It must use CJS format compatible with Tailwind v3.
-* **Database Error:** "tmdbId is required" -> Check `jellyseerr.ts` normalization logic and Frontend `MediaCard` payload.
-* **Prisma Error:** "Missing DATABASE_URL" -> Always use `npm run db:migrate` (it uses `dotenv-cli` to force load `.env`).
-* **Jellyseerr 404:** Ensure the endpoint is `/api/v1/request` (singular, not plural) and the query is `encodeURIComponent`'d properly in `jellyseerr.ts`.
+* **"tmdbId is required":** Check `data.ts` Smart Unwrap logic vs Frontend payload.
+* **"Network Error / CORS":** Frontend is likely trying to hit `localhost` instead of relative `/api`. Check `frontend/src/services/api.ts`.
+* **"Jellyseerr 404":** Endpoint must be singular `/api/v1/request`.
+* **"Table not found":** Run `npm run db:migrate` locally or restart container (triggers `start.sh`).

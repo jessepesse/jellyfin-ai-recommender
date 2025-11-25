@@ -28,25 +28,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding in iframes if needed
 }));
 
-// Allow frontend on any localhost port for development flexibility
-const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174'];
+// CORS configuration: Allow all origins for self-hosted deployment
+// This permits access from any LAN IP (e.g., http://192.168.1.62:5173)
 app.use(cors({ 
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // In development, allow any localhost port
-    if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) {
-      return callback(null, true);
-    }
-    
-    // In production, check whitelist
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    
-    return callback(new Error('Not allowed by CORS'));
-  }, 
+  origin: true, // Reflect request origin back (allows all origins)
   credentials: true 
 }));
 

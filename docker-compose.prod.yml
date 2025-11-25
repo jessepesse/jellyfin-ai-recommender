@@ -9,6 +9,7 @@ services:
     environment:
       # Database location - points to mounted data directory
       - DATABASE_URL=file:/app/data/dev.db
+      - DATA_DIR=/app/data
       - PORT=3001
       # NOTE: Do NOT pre-configure JELLYFIN_URL, JELLYSEERR_URL, JELLYSEERR_API_KEY, or GEMINI_API_KEY here.
       # These should be configured via the Settings page in the UI after first login.

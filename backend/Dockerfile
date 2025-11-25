@@ -2,7 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
+# Install OpenSSL for Prisma and ts-node for backup script
 RUN apk -U add --no-cache openssl curl
 
 COPY package*.json ./
@@ -17,8 +17,12 @@ ARG DATABASE_URL="file:./prisma/dev.db"
 # Run prisma generate with the build ARG available as an environment variable for this RUN.
 RUN DATABASE_URL=${DATABASE_URL} npx prisma generate
 RUN npm run build
-# Remove devDependencies to keep the runtime image lean
-RUN npm prune --production
+
+# Make start.sh executable
+RUN chmod +x start.sh
+
+# Keep devDependencies for ts-node (needed by backup script)
+# We sacrifice some image size for disaster recovery capabilities
 
 EXPOSE 3001
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "start.sh"]

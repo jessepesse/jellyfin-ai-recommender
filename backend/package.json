@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:migrate": "dotenv -e .env -- npx prisma migrate dev",
     "db:generate": "dotenv -e .env -- npx prisma generate",
-    "db:studio": "dotenv -e .env -- npx prisma studio"
+    "db:studio": "dotenv -e .env -- npx prisma studio",
+    "db:backup": "dotenv -e .env -- npx ts-node scripts/backup_db.ts"
   },
   "keywords": [],
   "author": "",
