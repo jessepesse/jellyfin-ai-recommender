@@ -1091,7 +1091,8 @@ router.post('/sync/jellyfin', validateJellyfinSync, async (req: Request, res: Re
 router.get('/images/:filename', (req: Request, res: Response) => {
     const { filename } = req.params;
     // Security: Validate filename to prevent directory traversal
-    if (!filename || !/^movie_\d+_(poster|backdrop)\.(jpg|png)$/.test(filename)) {
+    // Supports both movie_ and tv_ prefixes for cached images
+    if (!filename || !/^(movie|tv)_\d+_(poster|backdrop)\.(jpg|png)$/.test(filename)) {
         return res.status(400).json({ error: 'Invalid filename' });
     }
     const imagePath = path.join('/app/images', filename);
