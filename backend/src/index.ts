@@ -106,9 +106,9 @@ const setupLimiter = rateLimit({
 
 // Very permissive limiter for import operations (they're long-running and already async)
 const importLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 import operations per 15 minutes (each can process hundreds of items)
-  message: 'Too many import operations, please wait before importing again.',
+  windowMs: 5 * 60 * 1000, // 5 minutes (shorter window for faster recovery)
+  max: 10, // 10 import operations per 5 minutes (allows testing and troubleshooting)
+  message: 'Too many import operations, please wait a moment before importing again.',
   standardHeaders: true,
   legacyHeaders: false,
 });

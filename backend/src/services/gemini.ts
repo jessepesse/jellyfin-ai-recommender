@@ -110,8 +110,13 @@ export class GeminiService {
       const titles = (seedItems || []).slice(0, 80).map((s: any) => typeof s === 'string' ? s : (s.title || s.Name || s.name || '')).filter(Boolean).slice(0, 80);
       const prompt = `Summarize the user's ${type} taste in 2-3 concise bullet points based on these titles:\n${titles.join('\n')}`;
       
-      // Use modern API with thinking support
-      const resp = await model.generateContent({ contents: prompt });
+      // Use modern API with proper message format
+      const resp = await model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [{ text: prompt }]
+        }]
+      });
       let text = '';
       try {
         const body = resp?.response;
@@ -152,9 +157,12 @@ export class GeminiService {
         const schema = (zodToJsonSchema as any)(RecommendationSchema as any);
         
         // Modern API call structure for thinking models
-        // Use model.generateContent with proper request format
+        // Use model.generateContent with proper message format
         response = await model.generateContent({
-          contents: promptText,
+          contents: [{
+            role: 'user',
+            parts: [{ text: promptText }]
+          }],
           generationConfig: { 
             responseMimeType: 'application/json', 
             responseSchema: schema 

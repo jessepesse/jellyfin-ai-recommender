@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[Unreleased]
+
+🐛 Bug Fixes
+
+    **Fixed Gemini API Message Format**:
+        - Corrected `contents` parameter format in Gemini API calls
+        - Changed from plain string to proper message object array format
+        - Affects: `summarizeProfile()` and `generateRecommendations()`
+        - Fixes 400 Bad Request errors when generating taste profiles and recommendations
+        
+    **Relaxed Import Rate Limiter**:
+        - Increased import limit from 5 to 10 operations per window
+        - Reduced window from 15 minutes to 5 minutes for faster recovery
+        - Allows better testing and troubleshooting workflows
+
 [2.0.7] - 2025-11-25
 
 🔒 Security Patch
