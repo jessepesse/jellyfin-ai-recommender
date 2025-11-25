@@ -45,20 +45,30 @@ router.get('/proxy/image', async (req, res) => {
             return res.status(503).json({ error: 'Jellyseerr URL not configured' });
         }
 
-        // Validate and sanitize the Jellyseerr URL
-        const baseUrl = sanitizeUrl(jellyseerrUrl);
-        if (!baseUrl) {
-            return res.status(500).json({ error: 'Invalid Jellyseerr URL configuration' });
-        }
+        // Handle two cases: 
+        // 1. Absolute URLs (http://...) - proxy them directly
+        // 2. Relative paths (/xxx.jpg) - construct Jellyseerr URL
+        let imageUrl: string;
+        
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+            // Already an absolute URL - proxy it directly
+            imageUrl = path;
+        } else {
+            // Relative path - construct from Jellyseerr base
+            const baseUrl = sanitizeUrl(jellyseerrUrl);
+            if (!baseUrl) {
+                return res.status(500).json({ error: 'Invalid Jellyseerr URL configuration' });
+            }
 
-        // Select appropriate image resolution based on type
-        let upstreamPrefix = '/imageproxy/tmdb/t/p/w300_and_h450_face'; // Default: Poster
-        if (type === 'backdrop') {
-            upstreamPrefix = '/imageproxy/tmdb/t/p/w1920_and_h800_multi_faces'; // Backdrop (landscape)
-        }
+            // Select appropriate image resolution based on type
+            let upstreamPrefix = '/imageproxy/tmdb/t/p/w300_and_h450_face'; // Default: Poster
+            if (type === 'backdrop') {
+                upstreamPrefix = '/imageproxy/tmdb/t/p/w1920_and_h800_multi_faces'; // Backdrop (landscape)
+            }
 
-        // Construct full image URL
-        const imageUrl = `${baseUrl}${upstreamPrefix}${path}`;
+            // Construct full image URL
+            imageUrl = `${baseUrl}${upstreamPrefix}${path}`;
+        }
         
         // SSRF Protection: Validate the full URL before making request
         const validatedUrl = validateRequestUrl(imageUrl);
@@ -106,28 +116,23 @@ function toFrontendItem(item: any) {
     const mediaTypeRaw = item.mediaType ?? item.media_type ?? item.type ?? item.MediaType ?? 'movie';
     const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.toLowerCase() : 'movie';
     const releaseYear = item.releaseYear ?? (item.releaseDate ? String(item.releaseDate).substring(0,4) : (item.firstAirDate ? String(item.firstAirDate).substring(0,4) : '')) ?? '';
-    // Poster resolution: Use local proxy to avoid 403 errors from external Jellyseerr
+    // Poster resolution: ALWAYS use local proxy to avoid 403 errors from external sources
     let posterUrl: string | null = null;
-    if (item.posterUrl && item.posterUrl.startsWith('http')) {
-        // If absolute URL already provided, keep it (for backward compatibility)
-        posterUrl = item.posterUrl;
-    } else if (item.poster_path || item.poster) {
-        // Route through our proxy to bypass Cloudflare/WAF protections
-        const posterPath = item.poster_path || item.poster;
-        posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(posterPath)}`;
+    const posterSource = item.posterUrl || item.poster_path || item.poster || item.poster_url;
+    if (posterSource) {
+        // Force ALL images through proxy - even if already absolute URLs
+        // This bypasses Cloudflare, WAF, and CORS restrictions
+        posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(posterSource)}`;
     }
     
     const voteAverage = item.voteAverage ?? item.vote_average ?? item.rating ?? 0;
     
-    // Backdrop resolution: Use local proxy as well
+    // Backdrop resolution: ALWAYS use local proxy as well
     let backdropUrl: string | null = null;
-    if (item.backdropUrl && item.backdropUrl.startsWith('http')) {
-        backdropUrl = item.backdropUrl;
-    } else if (item.backdrop_path || item.backdrop) {
-        const backdropPath = item.backdrop_path || item.backdrop;
-        backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(backdropPath)}`;
-    } else {
-        backdropUrl = item.backdropUrl ?? item.backdrop_url ?? null;
+    const backdropSource = item.backdropUrl || item.backdrop_path || item.backdrop || item.backdrop_url;
+    if (backdropSource) {
+        // Force ALL images through proxy
+        backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(backdropSource)}`;
     }
     return {
         tmdbId,

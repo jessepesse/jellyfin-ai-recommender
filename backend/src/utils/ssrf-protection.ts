@@ -64,25 +64,47 @@ export function sanitizeUrl(url?: string): string | undefined {
             return undefined;
         }
         
+        // Check if this is a private/local IP address
+        const isPrivateIP = (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname.startsWith('192.168.') ||
+            hostname.startsWith('10.') ||
+            hostname.startsWith('172.16.') ||
+            hostname.startsWith('172.17.') ||
+            hostname.startsWith('172.18.') ||
+            hostname.startsWith('172.19.') ||
+            hostname.startsWith('172.20.') ||
+            hostname.startsWith('172.21.') ||
+            hostname.startsWith('172.22.') ||
+            hostname.startsWith('172.23.') ||
+            hostname.startsWith('172.24.') ||
+            hostname.startsWith('172.25.') ||
+            hostname.startsWith('172.26.') ||
+            hostname.startsWith('172.27.') ||
+            hostname.startsWith('172.28.') ||
+            hostname.startsWith('172.29.') ||
+            hostname.startsWith('172.30.') ||
+            hostname.startsWith('172.31.') ||
+            hostname.startsWith('jellyseerr') ||
+            hostname.startsWith('host.docker.internal')
+        );
+        
         // SSRF Protection: Allowlist approach for external requests
-        // Only allow requests to known safe domains
+        // Allow private IPs, Docker hostnames, and known safe domains
         const allowedDomains = [
             'image.tmdb.org',           // TMDB CDN
             'themoviedb.org',           // TMDB domains
-            'localhost',                // Local Jellyseerr proxy
-            '127.0.0.1',                // Local Jellyseerr proxy
             ...ADDITIONAL_ALLOWED_DOMAINS, // User-configured domains
         ];
         
         // Check if hostname matches allowed domains
-        const isAllowed = allowedDomains.some(allowed => 
+        const isAllowedDomain = allowedDomains.some(allowed => 
             hostname === allowed || hostname.endsWith(`.${allowed}`)
         );
         
-        // Also allow local Docker network hostnames (for containerized Jellyseerr)
-        const isLocalDockerHost = hostname.startsWith('jellyseerr') || hostname.startsWith('host.docker.internal');
-        
-        if (!isAllowed && !isLocalDockerHost) {
+        // Allow if: private IP, Docker host, or allowlisted domain
+        if (!isPrivateIP && !isAllowedDomain) {
             console.warn(`[SSRF] Blocked request to non-allowlisted domain: ${hostname}`);
             return undefined;
         }

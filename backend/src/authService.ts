@@ -5,11 +5,26 @@ import ConfigService from './services/config';
 import { JellyfinAuthResponse } from './types';
 import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from './utils/ssrf-protection';
 
+// Custom URL validator that allows local IPs and HTTP
+const urlSchema = z.string().refine(
+    (val) => {
+        if (!val) return true; // Optional field
+        try {
+            const url = new URL(val);
+            // Allow http and https only
+            return url.protocol === 'http:' || url.protocol === 'https:';
+        } catch {
+            return false;
+        }
+    },
+    { message: "Invalid server URL format" }
+);
+
 // Zod schema for login request body
 export const LoginSchema = z.object({
     username: z.string().min(1, "Username is required"),
     password: z.string().min(1, "Password is required"),
-    serverUrl: z.string().url("Invalid server URL").optional(),
+    serverUrl: urlSchema.optional(),
 });
 
 export class AuthService {
