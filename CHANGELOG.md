@@ -6,9 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 [2.0.3] - 2025-11-25
 
-🔧 CORS & Network Fixes + Backup/Recovery System + Image Proxy
+🔧 CORS & Network Fixes + Backup/Recovery System + Image Proxy + Mobile UX Overhaul
 
-Critical fixes for LAN deployments, comprehensive disaster recovery, and image loading issues.
+Critical fixes for LAN deployments, comprehensive disaster recovery, responsive image handling, and mobile-first UI improvements.
 
 🐛 Bug Fixes
 
@@ -30,6 +30,11 @@ Critical fixes for LAN deployments, comprehensive disaster recovery, and image l
         Prevents environment variables from overriding UI changes
         Settings page updates now persist across container restarts
         Maintains backward compatibility with env-only setups
+        
+    Fixed Block Button Visibility:
+        Replaced Slash icon with Ban icon for clearer visual indication
+        Optimized button layout spacing (gap-1, justify-evenly) for 4 buttons
+        All action buttons (Request, Watchlist, Watched, Block) now properly visible
 
 ✨ New Features: Backup & Recovery System
 
@@ -52,6 +57,33 @@ Critical fixes for LAN deployments, comprehensive disaster recovery, and image l
         Automatic extraction of Jellyfin, Jellyseerr, and Gemini settings
         Ready for watch history restoration after first login
         Supports both new multi-user and legacy single-user backup formats
+
+✨ Mobile UX Improvements
+
+    Responsive Image System:
+        Mobile: Displays backdrop images (16:9 landscape) for better horizontal layout
+        Desktop: Maintains poster images (2:3 portrait) for classic grid view
+        Dual image rendering with CSS visibility toggles at `md` breakpoint
+        Automatic fallback between poster and backdrop based on availability
+        
+    Mobile-First Grid Layout:
+        Mobile: Single column (grid-cols-1) for full-width landscape cards
+        Tablet: 2 columns (sm:grid-cols-2)
+        Desktop: 3-5 columns (md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5)
+        Prevents squished horizontal cards on mobile devices
+        
+    Enhanced Touch Targets:
+        Increased button padding on mobile (p-3 vs p-2 on desktop)
+        Larger icons on mobile (w-6 h-6 vs w-5 h-5 on desktop)
+        Minimum 48x48px touch targets for accessibility
+        Consistent spacing across all action buttons
+        
+    Image Proxy Upgrade:
+        Added `type` parameter support (poster | backdrop)
+        Poster: w300_and_h450_face (portrait, 300x450px)
+        Backdrop: w1920_and_h800_multi_faces (landscape, 1920x800px)
+        High-resolution backdrop images for mobile landscape layout
+        Automatic type parameter in URL generation
 
 🔧 Infrastructure
 
