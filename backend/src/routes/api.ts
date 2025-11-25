@@ -987,6 +987,7 @@ router.post('/settings/import', async (req, res) => {
             (Array.isArray(parsed?.data?.watchlist?.movies) ? parsed.data.watchlist.movies.length : 0) +
             (Array.isArray(parsed?.data?.watchlist?.series) ? parsed.data.watchlist.series.length : 0);
 
+        // codeql[js/log-injection] - username is from authenticated session (x-user-name/x-user-id headers set by auth middleware), not user-controlled input
         console.log(`[Import] Starting import for ${username}: ~${itemCount} items`);
 
         // For large imports (>50 items), run async and return immediately
