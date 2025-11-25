@@ -26,8 +26,10 @@ const ADDITIONAL_ALLOWED_DOMAINS = process.env.ALLOWED_IMAGE_DOMAINS
 
 /**
  * Validates a user-configured service URL (Jellyfin/Jellyseerr)
- * More permissive than sanitizeUrl - allows any valid http/https URL
- * Only blocks known cloud metadata endpoints for security
+ * 
+ * PERMISSIVE MODE: Protocol-only validation for self-hosted environments
+ * Accepts any valid http/https URL without restrictions
+ * 
  * @param url - Raw URL string to validate
  * @returns Sanitized URL string or undefined if invalid/blocked
  */
@@ -46,23 +48,9 @@ export function sanitizeConfigUrl(url?: string): string | undefined {
         }
         const parsed = new URL(trimmed);
         
-        // Only allow http/https protocols
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
+        // Only validate protocol - allow any http/https URL
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
             console.warn(`[SSRF] Blocked non-HTTP protocol in config URL: ${parsed.protocol}`);
-            return undefined;
-        }
-        
-        const hostname = parsed.hostname.toLowerCase();
-        
-        // Block ONLY cloud metadata endpoints (minimal security)
-        if (BLOCKED_HOSTS.some(blocked => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
-            console.warn(`[SSRF] Blocked metadata endpoint in config URL: ${hostname}`);
-            return undefined;
-        }
-        
-        // Block link-local addresses (169.254.0.0/16)
-        if (hostname.startsWith('169.254.')) {
-            console.warn(`[SSRF] Blocked link-local address in config URL: ${hostname}`);
             return undefined;
         }
         
