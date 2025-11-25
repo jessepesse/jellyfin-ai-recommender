@@ -3,7 +3,7 @@ import { z } from 'zod';
 import axios from 'axios';
 import ConfigService from './services/config';
 import { JellyfinAuthResponse } from './types';
-import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from './utils/ssrf-protection';
+import { sanitizeConfigUrl, validateRequestUrl, validateSafeUrl } from './utils/ssrf-protection';
 
 // Custom URL validator that allows local IPs and HTTP
 const urlSchema = z.string().refine(
@@ -30,7 +30,8 @@ export const LoginSchema = z.object({
 export class AuthService {
     private static cleanBaseUrl(inputUrl: string): string {
         if (!inputUrl) return '';
-        const sanitized = sanitizeUrl(inputUrl);
+        // Use permissive validation for user-provided URLs
+        const sanitized = sanitizeConfigUrl(inputUrl);
         if (!sanitized) return '';
         // Remove /web and anything after it (common client path)
         const clean = sanitized.split('/web')[0];
