@@ -14,6 +14,10 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 
+// Trust proxy headers for rate limiting (needed for reverse proxies like Nginx, ZimaOS)
+// This allows express-rate-limit to correctly identify users behind proxies
+app.set('trust proxy', 1);
+
 // Security headers with Helmet
 app.use(helmet({
   contentSecurityPolicy: {
@@ -109,6 +113,9 @@ const importLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// CRITICAL: Parse JSON BEFORE rate limiting so limiters can access req.body if needed
+app.use(express.json({ limit: '50mb' })); // Increased limit for large backup imports
+
 // Apply rate limiters in order (most specific first)
 app.use('/api/auth', authLimiter);
 app.use('/api/recommendations', recommendationLimiter);
@@ -116,8 +123,6 @@ app.use('/api/system/setup', setupLimiter);
 app.use('/api/system/verify', setupLimiter);
 app.use('/api/settings/import', importLimiter); // Special handling for imports
 app.use('/api', generalLimiter); // General limiter for all other endpoints
-
-app.use(express.json({ limit: '50mb' })); // Increased limit for large backup imports
 
 // Serve static images from local storage
 // Images are downloaded and cached to prevent broken links when Jellyseerr IP changes

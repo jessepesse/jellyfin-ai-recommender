@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.6] - 2025-11-25
+
+🔧 Critical Fixes: Rate Limiting & Setup Wizard
+
+Major improvements to rate limiting for large imports and fixed Setup Wizard connection testing.
+
+🐛 Bug Fixes
+
+    **Fixed Setup Wizard Connection Test (404 Error)**:
+        - Fixed double-slash bug in URL sanitization (`//System/Info/Public`)
+        - `sanitizeUrl()` now properly removes trailing slashes from reconstructed URLs
+        - Connection tests now work correctly in Setup Wizard
+        - Affects: Jellyfin, Jellyseerr, and Gemini verification endpoints
+        
+    **Fixed Middleware Order (Request Body Parsing)**:
+        - Moved `express.json()` before rate limiters
+        - Ensures `req.body` is available for rate limiting logic
+        - Fixes verify endpoint receiving empty payloads
+        
+    **Improved Rate Limiting for Production Use**:
+        - Increased general limiter: 100 → 2000 requests per 15 minutes
+        - Supports large imports (1000+ items) without 429 errors
+        - Added skip logic for read-only GET endpoints
+        - Separate limiters by operation type:
+          - Auth: 10 attempts/15min
+          - Recommendations: 30 requests/5min
+          - Setup: 20 operations/5min
+          - Import: 5 imports/15min (each processes hundreds of items internally)
+        
+    **Fixed Reverse Proxy Rate Limiting**:
+        - Added `app.set('trust proxy', 1)` for X-Forwarded-For headers
+        - Resolves `ValidationError` in ZimaOS and other reverse proxy environments
+        - Rate limiter now correctly identifies users behind proxies
+
+🔒 Security
+
+    **Enhanced SSRF Protection**:
+        - Improved URL validation with proper trailing slash handling
+        - Prevents malformed URLs from bypassing security checks
+
+📝 Technical Details
+
+    - Rate limiter skip paths: `/system/status`, `/system/setup-defaults`, `/system/config-editor`, `/health`
+    - Trust proxy level: 1 (single reverse proxy layer)
+    - Import calculations: 1000 items × 2-3 API calls/batch ≈ 300 requests (well under 2000 limit)
+
 [2.0.5] - 2025-11-25
 
 🎯 Real-Time Import Progress & Security Hardening

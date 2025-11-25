@@ -96,7 +96,11 @@ export function sanitizeUrl(url?: string): string | undefined {
         
         // Reconstruct URL from validated components to break taint chain
         // This prevents CodeQL from tracking user input through validation
-        const cleanUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+        let cleanUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+        // Remove trailing slash from reconstructed URL
+        while (cleanUrl.endsWith('/')) {
+            cleanUrl = cleanUrl.slice(0, -1);
+        }
         return cleanUrl;
     } catch (err) {
         console.warn('[SSRF] Invalid URL format');

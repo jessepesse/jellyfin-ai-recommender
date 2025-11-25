@@ -709,9 +709,12 @@ router.post('/system/verify', async (req, res) => {
         // Jellyfin check
         const jellyfinCheck = (async () => {
             try {
-                const base = sanitizeUrl(jellyfinUrlRaw);
+                let base = sanitizeUrl(jellyfinUrlRaw);
                 if (!base) return { ok: false, message: 'No Jellyfin URL provided or invalid' };
+                // Ensure no double slashes when appending path
+                if (base.endsWith('/')) base = base.slice(0, -1);
                 const url = validateRequestUrl(`${base}/System/Info/Public`);
+                console.log(`[Verify] Testing Jellyfin: ${url}`);
                 // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
                 // codeql[js/request-forgery] - User-configured Jellyfin URL for health check, validated by validateSafeUrl
                 const resp = await axios.get(validateSafeUrl(url), { timeout: 8000 });
@@ -721,6 +724,7 @@ router.post('/system/verify', async (req, res) => {
                 }
                 return { ok: false, message: `HTTP ${resp.status}` };
             } catch (e: any) {
+                console.error(`[Verify] Jellyfin check failed:`, e?.response?.status, e?.message);
                 const msg = e?.response ? `${e.response.status} ${e.response.statusText || ''}`.trim() : (e?.message || String(e));
                 return { ok: false, message: msg };
             }
