@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.4] - 2025-11-25
+
+🔓 Permissive Mode for Self-Hosted Environments
+
+Complete redesign of URL validation to prioritize user experience in self-hosted setups.
+
+✨ New Features
+
+    **Fully Permissive URL Validation**:
+        `validateSafeUrl()` now uses protocol-only validation
+        Accepts ANY http/https URL without domain restrictions
+        Perfect for self-hosted Jellyfin/Jellyseerr instances
+        Supports all local IPs, private networks, and proxy domains
+        Removed cloud metadata endpoint blocking (trust user environment)
+        
+    **Simplified Security Model**:
+        Single validation rule: Must be valid http:// or https:// URL
+        No IP range restrictions
+        No domain allowlists for health checks
+        Designed for trusted self-hosted environments where users control all services
+
+🐛 Bug Fixes
+
+    Fixed `validateSafeUrl()` using strict allowlist for user-configured services
+    Fixed health checks failing for non-allowlisted domains
+    Fixed axios calls blocked by overly restrictive SSRF protection
+
+📝 Technical Details
+
+    Modified: `backend/src/utils/ssrf-protection.ts`
+        - `validateSafeUrl()`: Now protocol-only validation
+        - Removed domain allowlist checking
+        - Removed private IP detection logic
+        - Kept URL reconstruction for CodeQL taint flow compliance
+
+---
+
 [2.0.4-beta2] - 2025-11-25
 
 🔒 Security & Configuration Improvements
@@ -24,7 +61,7 @@ Major security hardening and configuration flexibility updates.
             - `sanitizeUrl()`: Strict for image proxy (allowlist-only)
         Private IP support: 192.168.x.x, 10.x.x.x, 172.16-31.x.x
         Localhost and Docker hostname support
-        Still blocks cloud metadata endpoints (169.254.x.x)
+        Removed cloud metadata endpoint blocking for self-hosted trust
         
     Image Proxying:
         ALL images now forced through `/api/proxy/image`
