@@ -85,7 +85,7 @@ export class ImageService {
 
             // If file already exists, return the local path
             if (fs.existsSync(filepath)) {
-                console.log(`[ImageService] Image already exists: ${filename}`);
+                console.log('[ImageService] Image already exists at path:', filename);
                 return `/images/${filename}`;
             }
 
@@ -99,10 +99,12 @@ export class ImageService {
 
             // SSRF Protection: Validate URL before making request
             const validatedUrl = validateRequestUrl(downloadUrl);
-            console.log(`[ImageService] Downloading: ${downloadUrl} -> ${filename}`);
+            const safeUrl = validateSafeUrl(validatedUrl);
+            // Security: Use separate arguments to prevent format string injection
+            console.log('[ImageService] Downloading image to file:', filename);
 
-            // Download image stream
-            const response = await axios.get(validateSafeUrl(validatedUrl), {
+            // Download image stream with validated URL
+            const response = await axios.get(safeUrl, {
                 responseType: 'stream',
                 headers: headers || {},
                 timeout: 30000, // 30 second timeout
@@ -111,12 +113,13 @@ export class ImageService {
             // Save to disk
             await pipeline(response.data, fs.createWriteStream(filepath));
 
-            console.log(`[ImageService] Successfully downloaded: ${filename}`);
+            console.log('[ImageService] Successfully downloaded image to file:', filename);
             return `/images/${filename}`;
         } catch (error: any) {
-            // Security: Sanitize error message to prevent format string injection
+            // Security: Sanitize both URL and error message to prevent format string injection
+            const safeUrl = String(url).substring(0, 200); // Limit URL length for logging
             const errorMsg = error instanceof Error ? error.message : String(error);
-            console.error(`[ImageService] Failed to download ${url}:`, errorMsg);
+            console.error(`[ImageService] Failed to download URL:`, safeUrl, errorMsg);
             return null;
         }
     }

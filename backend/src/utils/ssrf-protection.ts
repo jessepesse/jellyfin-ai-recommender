@@ -5,8 +5,10 @@
  * - Cloud metadata endpoints (AWS, GCP, Azure)
  * - Link-local addresses
  * - Non-HTTP protocols
+ * - Non-allowlisted domains (uses strict allowlist approach)
  * 
- * While allowing legitimate self-hosted servers (local IPs, domains)
+ * Configuration:
+ * - ALLOWED_IMAGE_DOMAINS: Comma-separated list of additional allowed domains (env var)
  */
 
 const BLOCKED_HOSTS = [
@@ -16,6 +18,11 @@ const BLOCKED_HOSTS = [
     'fd00:ec2::254',             // AWS IPv6 metadata
     'metadata',                   // Generic metadata hostname
 ];
+
+// Get additional allowed domains from environment variable
+const ADDITIONAL_ALLOWED_DOMAINS = process.env.ALLOWED_IMAGE_DOMAINS
+    ? process.env.ALLOWED_IMAGE_DOMAINS.split(',').map(d => d.trim().toLowerCase())
+    : [];
 
 /**
  * Validates and sanitizes a URL for SSRF protection
@@ -43,8 +50,9 @@ export function sanitizeUrl(url?: string): string | undefined {
             return undefined;
         }
         
-        // Block known cloud metadata endpoints
         const hostname = parsed.hostname.toLowerCase();
+        
+        // Block known cloud metadata endpoints
         if (BLOCKED_HOSTS.some(blocked => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
             console.warn(`[SSRF] Blocked metadata endpoint: ${hostname}`);
             return undefined;
@@ -56,7 +64,29 @@ export function sanitizeUrl(url?: string): string | undefined {
             return undefined;
         }
         
-        // Allow everything else (localhost, private IPs, domains)
+        // SSRF Protection: Allowlist approach for external requests
+        // Only allow requests to known safe domains
+        const allowedDomains = [
+            'image.tmdb.org',           // TMDB CDN
+            'themoviedb.org',           // TMDB domains
+            'localhost',                // Local Jellyseerr proxy
+            '127.0.0.1',                // Local Jellyseerr proxy
+            ...ADDITIONAL_ALLOWED_DOMAINS, // User-configured domains
+        ];
+        
+        // Check if hostname matches allowed domains
+        const isAllowed = allowedDomains.some(allowed => 
+            hostname === allowed || hostname.endsWith(`.${allowed}`)
+        );
+        
+        // Also allow local Docker network hostnames (for containerized Jellyseerr)
+        const isLocalDockerHost = hostname.startsWith('jellyseerr') || hostname.startsWith('host.docker.internal');
+        
+        if (!isAllowed && !isLocalDockerHost) {
+            console.warn(`[SSRF] Blocked request to non-allowlisted domain: ${hostname}`);
+            return undefined;
+        }
+        
         return trimmed;
     } catch (err) {
         console.warn(`[SSRF] Invalid URL format: ${url}`);
