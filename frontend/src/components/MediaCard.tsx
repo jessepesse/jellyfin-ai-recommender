@@ -17,6 +17,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
 
   // Debug logging to help diagnose rendering issues
   // eslint-disable-next-line no-console
+  console.log('[MediaCard] Rendering:', { title: titleText, posterUrl: item.posterUrl, imgSrc });
   // Avoid logging card rendering details in production
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);

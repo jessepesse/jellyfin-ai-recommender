@@ -37,10 +37,16 @@ export async function syncMediaItem(item: any) {
     mediaType: validType,
   };
   if (validYear) updateData.releaseYear = validYear;
-  if (posterUrl) updateData.posterUrl = posterUrl;
+  if (posterUrl) {
+    updateData.posterUrl = posterUrl;
+    updateData.posterSourceUrl = posterUrl; // Save original URL as source
+  }
   // Persist rich metadata when provided to allow backfilling
   if (overview !== null && overview !== undefined && overview !== '') updateData.overview = overview;
-  if (backdropUrl) updateData.backdropUrl = backdropUrl;
+  if (backdropUrl) {
+    updateData.backdropUrl = backdropUrl;
+    updateData.backdropSourceUrl = backdropUrl; // Save original URL as source
+  }
   if (voteAverage !== null && voteAverage !== undefined) updateData.voteAverage = Number(voteAverage);
   if (language) updateData.language = String(language);
 
@@ -49,9 +55,11 @@ export async function syncMediaItem(item: any) {
     title: validTitle,
     mediaType: validType,
     posterUrl,
+    posterSourceUrl: posterUrl, // Save original URL as source
     releaseYear: validYear,
     overview: overview ?? null,
     backdropUrl: backdropUrl ?? null,
+    backdropSourceUrl: backdropUrl, // Save original URL as source
     voteAverage: voteAverage !== null && voteAverage !== undefined ? Number(voteAverage) : null,
     language,
   };
@@ -75,19 +83,23 @@ export async function syncMediaItem(item: any) {
         backdropUrl
       );
 
-      // Update database with local image paths
+      // Update database with local image paths (posterUrl/backdropUrl)
+      // Keep posterSourceUrl/backdropSourceUrl as original URLs for fallback
       const imageUpdate: any = {};
       if (localImages.posterUrl && localImages.posterUrl !== posterUrl) {
-        imageUpdate.posterUrl = localImages.posterUrl;
+        imageUpdate.posterUrl = localImages.posterUrl; // Update to local path
         media.posterUrl = localImages.posterUrl;
+        console.log(`[syncMediaItem] Updating posterUrl: ${posterUrl} -> ${localImages.posterUrl}`);
       }
       if (localImages.backdropUrl && localImages.backdropUrl !== backdropUrl) {
-        imageUpdate.backdropUrl = localImages.backdropUrl;
+        imageUpdate.backdropUrl = localImages.backdropUrl; // Update to local path
         media.backdropUrl = localImages.backdropUrl;
+        console.log(`[syncMediaItem] Updating backdropUrl: ${backdropUrl} -> ${localImages.backdropUrl}`);
       }
 
       if (Object.keys(imageUpdate).length > 0) {
         await prisma.media.update({ where: { id: media.id }, data: imageUpdate });
+        console.log(`[syncMediaItem] Database updated with local image paths for tmdbId ${tmdbId}`);
       }
     }
   } catch (error) {
@@ -209,9 +221,11 @@ export async function getFullWatchlist(username: string) {
   return entries.map(e => ({
     tmdbId: e.media?.tmdbId ?? null,
     title: e.media?.title ?? '',
-    posterUrl: e.media?.posterUrl ?? null,
+    posterUrl: e.media?.posterUrl ?? null, // Local path if downloaded, else proxy URL
+    posterSourceUrl: e.media?.posterSourceUrl ?? null, // Original proxy/Jellyseerr URL
     overview: e.media?.overview ?? null,
-    backdropUrl: e.media?.backdropUrl ?? null,
+    backdropUrl: e.media?.backdropUrl ?? null, // Local path if downloaded, else proxy URL
+    backdropSourceUrl: e.media?.backdropSourceUrl ?? null, // Original proxy/Jellyseerr URL
     voteAverage: e.media?.voteAverage ?? null,
     language: e.media?.language ?? null,
     mediaType: e.media?.mediaType ?? 'movie',

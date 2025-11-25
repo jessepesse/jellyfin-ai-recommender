@@ -55,7 +55,9 @@ export class AuthService {
 
         // Candidate roots to try when authenticating. Prefer the sanitized root,
         // then common mounted prefixes used by some reverse proxies.
-        const candidates = [baseUrl, `${baseUrl}/jellyfin`, `${baseUrl}/emby`].map(s => AuthService.cleanBaseUrl(s));
+        // Ensure no double slashes by removing any trailing slash from baseUrl before appending
+        const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const candidates = [cleanBase, `${cleanBase}/jellyfin`, `${cleanBase}/emby`];
 
         const authHeaders = {
             'Content-Type': 'application/json',
@@ -92,7 +94,11 @@ export class AuthService {
                     console.warn(`[Auth] Endpoint not found (404) at: ${endpoint} — trying next candidate`);
                     continue;
                 }
-                console.error(`[Auth] Login failed at ${endpoint}:`, err?.response ? { status: err.response.status, data: err.response.data } : err?.message || err);
+                // Only log status and error message, never full response data (may contain sensitive info)
+                const safeError = err?.response 
+                    ? { status: err.response.status, message: err.response.data?.message || err.response.statusText }
+                    : err?.message || err;
+                console.error(`[Auth] Login failed at ${endpoint}:`, safeError);
                 throw err;
             }
         }

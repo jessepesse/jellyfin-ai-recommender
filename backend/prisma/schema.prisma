@@ -26,9 +26,11 @@ model Media {
   tmdbId      Int      @unique
   title       String
   mediaType   String
-  posterUrl   String?
+  posterUrl   String?  // Local cached image path (/images/movie_123_poster.jpg)
+  posterSourceUrl String? // Original Jellyseerr/proxy URL (backup)
   overview    String?
-  backdropUrl String?
+  backdropUrl String?  // Local cached image path (/images/movie_123_backdrop.jpg)
+  backdropSourceUrl String? // Original Jellyseerr/proxy URL (backup)
   voteAverage Float?
   language    String?
   releaseYear String?

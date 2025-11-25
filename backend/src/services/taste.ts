@@ -42,18 +42,22 @@ export const TasteService = {
       }
     }
 
-    // Ask Gemini to generate a compact taste summary
-    try {
-      const summary = await GeminiService.summarizeProfile(username, seed, type);
-      if (typeof summary === 'string') {
-        const data: any = {};
-        if (type === 'tv') data.tvProfile = summary;
-        else data.movieProfile = summary;
-        await prisma.user.upsert({ where: { username }, create: { username, ...data }, update: data });
-        return summary;
+    // Ask Gemini to generate a compact taste summary (only if enough data)
+    if (seed && seed.length >= 3) {
+      try {
+        const summary = await GeminiService.summarizeProfile(username, seed, type);
+        if (typeof summary === 'string') {
+          const data: any = {};
+          if (type === 'tv') data.tvProfile = summary;
+          else data.movieProfile = summary;
+          await prisma.user.upsert({ where: { username }, create: { username, ...data }, update: data });
+          return summary;
+        }
+      } catch (e) {
+        console.error('Failed to generate/save taste profile', e);
       }
-    } catch (e) {
-      console.error('Failed to generate/save taste profile', e);
+    } else {
+      console.debug(`[TasteService] Skipping profile generation: only ${seed?.length || 0} items (minimum 3 required)`);
     }
 
     return '';

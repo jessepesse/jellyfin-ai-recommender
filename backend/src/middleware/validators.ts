@@ -27,13 +27,14 @@ export const validateLogin = [
 
 /**
  * Validation rules for user action endpoints (watched, watchlist, block)
+ * Frontend sends { item: { tmdbId, mediaType, title, ... } }
  */
 export const validateUserAction = [
-  body('userId').isString().trim().notEmpty().withMessage('User ID is required'),
-  body('tmdbId').isInt({ min: 1 }).withMessage('TMDB ID must be a positive integer'),
-  body('mediaType').isIn(['movie', 'tv']).withMessage('Media type must be "movie" or "tv"'),
-  body('title').optional().isString().trim(),
-  body('releaseYear').optional().isInt({ min: 1800, max: 2100 }).withMessage('Invalid release year'),
+  body('item').isObject().withMessage('Item object is required'),
+  body('item.tmdbId').isInt({ min: 1 }).withMessage('TMDB ID must be a positive integer'),
+  body('item.mediaType').isIn(['movie', 'tv']).withMessage('Media type must be "movie" or "tv"'),
+  body('item.title').optional().isString().trim(),
+  body('item.releaseYear').optional().isString().trim(),
   handleValidationErrors,
 ];
 

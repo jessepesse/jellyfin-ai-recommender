@@ -1,11 +1,25 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { postSettingsImport, getSettingsExport } from '../services/api';
 import GlassCard from './GlassCard';
 import HeroButton from './HeroButton';
 import ConfigEditor from './ConfigEditor';
-import { UploadCloud, FileJson, X, Download } from 'lucide-react';
+import { UploadCloud, FileJson, X, Download, Loader2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+
+interface ImportProgress {
+  username: string;
+  total: number;
+  processed: number;
+  imported: number;
+  skipped: number;
+  errors: number;
+  currentItem: string;
+  active: boolean;
+  completed: boolean;
+}
 
 const SettingsView: React.FC = () => {
+  const { user } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -14,6 +28,8 @@ const SettingsView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [eventSource, setEventSource] = useState<EventSource | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,6 +93,53 @@ const SettingsView: React.FC = () => {
     }
   };
 
+  // Connect to SSE for import progress
+  const connectToProgressStream = () => {
+    if (!user?.id) return;
+    
+    const username = user.name || user.id;
+    const es = new EventSource(`/api/settings/import/progress/${username}`);
+    
+    es.onmessage = (event) => {
+      try {
+        const progress = JSON.parse(event.data);
+        setImportProgress(progress);
+        
+        // When import completes, close SSE and show final result
+        if (progress.completed) {
+          setLoading(false);
+          setResult({
+            total: progress.total,
+            imported: progress.imported,
+            skipped: progress.skipped,
+            errors: progress.errors,
+          });
+          es.close();
+          setEventSource(null);
+        }
+      } catch (e) {
+        console.error('Failed to parse progress:', e);
+      }
+    };
+    
+    es.onerror = () => {
+      console.error('SSE connection error');
+      es.close();
+      setEventSource(null);
+    };
+    
+    setEventSource(es);
+  };
+
+  // Cleanup SSE on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [eventSource]);
+
   const onImport = async () => {
     if (!fileContent) {
       setError('No file content to import');
@@ -85,7 +148,9 @@ const SettingsView: React.FC = () => {
 
     setError(null);
     setResult(null);
+    setImportProgress(null);
     setLoading(true);
+    
     try {
       // Validate JSON before sending
       let parsed: any;
@@ -95,12 +160,31 @@ const SettingsView: React.FC = () => {
         throw new Error('Invalid JSON format');
       }
 
+      // Start SSE connection for progress
+      connectToProgressStream();
+
       const res = await postSettingsImport(parsed);
-      setResult(res.summary ?? res);
+      
+      // Check if async import
+      if (res.async) {
+        // Keep loading state, progress will update via SSE
+        // Don't set result or loading here - progress bar handles it
+      } else {
+        // Small import completed synchronously
+        setResult(res.summary ?? res);
+        setLoading(false);
+        if (eventSource) {
+          eventSource.close();
+          setEventSource(null);
+        }
+      }
     } catch (e: any) {
       setError(String(e?.message || e));
-    } finally {
       setLoading(false);
+      if (eventSource) {
+        eventSource.close();
+        setEventSource(null);
+      }
     }
   };
 
@@ -195,11 +279,16 @@ const SettingsView: React.FC = () => {
         <div className="flex items-center gap-3 mt-6">
           <HeroButton
             onClick={onImport}
-            disabled={loading || !selectedFile || !fileContent}
+            disabled={loading || !selectedFile || !fileContent || importProgress?.active}
           >
-            {loading ? 'Importing...' : 'Import'}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Importing...
+              </span>
+            ) : 'Import'}
           </HeroButton>
-          {selectedFile && (
+          {selectedFile && !loading && (
             <HeroButton
               variant="secondary"
               onClick={handleClearFile}
@@ -209,21 +298,64 @@ const SettingsView: React.FC = () => {
           )}
         </div>
 
+        {/* Progress Bar */}
+        {importProgress && importProgress.active && (
+          <div className="mt-6 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-300">
+                Importing... {importProgress.processed}/{importProgress.total}
+              </span>
+              <span className="text-sm text-slate-400">
+                {Math.round((importProgress.processed / importProgress.total) * 100)}%
+              </span>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
+              />
+            </div>
+            
+            {/* Current Item & Stats */}
+            <div className="mt-3 space-y-1 text-xs text-slate-400">
+              {importProgress.currentItem && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Current:</span>
+                  <span className="text-slate-300 truncate">{importProgress.currentItem}</span>
+                </div>
+              )}
+              <div className="flex gap-4">
+                <span className="text-green-400">✓ {importProgress.imported} imported</span>
+                <span className="text-yellow-400">⊘ {importProgress.skipped} skipped</span>
+                {importProgress.errors > 0 && (
+                  <span className="text-red-400">✗ {importProgress.errors} errors</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
             <strong>Error:</strong> {error}
           </div>
         )}
 
-        {result && (
-          <div className="mt-6 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
-            <div className="font-semibold text-cyan-300 mb-3">Import Summary</div>
+        {result && !importProgress?.active && (
+          <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+            <div className="font-semibold text-green-300 mb-3">
+              ✓ Import Complete
+            </div>
             <div className="text-sm text-slate-400 space-y-1">
-              <div>Total: {result.total}</div>
-              <div>Imported: {result.imported}</div>
-              <div>Skipped: {result.skipped}</div>
-              {result.errors && result.errors.length > 0 && (
-                <div className="text-yellow-300 mt-2">Errors: {result.errors.join('; ')}</div>
+              <div className="flex gap-4">
+                <span>Total: {result.total}</span>
+                <span className="text-green-400">Imported: {result.imported}</span>
+                <span className="text-yellow-400">Skipped: {result.skipped}</span>
+              </div>
+              {result.errors > 0 && (
+                <div className="text-red-400 mt-2">Errors: {result.errors}</div>
               )}
             </div>
           </div>

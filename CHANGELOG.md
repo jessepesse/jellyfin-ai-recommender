@@ -4,6 +4,106 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.5] - 2025-11-25
+
+🎯 Real-Time Import Progress & Security Hardening
+
+Major UX improvement with live progress tracking for imports, plus critical security fixes.
+
+✨ New Features
+
+    **Real-Time Import Progress Tracking (SSE)**:
+        - Server-Sent Events (SSE) for live import status updates
+        - Beautiful animated progress bar with gradient effects
+        - Live statistics: processed/total, imported, skipped, errors
+        - Current item display during import
+        - Auto-cleanup after 5 minutes
+        - Endpoint: `GET /api/settings/import/progress/:username`
+        
+    **Async Import Processing**:
+        - Large imports (>50 items) now process asynchronously
+        - Batch processing (10 items per batch) prevents timeouts
+        - Threshold-based: ≤50 items = synchronous, >50 = async
+        - No more 504 timeouts on large JSON files
+        
+    **Enhanced Image Architecture**:
+        - Dual URL storage: local cached path + original source URL
+        - Backend serves cached images via `/api/images/:filename`
+        - Smart fallback logic: local → proxy → source → construct
+        - Schema fields: `posterSourceUrl`, `backdropSourceUrl`
+        
+    **Import Button State Management**:
+        - Button automatically disables during active imports
+        - Loading spinner with "Importing..." text
+        - Success message replaces old async notification
+        - Clean UX with single source of truth (progress bar)
+
+🐛 Bug Fixes
+
+    **Authentication Double-Slash Fix**:
+        - `authService.ts`: Remove trailing slash before path concatenation
+        - `jellyfin.ts`: Fixed in all methods (getLibraries, getItems, getUserHistory, getOwnedIds)
+        - Prevents `//emby/Users/...` and similar malformed URLs
+        
+    **Nested Validation Fix**:
+        - `validators.ts`: Changed from `body('tmdbId')` to `body('item.tmdbId')`
+        - Properly validates nested `{ item: { tmdbId, mediaType, ... } }` payloads
+        - Fixes 400 Bad Request errors on watchlist actions
+        
+    **Image Proxy Query Parameters**:
+        - `image.ts`: Handles proxy URLs with query strings correctly
+        - Pattern: `/api/proxy/image?type=poster&path=...`
+        
+    **Gemini Profile Generation**:
+        - `taste.ts`: Requires minimum 3 items before API call
+        - Prevents errors when insufficient data available
+
+🔒 Security Improvements
+
+    **Auth Error Logging Sanitization**:
+        - `authService.ts`: Only logs `{ status, message }` instead of full response
+        - Prevents potential leak of sensitive error details from Jellyfin
+        - No passwords, tokens, or full responses in logs
+        
+    **Console.log Audit**:
+        - Reviewed all 100+ console.log statements across codebase
+        - Gemini API key: Only logs source (DB/ENV), never the actual key
+        - Jellyfin token: Test scripts truncate to first 12 chars
+        - Passwords: Never logged anywhere
+        - All logging safe for production use
+
+📝 Technical Details
+
+**Modified Files**:
+    - `backend/prisma/schema.prisma`: Added posterSourceUrl, backdropSourceUrl fields
+    - `backend/src/authService.ts`: Double-slash fix + secure error logging
+    - `backend/src/jellyfin.ts`: Double-slash fix in all methods
+    - `backend/src/middleware/validators.ts`: Nested object validation
+    - `backend/src/routes/api.ts`: SSE endpoint + async import + image serving
+    - `backend/src/services/data.ts`: Dual URL storage implementation
+    - `backend/src/services/image.ts`: Query parameter handling fix
+    - `backend/src/services/import.ts`: Progress tracking + batch processing
+    - `backend/src/services/taste.ts`: Minimum item requirement (3)
+    - `frontend/src/components/SettingsView.tsx`: SSE client + progress bar UI
+    - `frontend/src/components/MediaCard.tsx`: Debug logging
+    
+**New Files**:
+    - `docker-compose.dev.yml`: Local development Docker configuration
+
+**Database Schema Changes**:
+    ```prisma
+    model Media {
+      posterUrl String?           // Local: /images/movie_123_poster.jpg
+      posterSourceUrl String?     // Source: /api/proxy/image?...
+      backdropUrl String?         // Local: /images/movie_123_backdrop.jpg
+      backdropSourceUrl String?   // Source: /api/proxy/image?...
+    }
+    ```
+
+**Breaking Changes**: None - All changes are backward compatible
+
+---
+
 [2.0.4] - 2025-11-25
 
 🔓 Permissive Mode for Self-Hosted Environments

@@ -8,6 +8,8 @@ import { GeminiService } from '../services/gemini';
 import { TasteService } from '../services/taste';
 import { requestMediaByTmdb, search as jellySearch } from '../services/jellyseerr';
 import ConfigService from '../services/config';
+import path from 'path';
+import fs from 'fs';
 import importService from '../services/import';
 import { exportUserData } from '../services/export';
 import axios from 'axios';
@@ -115,23 +117,68 @@ function toFrontendItem(item: any) {
     const mediaTypeRaw = item.mediaType ?? item.media_type ?? item.type ?? item.MediaType ?? 'movie';
     const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.toLowerCase() : 'movie';
     const releaseYear = item.releaseYear ?? (item.releaseDate ? String(item.releaseDate).substring(0,4) : (item.firstAirDate ? String(item.firstAirDate).substring(0,4) : '')) ?? '';
-    // Poster resolution: ALWAYS use local proxy to avoid 403 errors from external sources
+    // Poster resolution: Prefer local cached image, fallback to source URL
     let posterUrl: string | null = null;
-    const posterSource = item.posterUrl || item.poster_path || item.poster || item.poster_url;
-    if (posterSource) {
-        // Force ALL images through proxy - even if already absolute URLs
-        // This bypasses Cloudflare, WAF, and CORS restrictions
-        posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(posterSource)}`;
+    if (item.posterUrl) {
+        // If posterUrl starts with /images/, convert to /api/images/ (backend serves cached images)
+        if (item.posterUrl.startsWith('/images/')) {
+            const filename = item.posterUrl.replace('/images/', '');
+            posterUrl = `/api/images/${filename}`;
+        } 
+        // If posterUrl is already a proxy URL, use it
+        else if (item.posterUrl.startsWith('/api/proxy/image') || item.posterUrl.startsWith('/api/images/')) {
+            posterUrl = item.posterUrl;
+        }
+        // Otherwise, construct proxy URL
+        else {
+            posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(item.posterUrl)}`;
+        }
+    } 
+    // Fallback to posterSourceUrl if posterUrl is missing
+    else if (item.posterSourceUrl) {
+        posterUrl = item.posterSourceUrl.startsWith('/api/proxy/image') 
+            ? item.posterSourceUrl 
+            : `/api/proxy/image?type=poster&path=${encodeURIComponent(item.posterSourceUrl)}`;
+    }
+    // Last resort: try legacy fields
+    else {
+        const posterSource = item.poster_path || item.poster || item.poster_url;
+        if (posterSource) {
+            posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(posterSource)}`;
+        }
     }
     
     const voteAverage = item.voteAverage ?? item.vote_average ?? item.rating ?? 0;
     
-    // Backdrop resolution: ALWAYS use local proxy as well
+    // Backdrop resolution: Prefer local cached image, fallback to source URL
     let backdropUrl: string | null = null;
-    const backdropSource = item.backdropUrl || item.backdrop_path || item.backdrop || item.backdrop_url;
-    if (backdropSource) {
-        // Force ALL images through proxy
-        backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(backdropSource)}`;
+    if (item.backdropUrl) {
+        // If backdropUrl starts with /images/, convert to /api/images/ (backend serves cached images)
+        if (item.backdropUrl.startsWith('/images/')) {
+            const filename = item.backdropUrl.replace('/images/', '');
+            backdropUrl = `/api/images/${filename}`;
+        }
+        // If backdropUrl is already a proxy URL, use it
+        else if (item.backdropUrl.startsWith('/api/proxy/image') || item.backdropUrl.startsWith('/api/images/')) {
+            backdropUrl = item.backdropUrl;
+        }
+        // Otherwise, construct proxy URL
+        else {
+            backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(item.backdropUrl)}`;
+        }
+    }
+    // Fallback to backdropSourceUrl if backdropUrl is missing
+    else if (item.backdropSourceUrl) {
+        backdropUrl = item.backdropSourceUrl.startsWith('/api/proxy/image')
+            ? item.backdropSourceUrl
+            : `/api/proxy/image?type=backdrop&path=${encodeURIComponent(item.backdropSourceUrl)}`;
+    }
+    // Last resort: try legacy fields
+    else {
+        const backdropSource = item.backdrop_path || item.backdrop || item.backdrop_url;
+        if (backdropSource) {
+            backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(backdropSource)}`;
+        }
     }
     return {
         tmdbId,
@@ -240,8 +287,16 @@ router.get('/user/watchlist', async (req, res) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         const username = userName || userId;
         const list = await getFullWatchlist(username);
+        // DEBUG: Log first item to see what data structure looks like
+        if (list && list.length > 0) {
+            console.log('[Watchlist API] First item from getFullWatchlist:', JSON.stringify(list[0], null, 2));
+        }
         // Normalize to frontend contract for safety
         const mapped = (list || []).map(i => toFrontendItem(i)).filter((x: any) => x && x.tmdbId);
+        // DEBUG: Log first mapped item to see what toFrontendItem returns
+        if (mapped && mapped.length > 0) {
+            console.log('[Watchlist API] First mapped item:', JSON.stringify(mapped[0], null, 2));
+        }
         res.json(mapped);
     } catch (e) {
         console.error('Failed to fetch user watchlist', e);
@@ -858,6 +913,48 @@ router.put('/system/config-editor', validateConfigUpdate, async (req: Request, r
     }
 });
 
+// SSE endpoint for import progress
+router.get('/settings/import/progress/:username', (req, res) => {
+    const { username } = req.params;
+    
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable Nginx buffering
+    
+    console.log(`[SSE] Client connected for import progress: ${username}`);
+    
+    // Send initial progress
+    const initialProgress = importService.getProgress(username);
+    if (initialProgress) {
+        res.write(`data: ${JSON.stringify(initialProgress)}\n\n`);
+    }
+    
+    // Poll and send updates every 500ms
+    const interval = setInterval(() => {
+        const progress = importService.getProgress(username);
+        if (progress) {
+            res.write(`data: ${JSON.stringify(progress)}\n\n`);
+            
+            // Close connection when complete
+            if (progress.completed) {
+                clearInterval(interval);
+                res.end();
+            }
+        } else {
+            // No active import, send inactive status
+            res.write(`data: ${JSON.stringify({ active: false })}\n\n`);
+        }
+    }, 500);
+    
+    // Cleanup on client disconnect
+    req.on('close', () => {
+        clearInterval(interval);
+        console.log(`[SSE] Client disconnected: ${username}`);
+    });
+});
+
 // Import legacy database.json payload into Prisma non-destructively
 router.post('/settings/import', async (req, res) => {
     try {
@@ -878,8 +975,37 @@ router.post('/settings/import', async (req, res) => {
         }
 
         const username = (userName || userId);
+        
+        // Count items to estimate time
+        const itemCount = 
+            (Array.isArray(parsed?.data?.movies) ? parsed.data.movies.length : 0) +
+            (Array.isArray(parsed?.data?.series) ? parsed.data.series.length : 0) +
+            (Array.isArray(parsed?.data?.watchlist?.movies) ? parsed.data.watchlist.movies.length : 0) +
+            (Array.isArray(parsed?.data?.watchlist?.series) ? parsed.data.watchlist.series.length : 0);
+
+        console.log(`[Import] Starting import for ${username}: ~${itemCount} items`);
+
+        // For large imports (>50 items), run async and return immediately
+        if (itemCount > 50) {
+            // Start async import (don't await)
+            importService.processImport(username, parsed, token).then(summary => {
+                console.log(`[Import] Async import complete for ${username}:`, summary);
+            }).catch(e => {
+                console.error(`[Import] Async import failed for ${username}:`, e);
+            });
+            
+            // Return immediately
+            return res.json({ 
+                ok: true, 
+                async: true,
+                message: `Import started in background. Processing ~${itemCount} items. Check logs for progress.`,
+                estimatedMinutes: Math.ceil(itemCount / 20) // ~20 items/minute estimate
+            });
+        }
+
+        // For small imports, process synchronously
         const summary = await importService.processImport(username, parsed, token);
-        res.json({ ok: true, summary });
+        res.json({ ok: true, async: false, summary });
     } catch (e) {
         console.error('Import failed', e);
         res.status(500).json({ error: 'Import failed', message: String(((e as any)?.message) || e) });
@@ -952,6 +1078,24 @@ router.post('/sync/jellyfin', validateJellyfinSync, async (req: Request, res: Re
             message: e?.message || String(e) 
         });
     }
+});
+
+// GET /api/images/:filename - Serve locally cached images
+router.get('/images/:filename', (req: Request, res: Response) => {
+    const { filename } = req.params;
+    // Security: Validate filename to prevent directory traversal
+    if (!filename || !/^movie_\d+_(poster|backdrop)\.(jpg|png)$/.test(filename)) {
+        return res.status(400).json({ error: 'Invalid filename' });
+    }
+    const imagePath = path.join('/app/images', filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(imagePath)) {
+        return res.status(404).json({ error: 'Image not found' });
+    }
+    
+    // Serve the image file
+    res.sendFile(imagePath);
 });
 
 export default router;

@@ -40,11 +40,12 @@ export class JellyfinService {
     // Removed authenticateUser as it's now in AuthService
 
     public async getLibraries(accessToken: string, serverUrl?: string): Promise<JellyfinLibrary[]> {
-        const base = await JellyfinService.getBaseUrl(serverUrl);
-        if (!base) {
+        const baseRaw = await JellyfinService.getBaseUrl(serverUrl);
+        if (!baseRaw) {
             console.warn('getLibraries: No Jellyfin base URL configured');
             return [];
         }
+        const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
         const headers = JellyfinService.getHeaders(accessToken);
         try {
             // Diagnostic: log which base URL we are using for this request (debug level)
@@ -63,8 +64,9 @@ export class JellyfinService {
 
     public async getItems(userId: string, accessToken: string, libraryId: string, searchTerm?: string, serverUrl?: string): Promise<JellyfinItem[]> {
         try {
-            const base = await JellyfinService.getBaseUrl(serverUrl);
-            if (!base) throw new Error('Jellyfin base URL not configured');
+            const baseRaw = await JellyfinService.getBaseUrl(serverUrl);
+            if (!baseRaw) throw new Error('Jellyfin base URL not configured');
+            const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
             const headers = JellyfinService.getHeaders(accessToken);
 
             const params: any = {
@@ -105,8 +107,9 @@ export class JellyfinService {
          */
         public async getUserHistory(userId: string, accessToken: string, limit: number = 200, serverUrl?: string): Promise<JellyfinItem[]> {
             try {
-                const base = await JellyfinService.getBaseUrl(serverUrl);
-                if (!base) throw new Error('Jellyfin base URL not configured');
+                const baseRaw = await JellyfinService.getBaseUrl(serverUrl);
+                if (!baseRaw) throw new Error('Jellyfin base URL not configured');
+                const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
                 const headers = JellyfinService.getHeaders(accessToken);
                 
                 // STRICT filters: Only return items the user has actually watched
@@ -150,11 +153,12 @@ export class JellyfinService {
          */
         public async getOwnedIds(userId: string, accessToken: string, serverUrl?: string): Promise<Set<string>> {
             try {
-                const base = await JellyfinService.getBaseUrl(serverUrl);
-                if (!base) {
+                const baseRaw = await JellyfinService.getBaseUrl(serverUrl);
+                if (!baseRaw) {
                     console.warn('getOwnedIds: No Jellyfin base URL configured');
                     return new Set();
                 }
+                const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
                 const headers: any = JellyfinService.getHeaders(accessToken);
 
                 // Fetch the user's libraries and aggregate items similarly to getItems logic

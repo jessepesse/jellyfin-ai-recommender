@@ -18,7 +18,54 @@ import { updateMediaStatus } from './data';
 
 type LegacyEntry = string | { title?: string; tmdb_id?: number; tmdbId?: number; year?: string | number; media_type?: string };
 
+export interface ImportProgress {
+  username: string;
+  total: number;
+  processed: number;
+  imported: number;
+  skipped: number;
+  errors: number;
+  currentItem: string;
+  active: boolean;
+  completed: boolean;
+}
+
 export class ImportService {
+  private progressMap = new Map<string, ImportProgress>();
+
+  getProgress(username: string): ImportProgress | null {
+    return this.progressMap.get(username) || null;
+  }
+
+  private updateProgress(username: string, update: Partial<ImportProgress>) {
+    const current = this.progressMap.get(username);
+    if (current) {
+      this.progressMap.set(username, { ...current, ...update });
+    }
+  }
+
+  private initProgress(username: string, total: number) {
+    this.progressMap.set(username, {
+      username,
+      total,
+      processed: 0,
+      imported: 0,
+      skipped: 0,
+      errors: 0,
+      currentItem: '',
+      active: true,
+      completed: false,
+    });
+  }
+
+  private completeProgress(username: string) {
+    const current = this.progressMap.get(username);
+    if (current) {
+      this.progressMap.set(username, { ...current, active: false, completed: true });
+      // Auto-cleanup after 5 minutes
+      setTimeout(() => this.progressMap.delete(username), 5 * 60 * 1000);
+    }
+  }
   // Resolve an entry to a standard shape, try Jellyseerr when tmdbId missing
   async resolveLegacyEntry(entry: LegacyEntry, defaultMediaType: 'movie' | 'tv') {
     if (!entry) return null;
@@ -100,55 +147,84 @@ export class ImportService {
       // ignore malformed
     }
 
-    console.debug(`[Import] Built queue with ${queue.length} items for user ${username}`);
+    console.log(`[Import] Built queue with ${queue.length} items for user ${username}`);
+
+    // Initialize progress tracking
+    this.initProgress(username, queue.length);
 
     let total = 0, skipped = 0, imported = 0;
     const errors: string[] = [];
 
-    for (const q of queue) {
-      total++;
-      try {
-        const resolved: any = await this.resolveLegacyEntry(q.raw, q.mediaType);
-        if (!resolved || !resolved.tmdbId) {
-          skipped++;
-          continue;
+    // Process in batches to avoid timeout
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < queue.length; i += BATCH_SIZE) {
+      const batch = queue.slice(i, i + BATCH_SIZE);
+      console.log(`[Import] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(queue.length / BATCH_SIZE)} (items ${i + 1}-${Math.min(i + BATCH_SIZE, queue.length)})`);
+
+      for (const q of batch) {
+        total++;
+        try {
+          const resolved: any = await this.resolveLegacyEntry(q.raw, q.mediaType);
+          if (!resolved || !resolved.tmdbId) {
+            skipped++;
+            this.updateProgress(username, { 
+              processed: total, 
+              skipped, 
+              currentItem: typeof q.raw === 'string' ? q.raw : (q.raw as any).title || 'Unknown'
+            });
+            continue;
+          }
+
+          const tmdbId = Number(resolved.tmdbId);
+          
+          // Update progress with current item
+          this.updateProgress(username, { 
+            currentItem: resolved.title || 'Unknown',
+            processed: total
+          });
+
+          // Check if media exists
+          const media = await prisma.media.findUnique({ where: { tmdbId } });
+          let exists = false;
+          if (media) {
+            const um = await prisma.userMedia.findFirst({ where: { userId: user.id, mediaId: media.id } });
+            if (um) exists = true;
+          }
+
+          if (exists) {
+            console.debug(`[Import] Skipping '${resolved.title}' - Already in DB`);
+            skipped++;
+            this.updateProgress(username, { skipped, processed: total });
+            continue;
+          }
+
+          // Build item payload for updateMediaStatus (it will upsert media)
+          const itemForDb: any = {
+            tmdbId: tmdbId,
+            title: resolved.title,
+            mediaType: resolved.mediaType,
+            releaseYear: resolved.releaseYear,
+            posterUrl: resolved.posterUrl,
+            overview: resolved.overview,
+            backdropUrl: resolved.backdropUrl,
+            voteAverage: resolved.voteAverage !== undefined ? Number(resolved.voteAverage) : undefined,
+          };
+
+          await updateMediaStatus(username, itemForDb, q.targetStatus, accessToken);
+          imported++;
+          this.updateProgress(username, { imported, processed: total });
+          console.log(`[Import] ✓ Imported '${resolved.title}' (${imported}/${queue.length - skipped})`);
+        } catch (e: any) {
+          const errorMsg = String(e?.message || e);
+          errors.push(errorMsg);
+          this.updateProgress(username, { errors: errors.length, processed: total });
+          console.error(`[Import] ✗ Failed to import item:`, errorMsg);
         }
-
-        const tmdbId = Number(resolved.tmdbId);
-
-        // Check if media exists
-        const media = await prisma.media.findUnique({ where: { tmdbId } });
-        let exists = false;
-        if (media) {
-          const um = await prisma.userMedia.findFirst({ where: { userId: user.id, mediaId: media.id } });
-          if (um) exists = true;
-        }
-
-        if (exists) {
-          console.debug(`Skipping '${resolved.title}' - Already in DB`);
-          skipped++;
-          continue;
-        }
-
-        // Build item payload for updateMediaStatus (it will upsert media)
-        const itemForDb: any = {
-          tmdbId: tmdbId,
-          title: resolved.title,
-          mediaType: resolved.mediaType,
-          releaseYear: resolved.releaseYear,
-          posterUrl: resolved.posterUrl,
-          overview: resolved.overview,
-          backdropUrl: resolved.backdropUrl,
-          voteAverage: resolved.voteAverage !== undefined ? Number(resolved.voteAverage) : undefined,
-        };
-
-        await updateMediaStatus(username, itemForDb, q.targetStatus, accessToken);
-        imported++;
-      } catch (e: any) {
-        errors.push(String(e?.message || e));
       }
     }
 
+    console.log(`[Import] Complete: ${imported} imported, ${skipped} skipped, ${errors.length} errors`);
+    this.completeProgress(username);
     return { total, skipped, imported, errors };
   }
 }

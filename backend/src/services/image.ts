@@ -92,16 +92,10 @@ export class ImageService {
             // SSRF Protection: Handle proxy URLs safely
             let downloadUrl: string;
             if (url.startsWith('/api/proxy/image')) {
-                // For proxy URLs, validate the path first to prevent path traversal
-                // Only allow specific safe patterns
-                if (!url.match(/^\/api\/proxy\/image\/[a-zA-Z0-9_\-\/\.]+$/)) {
-                    console.warn('[ImageService] Invalid proxy URL pattern');
-                    return null;
-                }
-                // Construct clean URL from trusted components
+                // For proxy URLs with query parameters (e.g., ?type=poster&path=...)
+                // Construct full backend URL
                 const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
-                const proxyPath = url.substring('/api/proxy/image'.length);
-                downloadUrl = `${backendUrl}/api/proxy/image${proxyPath}`;
+                downloadUrl = `${backendUrl}${url}`;
             } else {
                 // For external URLs, validate directly
                 downloadUrl = url;

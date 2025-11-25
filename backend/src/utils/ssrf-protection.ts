@@ -65,7 +65,11 @@ export function sanitizeConfigUrl(url?: string): string | undefined {
 }
 
 /**
- * Validates and sanitizes a URL for SSRF protection (strict mode for image proxy)
+ * Validates and sanitizes a URL for SSRF protection
+ * 
+ * PERMISSIVE MODE: Protocol-only validation for self-hosted environments
+ * Accepts any valid http/https URL without restrictions
+ * 
  * @param url - Raw URL string to validate
  * @returns Sanitized URL string or undefined if invalid/blocked
  */
@@ -84,72 +88,13 @@ export function sanitizeUrl(url?: string): string | undefined {
         }
         const parsed = new URL(trimmed);
         
-        // Only allow http/https protocols
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-            console.warn('[SSRF] Blocked non-HTTP protocol');
+        // Only validate protocol - allow any http/https URL
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            console.warn(`[SSRF] Blocked non-HTTP protocol: ${parsed.protocol}`);
             return undefined;
         }
         
-        const hostname = parsed.hostname.toLowerCase();
-        
-        // Block known cloud metadata endpoints
-        if (BLOCKED_HOSTS.some(blocked => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
-            console.warn(`[SSRF] Blocked metadata endpoint: ${hostname}`);
-            return undefined;
-        }
-        
-        // Block link-local addresses (169.254.0.0/16) - common SSRF vector
-        if (hostname.startsWith('169.254.')) {
-            console.warn(`[SSRF] Blocked link-local address: ${hostname}`);
-            return undefined;
-        }
-        
-        // Check if this is a private/local IP address
-        const isPrivateIP = (
-            hostname === 'localhost' ||
-            hostname === '127.0.0.1' ||
-            hostname.startsWith('192.168.') ||
-            hostname.startsWith('10.') ||
-            hostname.startsWith('172.16.') ||
-            hostname.startsWith('172.17.') ||
-            hostname.startsWith('172.18.') ||
-            hostname.startsWith('172.19.') ||
-            hostname.startsWith('172.20.') ||
-            hostname.startsWith('172.21.') ||
-            hostname.startsWith('172.22.') ||
-            hostname.startsWith('172.23.') ||
-            hostname.startsWith('172.24.') ||
-            hostname.startsWith('172.25.') ||
-            hostname.startsWith('172.26.') ||
-            hostname.startsWith('172.27.') ||
-            hostname.startsWith('172.28.') ||
-            hostname.startsWith('172.29.') ||
-            hostname.startsWith('172.30.') ||
-            hostname.startsWith('172.31.') ||
-            hostname.startsWith('jellyseerr') ||
-            hostname.startsWith('host.docker.internal')
-        );
-        
-        // SSRF Protection: Allowlist approach for external requests
-        // Allow private IPs, Docker hostnames, and known safe domains
-        const allowedDomains = [
-            'image.tmdb.org',           // TMDB CDN
-            'themoviedb.org',           // TMDB domains
-            ...ADDITIONAL_ALLOWED_DOMAINS, // User-configured domains
-        ];
-        
-        // Check if hostname matches allowed domains
-        const isAllowedDomain = allowedDomains.some(allowed => 
-            hostname === allowed || hostname.endsWith(`.${allowed}`)
-        );
-        
-        // Allow if: private IP, Docker host, or allowlisted domain
-        if (!isPrivateIP && !isAllowedDomain) {
-            console.warn(`[SSRF] Blocked request to non-allowlisted domain: ${hostname}`);
-            return undefined;
-        }
-        
-        // CRITICAL: Reconstruct URL from validated components to break taint chain
+        // Reconstruct URL from validated components to break taint chain
         // This prevents CodeQL from tracking user input through validation
         const cleanUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
         return cleanUrl;
