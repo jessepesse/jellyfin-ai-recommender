@@ -56,17 +56,28 @@ app.use(cors({
 }));
 
 // Rate limiting
+// Balanced approach: Protect against abuse while allowing normal usage patterns
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per 15 minutes per IP
+  max: 2000, // 2000 requests per 15 minutes (~133/min) - allows very large imports (1000+ items)
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting for read-only system endpoints (status checks, config reads)
+  skip: (req) => {
+    const readOnlyPaths = [
+      '/system/status',
+      '/system/setup-defaults',
+      '/system/config-editor',
+      '/health',
+    ];
+    return readOnlyPaths.some(path => req.path.includes(path)) && req.method === 'GET';
+  },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per 15 minutes
+  max: 10, // 10 login attempts per 15 minutes (increased from 5 for multi-device scenarios)
   message: 'Too many login attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -74,15 +85,36 @@ const authLimiter = rateLimit({
 
 const recommendationLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 10, // 10 recommendation requests per 5 minutes
+  max: 30, // 30 recommendations per 5 minutes (increased from 10 for browsing sessions)
   message: 'Too many recommendation requests, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Apply rate limiters
+// Separate limiter for setup/verify operations (not import - that's handled separately)
+const setupLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20, // 20 setup/verify calls per 5 minutes - protects against automated abuse
+  message: 'Too many configuration changes, please slow down.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Very permissive limiter for import operations (they're long-running and already async)
+const importLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 import operations per 15 minutes (each can process hundreds of items)
+  message: 'Too many import operations, please wait before importing again.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiters in order (most specific first)
 app.use('/api/auth', authLimiter);
 app.use('/api/recommendations', recommendationLimiter);
+app.use('/api/system/setup', setupLimiter);
+app.use('/api/system/verify', setupLimiter);
+app.use('/api/settings/import', importLimiter); // Special handling for imports
 app.use('/api', generalLimiter); // General limiter for all other endpoints
 
 app.use(express.json({ limit: '50mb' })); // Increased limit for large backup imports
