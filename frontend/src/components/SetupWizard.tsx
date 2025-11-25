@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { postSystemSetup, postSystemVerify, getSystemSetupDefaults } from '../services/api';
-import axios from 'axios';
 
 type ServiceStatus = 'idle' | 'testing' | 'success' | 'error';
 
