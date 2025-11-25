@@ -35,7 +35,9 @@ Complete redesign of URL validation to prioritize user experience in self-hosted
 
     Modified: `backend/src/utils/ssrf-protection.ts`
         - `validateSafeUrl()`: Now protocol-only validation
-        - Removed domain allowlist checking
+        - `validateRequestUrl()`: Now protocol-only validation
+        - `validateBaseUrl()`: Now protocol-only validation
+        - Removed domain allowlist checking from all validation functions
         - Removed private IP detection logic
         - Kept URL reconstruction for CodeQL taint flow compliance
 
