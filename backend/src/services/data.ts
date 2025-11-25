@@ -1,5 +1,6 @@
 import { PrismaClient, MediaStatus } from '@prisma/client';
 import { search as jellySearch } from './jellyseerr';
+import { ImageService } from './image';
 
 const prisma = new PrismaClient();
 
@@ -60,6 +61,39 @@ export async function syncMediaItem(item: any) {
     update: updateData,
     create: createData,
   });
+
+  // Download and cache images locally to prevent broken links
+  try {
+    const needsPosterDownload = posterUrl && (posterUrl.startsWith('http') || posterUrl.startsWith('/api/proxy'));
+    const needsBackdropDownload = backdropUrl && (backdropUrl.startsWith('http') || backdropUrl.startsWith('/api/proxy'));
+
+    if (needsPosterDownload || needsBackdropDownload) {
+      const localImages = await ImageService.downloadMediaImages(
+        tmdbId,
+        validType,
+        posterUrl,
+        backdropUrl
+      );
+
+      // Update database with local image paths
+      const imageUpdate: any = {};
+      if (localImages.posterUrl && localImages.posterUrl !== posterUrl) {
+        imageUpdate.posterUrl = localImages.posterUrl;
+        media.posterUrl = localImages.posterUrl;
+      }
+      if (localImages.backdropUrl && localImages.backdropUrl !== backdropUrl) {
+        imageUpdate.backdropUrl = localImages.backdropUrl;
+        media.backdropUrl = localImages.backdropUrl;
+      }
+
+      if (Object.keys(imageUpdate).length > 0) {
+        await prisma.media.update({ where: { id: media.id }, data: imageUpdate });
+      }
+    }
+  } catch (error) {
+    console.warn(`[syncMediaItem] Failed to download images for tmdbId ${tmdbId}:`, error);
+    // Continue without failing the entire sync
+  }
 
   // If posterUrl is missing in DB but available from incoming item or Jellyseerr, try to persist it
   try {

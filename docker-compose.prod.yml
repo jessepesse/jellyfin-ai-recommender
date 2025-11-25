@@ -10,6 +10,7 @@ services:
       # Database location - points to mounted data directory
       - DATABASE_URL=file:/app/data/dev.db
       - DATA_DIR=/app/data
+      - IMAGE_DIR=/app/images
       - PORT=3001
       # 🔒 SECURITY: If exposing to public internet, uncomment and set your domain here.
       # This prevents other websites from hijacking your API.
@@ -21,6 +22,9 @@ services:
       # Mount data directory for persistent database storage
       # This preserves schema.prisma and migrations in the container
       - ./data:/app/data
+      # Mount images directory for local image caching
+      # Prevents broken links when Jellyseerr IP changes
+      - ./images:/app/images
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s

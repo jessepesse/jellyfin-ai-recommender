@@ -280,6 +280,9 @@ backend/prisma/**/*.db-journal
 # Docker volume data directory
 data/
 
+# Local image cache directory
+images/
+
 # Legacy backup folder
 legacy_backup/
 

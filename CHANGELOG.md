@@ -4,6 +4,65 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.4-beta] - 2025-11-25
+
+🖼️ Local Image Caching System (BETA)
+
+Complete overhaul of image handling to eliminate dependency on external Jellyseerr URLs.
+
+✨ New Features
+
+    Local Image Storage:
+        All poster and backdrop images downloaded to /app/images directory
+        Standardized naming: `{mediaType}_{tmdbId}_{type}.jpg`
+        Automatic download on media insert/update via DataService
+        Images persist across container restarts via Docker volume
+        
+    ImageService (NEW):
+        `download()`: Download images from external URLs with retry logic
+        `downloadMediaImages()`: Batch download poster and backdrop
+        `getLocalPath()`: Generate standardized local URLs
+        `imageExists()`: Check if image already cached
+        Automatic fallback to fresh Jellyseerr URLs on download failure
+        
+    Static File Serving:
+        Express middleware serves images at `/images/*`
+        No proxy overhead - direct file serving
+        Configurable via IMAGE_DIR environment variable
+        
+    Migration Script:
+        `npm run db:migrate-images` to fix existing database entries
+        Downloads all external images to local storage
+        Retries failed downloads with Jellyseerr lookup
+        Comprehensive progress logging and statistics
+
+🔧 Infrastructure Changes
+
+    docker-compose.prod.yml:
+        Added IMAGE_DIR=/app/images environment variable
+        Added ./images:/app/images volume mount
+        Images directory persisted on host
+        
+    .gitignore:
+        Added images/ directory exclusion
+        
+    Documentation:
+        Added images/README.md with usage instructions
+
+🎯 Benefits
+
+    Eliminates broken images when Jellyseerr IP changes
+    Faster loading (no proxy roundtrip)
+    Reduced external API dependencies
+    Consistent image availability
+    Self-healing architecture
+
+⚠️ Beta Notes
+
+    Run `npm run db:migrate-images` after updating to migrate existing data
+    Monitor disk usage in images/ directory
+    Ensure sufficient storage space for image cache
+
 [2.0.3] - 2025-11-25
 
 🔧 CORS & Network Fixes + Backup/Recovery System + Image Proxy + Mobile UX Overhaul

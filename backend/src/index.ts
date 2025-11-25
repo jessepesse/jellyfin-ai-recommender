@@ -87,6 +87,12 @@ app.use('/api', generalLimiter); // General limiter for all other endpoints
 
 app.use(express.json({ limit: '50mb' })); // Increased limit for large backup imports
 
+// Serve static images from local storage
+// Images are downloaded and cached to prevent broken links when Jellyseerr IP changes
+const imageDir = process.env.IMAGE_DIR || '/app/images';
+app.use('/images', express.static(imageDir));
+console.log(`[Static] Serving images from: ${imageDir}`);
+
 // Lightweight health endpoint (no DB access) for Docker and load-balancers
 app.get('/api/health', (_req, res) => {
   try {
