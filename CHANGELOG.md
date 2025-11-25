@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.7] - 2025-11-25
+
+🔒 Security Patch
+
+Critical security update addressing dependency vulnerability.
+
+🔒 Security
+
+    **Updated body-parser to 2.2.1**:
+        - Fixes CVE for denial of service vulnerability when URL encoding is used
+        - Explicitly installed body-parser@2.2.1 to override Express 5.1.0 transitive dependency
+        - Resolves Dependabot security alert
+
+✨ Features
+
+    **Automated Version Display**:
+        - Footer version now reads from package.json at build time
+        - No more manual version updates in Footer component
+        - Uses Vite's define config to inject version as compile-time constant
+
 [2.0.6] - 2025-11-25
 
 🔧 Critical Fixes: Rate Limiting & Setup Wizard
@@ -37,6 +57,11 @@ Major improvements to rate limiting for large imports and fixed Setup Wizard con
         - Added `app.set('trust proxy', 1)` for X-Forwarded-For headers
         - Resolves `ValidationError` in ZimaOS and other reverse proxy environments
         - Rate limiter now correctly identifies users behind proxies
+        
+    **Fixed TV Series Images Not Displaying**:
+        - Updated `/api/images/:filename` regex to accept both `movie_` and `tv_` prefixes
+        - TV series poster and backdrop images now load correctly
+        - Fixes 400 Bad Request error for TV show images
 
 🔒 Security
 
