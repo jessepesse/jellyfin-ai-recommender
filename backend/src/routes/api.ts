@@ -835,8 +835,25 @@ router.put('/system/config-editor', validateConfigUpdate, async (req: Request, r
             updatePayload.geminiApiKey = currentConfig.geminiApiKey;
         }
 
+        // Check if Jellyseerr URL changed (triggers image re-download)
+        const jellyseerrUrlChanged = updatePayload.jellyseerrUrl && 
+            updatePayload.jellyseerrUrl !== currentConfig.jellyseerrUrl;
+
         const result = await ConfigService.saveConfig(updatePayload);
-        res.json({ ok: true, message: 'Configuration updated successfully' });
+        
+        // If Jellyseerr URL changed, queue image re-download
+        // Note: Actual migration happens in next metadata backfill or can be triggered manually
+        // via: npm run db:migrate-images
+        if (jellyseerrUrlChanged) {
+            console.log('[ConfigEditor] Jellyseerr URL changed. Run `npm run db:migrate-images` to re-download images from new source.');
+            res.json({ 
+                ok: true, 
+                message: 'Configuration updated. To re-download images from new Jellyseerr URL, run: npm run db:migrate-images',
+                jellyseerrUrlChanged: true
+            });
+        } else {
+            res.json({ ok: true, message: 'Configuration updated successfully' });
+        }
     } catch (e) {
         console.error('Failed to update config', e);
         res.status(500).json({ error: 'Failed to update configuration' });

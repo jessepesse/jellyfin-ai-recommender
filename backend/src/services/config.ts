@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { sanitizeUrl } from '../utils/ssrf-protection';
+import { sanitizeConfigUrl } from '../utils/ssrf-protection';
 
 const prisma = new PrismaClient();
 
@@ -55,16 +55,18 @@ class ConfigService {
   }
 
   public static async saveConfig(payload: Partial<SystemConfig>) {
-    // SSRF Protection: Validate URLs before saving to database
-    const validatedJellyfinUrl = payload.jellyfinUrl ? sanitizeUrl(payload.jellyfinUrl) : undefined;
-    const validatedJellyseerrUrl = payload.jellyseerrUrl ? sanitizeUrl(payload.jellyseerrUrl) : undefined;
+    // SSRF Protection: Validate URLs before saving to database (permissive for user config)
+    const validatedJellyfinUrl = payload.jellyfinUrl ? sanitizeConfigUrl(payload.jellyfinUrl) : undefined;
+    const validatedJellyseerrUrl = payload.jellyseerrUrl ? sanitizeConfigUrl(payload.jellyseerrUrl) : undefined;
     
-    // Throw error if URL validation fails
+    // Throw error if URL validation fails with detailed message
     if (payload.jellyfinUrl && !validatedJellyfinUrl) {
-      throw new Error('Invalid or blocked Jellyfin URL provided');
+      console.error(`[ConfigService] Jellyfin URL validation failed for: ${payload.jellyfinUrl}`);
+      throw new Error(`Invalid or blocked Jellyfin URL: ${payload.jellyfinUrl}. Ensure it uses http:// or https:// protocol.`);
     }
     if (payload.jellyseerrUrl && !validatedJellyseerrUrl) {
-      throw new Error('Invalid or blocked Jellyseerr URL provided');
+      console.error(`[ConfigService] Jellyseerr URL validation failed for: ${payload.jellyseerrUrl}`);
+      throw new Error(`Invalid or blocked Jellyseerr URL: ${payload.jellyseerrUrl}. Ensure it uses http:// or https:// protocol.`);
     }
     
     // Upsert singleton row with id=1

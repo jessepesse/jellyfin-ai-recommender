@@ -25,7 +25,58 @@ const ADDITIONAL_ALLOWED_DOMAINS = process.env.ALLOWED_IMAGE_DOMAINS
     : [];
 
 /**
- * Validates and sanitizes a URL for SSRF protection
+ * Validates a user-configured service URL (Jellyfin/Jellyseerr)
+ * More permissive than sanitizeUrl - allows any valid http/https URL
+ * Only blocks known cloud metadata endpoints for security
+ * @param url - Raw URL string to validate
+ * @returns Sanitized URL string or undefined if invalid/blocked
+ */
+export function sanitizeConfigUrl(url?: string): string | undefined {
+    if (!url || url === 'none' || url.length === 0) return undefined;
+    
+    try {
+        // Remove trailing slashes and fragments
+        let trimmed = url.trim();
+        while (trimmed.endsWith('/')) {
+            trimmed = trimmed.slice(0, -1);
+        }
+        const hashIndex = trimmed.indexOf('#');
+        if (hashIndex !== -1) {
+            trimmed = trimmed.slice(0, hashIndex);
+        }
+        const parsed = new URL(trimmed);
+        
+        // Only allow http/https protocols
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+            console.warn('[SSRF] Blocked non-HTTP protocol in config URL');
+            return undefined;
+        }
+        
+        const hostname = parsed.hostname.toLowerCase();
+        
+        // Block ONLY cloud metadata endpoints (minimal security)
+        if (BLOCKED_HOSTS.some(blocked => hostname === blocked || hostname.endsWith(`.${blocked}`))) {
+            console.warn(`[SSRF] Blocked metadata endpoint in config URL: ${hostname}`);
+            return undefined;
+        }
+        
+        // Block link-local addresses (169.254.0.0/16)
+        if (hostname.startsWith('169.254.')) {
+            console.warn(`[SSRF] Blocked link-local address in config URL: ${hostname}`);
+            return undefined;
+        }
+        
+        // Allow everything else - user knows their own services
+        const cleanUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+        return cleanUrl;
+    } catch (err) {
+        console.warn('[SSRF] Invalid URL format in config');
+        return undefined;
+    }
+}
+
+/**
+ * Validates and sanitizes a URL for SSRF protection (strict mode for image proxy)
  * @param url - Raw URL string to validate
  * @returns Sanitized URL string or undefined if invalid/blocked
  */

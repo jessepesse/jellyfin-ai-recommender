@@ -4,6 +4,65 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.4-beta2] - 2025-11-25
+
+🔒 Security & Configuration Improvements
+
+Major security hardening and configuration flexibility updates.
+
+✨ New Features
+
+    Setup Wizard URL Flexibility:
+        Now accepts proxy URLs (e.g., `https://jellyfin.example.com`)
+        Accepts local IPs with HTTP (e.g., `http://192.168.1.100:8096`)
+        Accepts any valid http/https URL for Jellyfin/Jellyseerr
+        Better error messages showing rejected URLs
+        
+    SSRF Protection Enhancements:
+        Split validation into two modes:
+            - `sanitizeConfigUrl()`: Permissive for user config (allows any domain)
+            - `sanitizeUrl()`: Strict for image proxy (allowlist-only)
+        Private IP support: 192.168.x.x, 10.x.x.x, 172.16-31.x.x
+        Localhost and Docker hostname support
+        Still blocks cloud metadata endpoints (169.254.x.x)
+        
+    Image Proxying:
+        ALL images now forced through `/api/proxy/image`
+        Prevents 403 errors from Cloudflare/WAF-protected sources
+        Handles both absolute URLs and relative paths
+        Bypasses CORS restrictions
+        
+    Settings URL Change Detection:
+        ConfigEditor now detects when Jellyseerr URL changes
+        Displays notification to user to re-download images
+        Suggests running migration script or waiting for next sync
+        Backend automatically loads fresh config on login
+        
+    Environment Configuration:
+        `ALLOWED_IMAGE_DOMAINS`: Allow custom domains for strict mode
+        Documented in README, docker-compose.prod.yml, .env.example
+
+🐛 Bug Fixes
+
+    Fixed Setup Wizard rejecting local IP addresses
+    Fixed Setup Wizard rejecting proxy URLs (e.g., Cloudflare tunnels)
+    Fixed external Jellyseerr images returning 403 to frontend
+    Fixed Zod URL validation requiring valid TLD for IP addresses
+
+🔒 Security
+
+    Added CodeQL suppression comments for intentional SSRF
+    Documented all axios calls to user-configured services
+    Maintained strict validation for cloud metadata endpoints
+    URL reconstruction to break taint chains for security scanners
+    Format string injection prevention (safe logging)
+
+📚 Documentation
+
+    Added SSRF protection configuration guide
+    Updated README with `ALLOWED_IMAGE_DOMAINS` usage
+    Added security context for self-hosted applications
+
 [2.0.4-beta] - 2025-11-25
 
 🖼️ Local Image Caching System (BETA)

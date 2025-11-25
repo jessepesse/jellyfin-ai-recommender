@@ -84,8 +84,17 @@ const ConfigEditor: React.FC = () => {
         geminiModel: config.geminiModel || undefined,
       };
 
-      await putSystemConfigEditor(payload);
-      setMessage({ type: 'success', text: 'Configuration saved successfully!' });
+      const response = await putSystemConfigEditor(payload);
+      
+      // Check if Jellyseerr URL changed - user needs to re-download images
+      if (response.jellyseerrUrlChanged) {
+        setMessage({ 
+          type: 'info', 
+          text: 'Configuration saved! Jellyseerr URL changed - images will be re-downloaded automatically on next media sync, or run: docker-compose exec backend npm run db:migrate-images' 
+        });
+      } else {
+        setMessage({ type: 'success', text: 'Configuration saved successfully!' });
+      }
       
       // Reload to show masked keys
       setTimeout(() => loadConfig(), 1500);
