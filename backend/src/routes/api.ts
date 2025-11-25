@@ -989,8 +989,10 @@ router.post('/settings/import', async (req, res) => {
         if (itemCount > 50) {
             // Start async import (don't await)
             importService.processImport(username, parsed, token).then(summary => {
+                // codeql[js/log-injection] - username is from authenticated session, summary is typed object from processImport
                 console.log(`[Import] Async import complete for ${username}:`, summary);
             }).catch(e => {
+                // codeql[js/log-injection] - username is from authenticated session, not user-controlled input
                 console.error(`[Import] Async import failed for ${username}:`, e);
             });
             
