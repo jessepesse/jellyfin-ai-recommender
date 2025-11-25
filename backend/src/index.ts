@@ -28,11 +28,31 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding in iframes if needed
 }));
 
-// CORS configuration: Allow all origins for self-hosted deployment
-// This permits access from any LAN IP (e.g., http://192.168.1.62:5173)
-app.use(cors({ 
-  origin: true, // Reflect request origin back (allows all origins)
-  credentials: true 
+// CORS configuration: Strict allowlist for self-hosted deployment
+// Allows private networks (LAN), localhost, and configured origins only
+const allowedOrigins = [process.env.CORS_ORIGIN].filter(Boolean);
+
+// Regex for Private IP ranges (RFC 1918) + Localhost
+const privateIpRegex = /^(http|https):\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // 1. Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // 2. Allow specific env override
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // 3. Allow Private Networks & Localhost
+    if (privateIpRegex.test(origin)) {
+      return callback(null, true);
+    }
+
+    // 4. Block external public domains
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    return callback(new Error(msg), false);
+  },
+  credentials: true
 }));
 
 // Rate limiting
