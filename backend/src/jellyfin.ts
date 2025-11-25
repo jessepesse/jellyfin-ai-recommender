@@ -51,6 +51,7 @@ export class JellyfinService {
             console.debug(`[Jellyfin] getLibraries using base: ${base}`);
             const url = validateRequestUrl(`${base}/Library/VirtualFolders`);
             // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+            // codeql[js/request-forgery] - User-configured Jellyfin URL, validated by validateSafeUrl
             const response = await axios.get<any>(validateSafeUrl(url), { headers, timeout: 10000 });
             return response.data.Items || [];
         } catch (error) {
@@ -79,6 +80,7 @@ export class JellyfinService {
 
             const url = validateRequestUrl(`${base}/Users/${userId}/Items`);
             // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+            // codeql[js/request-forgery] - User-configured Jellyfin URL, validated by validateSafeUrl
             const response = await axios.get<any>(validateSafeUrl(url), { headers, params, timeout: 10000 });
             
             const items: JellyfinItem[] = response.data.Items;
@@ -121,6 +123,7 @@ export class JellyfinService {
                 console.debug(`[Jellyfin] Fetching watched history: ${base}/Users/${userId}/Items (limit: ${limit})`);
                 const url = validateRequestUrl(`${base}/Users/${userId}/Items`);
                 // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+                // codeql[js/request-forgery] - User-configured Jellyfin URL, validated by validateSafeUrl
                 const response = await axios.get<any>(validateSafeUrl(url), { headers, params, timeout: 15000 });
                 const items: JellyfinItem[] = response.data.Items || [];
                 
@@ -165,6 +168,7 @@ export class JellyfinService {
                 const pools = libs.length ? await Promise.all(libs.map(l => {
                     const url = validateRequestUrl(`${base}/Users/${userId}/Items`);
                     // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+                    // codeql[js/request-forgery] - User-configured Jellyfin URL, validated by validateSafeUrl
                     return axios.get<any>(validateSafeUrl(url), { headers, params: { ParentId: l.Id, Recursive: true, IncludeItemTypes: 'Movie,Series', Fields: 'ProviderIds,ProductionYear,Name,PremiereDate' }, timeout: 15000 }).then(r => r.data.Items || []).catch(() => []);
                 })) : [];
                 const items = (pools || []).flat();

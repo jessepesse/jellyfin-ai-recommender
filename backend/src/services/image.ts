@@ -114,6 +114,7 @@ export class ImageService {
             console.log('[ImageService] Downloading image to file:', filename);
 
             // Download image stream with validated URL
+            // codeql[js/request-forgery] - Image download from validated sources (TMDB, Jellyseerr, local IPs), validated by validateSafeUrl
             const response = await axios.get(safeUrl, {
                 responseType: 'stream',
                 headers: headers || {},

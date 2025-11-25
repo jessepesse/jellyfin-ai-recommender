@@ -79,6 +79,7 @@ router.get('/proxy/image', async (req, res) => {
             headers['X-Api-Key'] = config.jellyseerrApiKey;
         }
 
+        // codeql[js/request-forgery] - User-configured URL for image proxy, validated by validateSafeUrl
         const response = await axios.get(validateSafeUrl(validatedUrl), {
             responseType: 'arraybuffer',
             headers,
@@ -659,6 +660,7 @@ router.post('/system/verify', async (req, res) => {
                 if (!base) return { ok: false, message: 'No Jellyfin URL provided or invalid' };
                 const url = validateRequestUrl(`${base}/System/Info/Public`);
                 // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+                // codeql[js/request-forgery] - User-configured Jellyfin URL for health check, validated by validateSafeUrl
                 const resp = await axios.get(validateSafeUrl(url), { timeout: 8000 });
                 if (resp.status === 200) {
                     const ver = (resp.data && (resp.data.Version || resp.data.ServerVersion || resp.data.version)) || '';
@@ -680,6 +682,7 @@ router.post('/system/verify', async (req, res) => {
                 const headers: any = {};
                 if (jellyseerrApiKey) headers['X-Api-Key'] = String(jellyseerrApiKey);
                 // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
+                // codeql[js/request-forgery] - User-configured Jellyseerr URL for health check, validated by validateSafeUrl
                 const resp = await axios.get(validateSafeUrl(url), { headers, timeout: 8000 });
                 if (resp.status === 200) {
                     const info = resp.data?.status || resp.data?.message || 'OK';
