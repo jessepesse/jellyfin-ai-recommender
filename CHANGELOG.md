@@ -6,17 +6,30 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 [2.0.3] - 2025-11-25
 
-🔧 CORS & Network Fixes + Backup/Recovery System
+🔧 CORS & Network Fixes + Backup/Recovery System + Image Proxy
 
-Critical fixes for LAN deployments and comprehensive disaster recovery implementation.
+Critical fixes for LAN deployments, comprehensive disaster recovery, and image loading issues.
 
 🐛 Bug Fixes
 
-    Fixed CORS Error on LAN Access:
-        Updated backend CORS configuration to allow all origins (`origin: true`)
-        Enables access from any LAN IP address (e.g., http://192.168.1.62:5173)
-        Removed restrictive localhost-only whitelist
-        Essential for self-hosted deployments on ZimaOS, NAS, or local network servers
+    Fixed CORS Security Vulnerability (Critical):
+        Replaced unsafe `origin: true` with strict validation function
+        Allows only private IP ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+        Allows localhost and configured CORS_ORIGIN from environment
+        Blocks external public domains to prevent CORS hijacking
+        Fixes GitHub CodeQL Critical security alert
+        
+    Fixed Image Loading 403 Errors:
+        Implemented `/api/proxy/image` endpoint to route images through backend
+        Bypasses Cloudflare/WAF protections on external Jellyseerr servers
+        Includes Cache-Control headers (1 day) for improved performance
+        SSRF protection and URL validation maintained
+        
+    Fixed Configuration Persistence:
+        Database values now take priority when isConfigured=true
+        Prevents environment variables from overriding UI changes
+        Settings page updates now persist across container restarts
+        Maintains backward compatibility with env-only setups
 
 ✨ New Features: Backup & Recovery System
 
@@ -61,12 +74,21 @@ Critical fixes for LAN deployments and comprehensive disaster recovery implement
     Added `db:backup` script to backend package.json
     Enables manual database backups: `npm run db:backup`
 
+🔐 Security Enhancements
+
+    Strict CORS policy with private network allowlist
+    CORS_ORIGIN environment variable for public deployments
+    Comprehensive documentation for public internet exposure
+    Image proxy prevents direct external resource access
+
 🚀 Deployment
 
     Production deployment now fully working on local network IPs
+    Support for public deployment via CORS_ORIGIN configuration
     Self-healing database initialization on first startup
     Automatic backups protect against data loss during upgrades
     Complete disaster recovery workflow for migrations
+    Images load reliably through backend proxy
 
 [2.0.2] - 2025-11-24
 
