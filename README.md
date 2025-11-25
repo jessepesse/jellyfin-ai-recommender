@@ -1,4 +1,4 @@
-# 🎬 Jellyfin AI Recommender (v2.0)
+# 🎬 Jellyfin AI Recommender (v2.0.6)
 
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**
@@ -18,6 +18,8 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 📱 **Responsive Design** — Mobile-first UI with backdrop images on mobile, poster images on desktop.
 - ⚙️ **UI Configuration** — Edit API keys and URLs directly in the browser via the Settings page.
 - 🔄 **Legacy Import** — Non-destructive import tool to migrate data from the old v1 `database.json`.
+- 🔧 **Production-Ready Rate Limiting** — Smart rate limiting supports large imports (1000+ items) with separate limits per operation type.
+- 🌐 **Reverse Proxy Support** — Full support for Nginx, ZimaOS, and other reverse proxy environments with proper header forwarding.
 
 ## 🏗️ Architecture
 
