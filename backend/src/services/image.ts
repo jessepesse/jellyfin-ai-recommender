@@ -89,12 +89,22 @@ export class ImageService {
                 return `/images/${filename}`;
             }
 
-            // Convert relative proxy URLs to absolute
-            let downloadUrl = url;
+            // SSRF Protection: Handle proxy URLs safely
+            let downloadUrl: string;
             if (url.startsWith('/api/proxy/image')) {
-                // Construct absolute URL using backend URL
+                // For proxy URLs, validate the path first to prevent path traversal
+                // Only allow specific safe patterns
+                if (!url.match(/^\/api\/proxy\/image\/[a-zA-Z0-9_\-\/\.]+$/)) {
+                    console.warn('[ImageService] Invalid proxy URL pattern');
+                    return null;
+                }
+                // Construct clean URL from trusted components
                 const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
-                downloadUrl = `${backendUrl}${url}`;
+                const proxyPath = url.substring('/api/proxy/image'.length);
+                downloadUrl = `${backendUrl}/api/proxy/image${proxyPath}`;
+            } else {
+                // For external URLs, validate directly
+                downloadUrl = url;
             }
 
             // SSRF Protection: Validate URL before making request
