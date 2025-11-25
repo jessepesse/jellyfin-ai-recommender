@@ -14,6 +14,8 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 📋 **Watchlist Management** — Organize your "To Watch" list with filtering (Movies vs. TV) and sorting.
 - 🔗 **Jellyseerr Integration** — Request recommended media directly with one click (Optimistic UI).
 - 💾 **Data Persistence** — Uses a local **SQLite** database (via Prisma) to store your history, ratings, and metadata safely.
+- 🖼️ **Local Image Caching** — Downloads and serves all poster/backdrop images locally to prevent broken links when Jellyseerr IP changes.
+- 📱 **Responsive Design** — Mobile-first UI with backdrop images on mobile, poster images on desktop.
 - ⚙️ **UI Configuration** — Edit API keys and URLs directly in the browser via the Settings page.
 - 🔄 **Legacy Import** — Non-destructive import tool to migrate data from the old v1 `database.json`.
 
@@ -85,7 +87,15 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 **Access:** The app is available at `http://localhost:5173` (frontend) and the backend API at `http://localhost:3001`.
 
-    Persisted Data: The SQLite database is stored in a ./data folder in the project root.
+**Persisted Data:**
+- SQLite database: `./data/dev.db`
+- Cached images: `./images/` (posters and backdrops)
+
+**Initial Setup:**
+After first run, migrate existing images to local cache:
+```bash
+docker-compose -f docker-compose.prod.yml exec backend npm run db:migrate-images
+```
 
 ## 🌐 Public Deployment & Security
 
@@ -139,6 +149,32 @@ See `frontend/nginx.conf` for a reference configuration.
 
         Export: Download a backup of your current database.
 
+## 🛠️ Maintenance & Utilities
+
+### Image Cache Migration
+If upgrading from v2.0.3 or earlier, run this to download all images locally:
+```bash
+# Development
+cd backend
+npm run db:migrate-images
+
+# Docker
+docker-compose -f docker-compose.prod.yml exec backend npm run db:migrate-images
+```
+
+### Database Backup
+Export your database to JSON:
+```bash
+# Development
+cd backend
+npm run db:backup
+
+# Docker
+docker-compose -f docker-compose.prod.yml exec backend npm run db:backup
+```
+
+Backups are saved to `./data/backup_latest.json` and timestamped files.
+
 ## 🔒 Security
 
 This project implements comprehensive security measures including:
@@ -146,6 +182,8 @@ This project implements comprehensive security measures including:
 - Input validation with Zod schemas
 - Rate limiting on all endpoints
 - Security headers via Helmet
+- Strict CORS policy with private network allowlist
+- Local image caching (eliminates external URL dependencies)
 - No sensitive data logging
 
 **For security policy and known CodeQL alerts, see [SECURITY.md](SECURITY.md)**
