@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { JellyfinItem } from '../types';
-import { DownloadCloud, Bookmark, Eye, Slash, Check, Loader2, Star } from 'lucide-react';
+import { DownloadCloud, Bookmark, Eye, Ban, Check, Loader2, Star } from 'lucide-react';
 import { postActionWatched, postActionWatchlist, postActionBlock, postJellyseerrRequest, postRemoveFromWatchlist } from '../services/api';
 
 interface Props {
@@ -31,16 +31,37 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onClick && onClick(item); }}
     >
-      <div className="relative w-full" style={{ paddingTop: '150%' }}>
+      {/* RESPONSIVE IMAGE CONTAINER: aspect-video on mobile, aspect-[2/3] on desktop */}
+      <div className="relative w-full aspect-video md:aspect-[2/3]">
+        {/* MOBILE IMAGE (Backdrop - Landscape 16:9) - Visible on mobile, hidden on md+ */}
+        {(item.backdropUrl || imgSrc) ? (
+          <img
+            src={item.backdropUrl || imgSrc}
+            alt={titleText}
+            className="absolute inset-0 w-full h-full object-cover block md:hidden"
+            loading="lazy"
+            onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="100%" height="100%" fill="%23343a40"/></svg>'; }}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-slate-800 h-full flex items-center justify-center md:hidden">
+            <div className="text-slate-300 text-center px-2">
+              <div className="font-semibold">{titleText}</div>
+              <div className="text-sm text-slate-400">No Image</div>
+            </div>
+          </div>
+        )}
+
+        {/* DESKTOP IMAGE (Poster - Portrait 2:3) - Hidden on mobile, visible on md+ */}
         {imgSrc ? (
           <img
             src={imgSrc}
             alt={titleText}
-            className="absolute inset-0 w-full h-full object-cover rounded-lg shadow-md"
+            className="absolute inset-0 w-full h-full object-cover hidden md:block"
+            loading="lazy"
             onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><rect width="100%" height="100%" fill="%23343a40"/></svg>'; }}
           />
         ) : (
-          <div className="absolute inset-0 bg-slate-800 h-full flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-800 h-full items-center justify-center hidden md:flex">
             <div className="text-slate-300 text-center px-2">
               <div className="font-semibold">{titleText}</div>
               <div className="text-sm text-slate-400">No Image</div>
@@ -57,7 +78,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
         )}
 
         <div className="absolute inset-0 transition-opacity duration-300 flex flex-col justify-end p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100">
-          <div className="flex justify-around items-center gap-2 bg-black/40 p-2 rounded-md">
+          <div className="flex w-full items-center justify-evenly gap-1 bg-black/40 px-1 py-2 rounded-md">
             {/* Request */}
             <button aria-label="Request" title="Request" onClick={async (e) => {
               e.stopPropagation();
@@ -182,8 +203,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               // Block payload (not logged)
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
               postActionBlock(payloadItemBlock).catch(() => {/* TODO: handle rollback if needed */});
-            }} className="p-3 md:p-2 rounded-md text-white hover:text-red-400 active:scale-95 transition-transform focus:outline-none">
-              <Slash className="w-6 h-6 md:w-5 md:h-5" />
+            }} className="p-3 md:p-2 rounded-md text-white hover:text-red-500 active:scale-95 transition-transform focus:outline-none">
+              <Ban className="w-6 h-6 md:w-5 md:h-5" />
             </button>
           </div>
         </div>

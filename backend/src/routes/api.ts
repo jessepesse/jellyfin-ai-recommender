@@ -31,6 +31,8 @@ const jellyfinService = new JellyfinService();
 router.get('/proxy/image', async (req, res) => {
     try {
         const path = req.query.path as string;
+        const type = (req.query.type as string) || 'poster';
+        
         if (!path) {
             return res.status(400).json({ error: 'Missing path parameter' });
         }
@@ -49,8 +51,14 @@ router.get('/proxy/image', async (req, res) => {
             return res.status(500).json({ error: 'Invalid Jellyseerr URL configuration' });
         }
 
+        // Select appropriate image resolution based on type
+        let upstreamPrefix = '/imageproxy/tmdb/t/p/w300_and_h450_face'; // Default: Poster
+        if (type === 'backdrop') {
+            upstreamPrefix = '/imageproxy/tmdb/t/p/w1920_and_h800_multi_faces'; // Backdrop (landscape)
+        }
+
         // Construct full image URL
-        const imageUrl = `${baseUrl}/imageproxy/tmdb/t/p/w300_and_h450_face${path}`;
+        const imageUrl = `${baseUrl}${upstreamPrefix}${path}`;
         
         // SSRF Protection: Validate the full URL before making request
         const validatedUrl = validateRequestUrl(imageUrl);
@@ -106,7 +114,7 @@ function toFrontendItem(item: any) {
     } else if (item.poster_path || item.poster) {
         // Route through our proxy to bypass Cloudflare/WAF protections
         const posterPath = item.poster_path || item.poster;
-        posterUrl = `/api/proxy/image?path=${encodeURIComponent(posterPath)}`;
+        posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(posterPath)}`;
     }
     
     const voteAverage = item.voteAverage ?? item.vote_average ?? item.rating ?? 0;
@@ -117,7 +125,7 @@ function toFrontendItem(item: any) {
         backdropUrl = item.backdropUrl;
     } else if (item.backdrop_path || item.backdrop) {
         const backdropPath = item.backdrop_path || item.backdrop;
-        backdropUrl = `/api/proxy/image?path=${encodeURIComponent(backdropPath)}`;
+        backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(backdropPath)}`;
     } else {
         backdropUrl = item.backdropUrl ?? item.backdrop_url ?? null;
     }
