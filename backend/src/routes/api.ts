@@ -454,7 +454,7 @@ router.get('/recommendations', async (req, res) => {
 
         // Buffer-based fetch: try to keep a per-user/type/genre buffer of recommendations
         const TARGET_COUNT = 10;
-        const BATCH_SIZE = 30; // request 30 items per Gemini call
+        const BATCH_SIZE = 40; // request 40 items per Gemini call (increased to compensate for strict verification drops)
         const MAX_ATTEMPTS = 3;
 
         const likedItems = [ ...(history || []), ...(watchlistEntries || []) ];
@@ -511,30 +511,51 @@ router.get('/recommendations', async (req, res) => {
 
             if (!Array.isArray(rawRecs)) rawRecs = [];
 
+            console.log(`[Gemini] Received ${rawRecs.length} raw candidates from AI.`);
+
             for (const rec of rawRecs) {
                 if (buffer.length >= TARGET_COUNT) break;
                 try {
-                    if (!rec || !rec.title) continue;
+                    if (!rec || !rec.title) {
+                        console.log(`[Filter] DROP: Invalid candidate (missing title)`);
+                        continue;
+                    }
                     const recTitle = String(rec.title).trim();
-                    if (!recTitle) continue;
+                    if (!recTitle) {
+                        console.log(`[Filter] DROP: Empty title after trim`);
+                        continue;
+                    }
 
                     // Enrich & verify
                     const enriched = await searchAndEnrich(recTitle, rec.media_type, rec.release_year);
                     if (!enriched) {
-                        console.warn('Enrichment failed for candidate from Gemini:', { title: recTitle, year: rec.release_year, media_type: rec.media_type });
+                        console.log(`[Filter] DROP: "${recTitle}" (${rec.release_year}) - Verification Failed (hallucination or wrong year)`);
                         continue;
                     }
                     if (!enriched) continue;
                     const tmdb = enriched.tmdb_id ? Number(enriched.tmdb_id) : null;
-                    if (!tmdb || !Number.isFinite(tmdb)) continue;
+                    if (!tmdb || !Number.isFinite(tmdb)) {
+                        console.log(`[Filter] DROP: "${recTitle}" - Invalid TMDB ID after enrichment`);
+                        continue;
+                    }
 
                     // Skip if excluded or already owned
-                    if (excludedIds.has(tmdb)) continue;
-                    if (Array.from(ownedSet || []).some(s => typeof s === 'string' && s === `tmdb:${tmdb}`)) continue;
+                    if (excludedIds.has(tmdb)) {
+                        console.log(`[Filter] DROP: "${recTitle}" (TMDB:${tmdb}) - Already in Library/History`);
+                        continue;
+                    }
+                    if (Array.from(ownedSet || []).some(s => typeof s === 'string' && s === `tmdb:${tmdb}`)) {
+                        console.log(`[Filter] DROP: "${recTitle}" (TMDB:${tmdb}) - Already owned in Jellyfin`);
+                        continue;
+                    }
 
                     // Skip duplicates in buffer
-                    if (buffer.find(b => Number(b.tmdb_id) === tmdb)) continue;
+                    if (buffer.find(b => Number(b.tmdb_id) === tmdb)) {
+                        console.log(`[Filter] DROP: "${recTitle}" (TMDB:${tmdb}) - Duplicate in current buffer`);
+                        continue;
+                    }
 
+                    console.log(`[Filter] ACCEPT: "${recTitle}" (TMDB:${tmdb}, ${rec.release_year})`);
                     buffer.push(enriched);
                     excludedIds.add(tmdb);
                 } catch (e) {

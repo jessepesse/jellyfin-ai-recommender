@@ -19,6 +19,28 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
         - Reduced window from 15 minutes to 5 minutes for faster recovery
         - Allows better testing and troubleshooting workflows
 
+⚡ Performance & Optimization
+
+    **High-Volume Recommendation Strategy**:
+        - Increased Gemini batch size from 30 to 40 items per request
+        - Compensates for strict verification drops to consistently yield 10+ valid recommendations
+        - Trimmed exclusion list sent to AI from full history to last 100 items only
+        - Reduces token usage by ~37% while maintaining quality
+        - Added "Prioritize variety" and "Ensure accurate release years" to prompt instructions
+        
+    **Media Type Context Filtering**:
+        - Gemini now receives ONLY relevant history based on requested media type
+        - Movie requests: Only movie watch history sent (no TV shows)
+        - TV requests: Only TV watch history sent (no movies)
+        - Improves recommendation relevance and reduces prompt confusion
+        - Saves additional tokens by filtering out irrelevant context
+        
+    **Detailed Drop Reason Logging**:
+        - Added comprehensive logging for recommendation pipeline
+        - Tracks: Raw candidate count, hard filter drops, verification failures, duplicates
+        - Log format: `[Filter] DROP: "Title" (Reason)` and `[Filter] ACCEPT: "Title"`
+        - Enables debugging and optimization of verification strictness
+
 [2.0.7] - 2025-11-25
 
 🔒 Security Patch

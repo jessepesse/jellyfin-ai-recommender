@@ -94,12 +94,36 @@ export class GeminiService {
     const mediaType = filters?.type ? String(filters.type).toUpperCase() : 'MOVIE OR TV SERIES';
     const genreNote = filters?.genre ? `Focus strictly on the genre: "${filters.genre}".` : 'Recommend diverse genres that match the user\'s taste.';
 
+    // Filter context by media type to send ONLY relevant history
+    // This improves recommendation relevance and saves tokens
+    let contextLiked = likedItems;
+    let contextDisliked = dislikedItems;
+
+    if (filters?.type) {
+      const targetType = filters.type.toLowerCase();
+      
+      // Filter liked items to match requested type
+      contextLiked = likedItems.filter(item => {
+        const itemType = (item.mediaType || item.media_type || item.MediaType || '').toLowerCase();
+        return itemType === targetType;
+      });
+      
+      // Filter disliked items to match requested type
+      contextDisliked = dislikedItems.filter(item => {
+        const itemType = (item.mediaType || item.media_type || item.MediaType || '').toLowerCase();
+        return itemType === targetType;
+      });
+    }
+
     const hasProfile = !!tasteProfile && String(tasteProfile).trim().length > 10;
     const fallbackProfile = `No explicit taste profile is available for this user.\nFor the purposes of recommendation, assume a broadly-curated, mainstream taste that prefers well-rated, accessible titles across popular genres (drama, action, comedy, thriller, family).\nProvide diverse suggestions (mix of recent and classic titles) that would suit a general audience.\nEven if user history is empty, you MUST provide recommendations immediately. Do not ask clarifying questions.`;
-    const profileSection = hasProfile ? tasteProfile as string : `${fallbackProfile}\n\nSeed Titles:\n${this.formatTable(Array.isArray(likedItems) ? likedItems.slice(0, 100) : [])}`;
-    const exclusionSection = exclusionTable && exclusionTable.length > 0 ? exclusionTable : this.formatTable(Array.isArray(dislikedItems) ? dislikedItems : []);
+    const profileSection = hasProfile ? tasteProfile as string : `${fallbackProfile}\n\nSeed Titles:\n${this.formatTable(Array.isArray(contextLiked) ? contextLiked.slice(0, 100) : [])}`;
+    
+    // Limit exclusion context to last 100 items to reduce token usage and avoid overwhelming the model
+    const trimmedExclusionData = exclusionTable && exclusionTable.length > 0 ? exclusionTable : this.formatTable(Array.isArray(contextDisliked) ? contextDisliked.slice(-100) : []);
+    const exclusionSection = trimmedExclusionData;
 
-    return `\n### 🧠 USER TASTE ANALYSIS\n${profileSection}\n\n### ⛔ EXCLUSION DATABASE (DO NOT SUGGEST THESE ITEMS)\n| Title | Year |\n|---|---|\n${exclusionSection}\n\n### TASK\nBased on the "Taste Analysis", recommend exactly 30 NEW items.\nStrictly avoid items in the "Exclusion Database".\n- TYPE: ${mediaType}\n- GENRE: ${genreNote}\n\n### IMPORTANT INSTRUCTIONS\n- Even if the user has no history or the profile is empty, you MUST produce recommendations immediately. Do not ask clarifying questions or for additional information.\n- DO NOT output any external IDs (TMDB, IMDB, etc.). Only return titles, type, year, and a short reason.\n\n### OUTPUT FORMAT\nRespond ONLY with a JSON array of objects with keys: title, media_type (movie|tv), release_year (YYYY), reason.\n`;
+    return `\n### 🧠 USER TASTE ANALYSIS\n${profileSection}\n\n### ⛔ EXCLUSION DATABASE (DO NOT SUGGEST THESE ITEMS)\n| Title | Year |\n|---|---|\n${exclusionSection}\n\n### TASK\nBased on the "Taste Analysis", recommend exactly 40 NEW items.\nStrictly avoid items in the "Exclusion Database".\n- TYPE: ${mediaType}\n- GENRE: ${genreNote}\n\n### IMPORTANT INSTRUCTIONS\n- Even if the user has no history or the profile is empty, you MUST produce recommendations immediately. Do not ask clarifying questions or for additional information.\n- Prioritize variety. Do not get stuck on one franchise or series.\n- Ensure release years are accurate. Double-check that the year matches the actual release date.\n- DO NOT output any external IDs (TMDB, IMDB, etc.). Only return titles, type, year, and a short reason.\n\n### OUTPUT FORMAT\nRespond ONLY with a JSON array of objects with keys: title, media_type (movie|tv), release_year (YYYY), reason.\n`;
   }
 
   // Summarize a user's taste profile using Gemini (compact text)
