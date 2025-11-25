@@ -48,7 +48,7 @@ export function sanitizeConfigUrl(url?: string): string | undefined {
         
         // Only allow http/https protocols
         if (!['http:', 'https:'].includes(parsed.protocol)) {
-            console.warn('[SSRF] Blocked non-HTTP protocol in config URL');
+            console.warn(`[SSRF] Blocked non-HTTP protocol in config URL: ${parsed.protocol}`);
             return undefined;
         }
         
@@ -68,9 +68,10 @@ export function sanitizeConfigUrl(url?: string): string | undefined {
         
         // Allow everything else - user knows their own services
         const cleanUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+        console.debug(`[SSRF] Config URL accepted: ${cleanUrl}`);
         return cleanUrl;
     } catch (err) {
-        console.warn('[SSRF] Invalid URL format in config');
+        console.warn(`[SSRF] Invalid URL format in config: ${url}`, err);
         return undefined;
     }
 }

@@ -41,8 +41,16 @@ export class AuthService {
         const cfg = await ConfigService.getConfig();
         let baseUrl = serverUrl || cfg.jellyfinUrl || process.env.JELLYFIN_URL;
         if (!baseUrl) throw new Error('Jellyfin server URL not configured. Please set via Setup Wizard or JELLYFIN_URL env.');
+        
+        console.debug(`[Auth] Raw input URL: ${baseUrl}`);
+        
         // Clean common browser-paste URLs (strip /web, hash fragments, trailing slashes)
         baseUrl = AuthService.cleanBaseUrl(String(baseUrl));
+        
+        if (!baseUrl) {
+            throw new Error('No Jellyfin URL provided or invalid. Ensure URL uses http:// or https:// protocol and is not a blocked endpoint.');
+        }
+        
         console.debug(`[Auth] Sanitized URL to: ${baseUrl}`);
 
         // Candidate roots to try when authenticating. Prefer the sanitized root,
