@@ -56,7 +56,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
           </div>
         )}
 
-        <div className="absolute inset-0 transition-opacity duration-300 flex flex-col justify-end p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100">
+        <div className="absolute inset-0 transition-opacity duration-300 flex flex-col justify-end p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100">
           <div className="flex justify-around items-center gap-2 bg-black/40 p-2 rounded-md">
             {/* Request */}
             <button aria-label="Request" title="Request" onClick={async (e) => {
@@ -73,8 +73,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               } finally {
                 setRequesting(false);
               }
-            }} className="p-2 rounded text-white hover:text-cyan-300 transition-colors">
-              {requesting ? <Loader2 className="animate-spin" /> : requested ? <Check className="text-green-400" /> : <DownloadCloud />}
+            }} className="p-3 md:p-2 rounded text-white hover:text-cyan-300 transition-colors">
+              {requesting ? <Loader2 className="w-6 h-6 md:w-5 md:h-5 animate-spin" /> : requested ? <Check className="w-6 h-6 md:w-5 md:h-5 text-green-400" /> : <DownloadCloud className="w-6 h-6 md:w-5 md:h-5" />}
             </button>
             {/* touch-friendly sizing */}
             {/* Watchlist */}
@@ -105,7 +105,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 })
                 .catch(() => {/* TODO: handle rollback if needed */});
             }} className="p-3 md:p-2 rounded-md text-white hover:text-yellow-300 active:scale-95 transition-transform focus:outline-none">
-              <Bookmark />
+              <Bookmark className="w-6 h-6 md:w-5 md:h-5" />
             </button>
             ) : (
             <button aria-label="Remove from Watchlist" title="Remove from Watchlist" onClick={(e) => {
@@ -134,7 +134,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   console.error('Failed to remove from watchlist', err);
                 });
             }} className="p-3 md:p-2 rounded-md text-white hover:text-yellow-300 active:scale-95 transition-transform focus:outline-none">
-              <Bookmark />
+              <Bookmark className="w-6 h-6 md:w-5 md:h-5" />
             </button>
             )}
 
@@ -159,7 +159,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
               postActionWatched(payloadItemWatched).catch(() => {/* TODO: handle rollback if needed */});
             }} className="p-3 md:p-2 rounded-md text-white hover:text-green-300 active:scale-95 transition-transform focus:outline-none">
-              <Eye />
+              <Eye className="w-6 h-6 md:w-5 md:h-5" />
             </button>
 
             {/* Block */}
@@ -183,7 +183,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
               postActionBlock(payloadItemBlock).catch(() => {/* TODO: handle rollback if needed */});
             }} className="p-3 md:p-2 rounded-md text-white hover:text-red-400 active:scale-95 transition-transform focus:outline-none">
-              <Slash />
+              <Slash className="w-6 h-6 md:w-5 md:h-5" />
             </button>
           </div>
         </div>
