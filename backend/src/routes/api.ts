@@ -55,10 +55,8 @@ router.get('/proxy/image', async (req, res) => {
             imageUrl = path;
         } else {
             // Relative path - construct from Jellyseerr base
-            const baseUrl = sanitizeUrl(jellyseerrUrl);
-            if (!baseUrl) {
-                return res.status(500).json({ error: 'Invalid Jellyseerr URL configuration' });
-            }
+            // Note: Use jellyseerrUrl directly since it's already validated in config
+            const baseUrl = jellyseerrUrl;
 
             // Select appropriate image resolution based on type
             let upstreamPrefix = '/imageproxy/tmdb/t/p/w300_and_h450_face'; // Default: Poster
