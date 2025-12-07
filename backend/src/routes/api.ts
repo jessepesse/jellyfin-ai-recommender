@@ -1,18 +1,31 @@
 import { Router, Request, Response } from 'express';
 import { Recommender } from '../recommender';
 import { JellyfinService } from '../jellyfin';
-import { JellyfinItem, JellyfinAuthResponse, LoginResponse } from '../types'; // Updated import
+import { 
+    JellyfinItem, 
+    JellyfinAuthResponse, 
+    LoginResponse, 
+    FrontendItem,
+    MediaItem,
+    EnrichedRecommendation,
+    UserData,
+    AuthHeaders,
+    HttpError,
+    MediaItemInput,
+    RecommendationCandidate,
+    RecommendationFilters
+} from '../types';
 import { getUserData, updateMediaStatus, getFullWatchlist, removeFromWatchlist } from '../services/data';
 import prisma from '../services/data';
 import { GeminiService } from '../services/gemini';
 import { TasteService } from '../services/taste';
-import { requestMediaByTmdb, search as jellySearch } from '../services/jellyseerr';
+import { requestMediaByTmdb, search as jellySearch, Enriched } from '../services/jellyseerr';
 import ConfigService from '../services/config';
 import path from 'path';
 import fs from 'fs';
 import importService from '../services/import';
 import { exportUserData } from '../services/export';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuthService } from '../authService';
 import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from '../utils/ssrf-protection';
@@ -26,7 +39,7 @@ import {
 
 const router = Router();
 // Simple in-memory buffer cache for recommendation buffers (per user+type+genre)
-const BufferCache: Map<string, any[]> = new Map();
+const BufferCache: Map<string, Enriched[]> = new Map();
 const jellyfinService = new JellyfinService();
 
 // Image Proxy Endpoint - Routes images through backend to avoid 403 from external Jellyseerr
@@ -74,7 +87,7 @@ router.get('/proxy/image', async (req, res) => {
         const validatedUrl = validateRequestUrl(imageUrl);
         
         // Fetch image from Jellyseerr with API key if available
-        const headers: any = {};
+        const headers: Record<string, string> = {};
         if (config.jellyseerrApiKey) {
             headers['X-Api-Key'] = config.jellyseerrApiKey;
         }
@@ -107,13 +120,51 @@ router.get('/proxy/image', async (req, res) => {
     }
 });
 
+// Input type for items that can be converted to FrontendItem
+// Handles various sources: Jellyseerr, Prisma DB, Jellyfin, etc.
+interface ToFrontendItemInput {
+    tmdbId?: number | string | null;
+    tmdb_id?: number | string | null;
+    id?: number | string | null;
+    tmdb?: number | string | null;
+    title?: string;
+    name?: string;
+    Title?: string;
+    overview?: string | null;
+    plot?: string | null;
+    synopsis?: string | null;
+    mediaType?: string;
+    media_type?: string;
+    type?: string;
+    MediaType?: string;
+    releaseYear?: string;
+    releaseDate?: string;
+    firstAirDate?: string;
+    posterUrl?: string | null;
+    posterSourceUrl?: string | null;
+    poster_path?: string | null;
+    poster?: string | null;
+    poster_url?: string | null;
+    backdropUrl?: string | null;
+    backdropSourceUrl?: string | null;
+    backdrop_path?: string | null;
+    backdrop?: string | null;
+    backdrop_url?: string | null;
+    voteAverage?: number | null;
+    vote_average?: number | null;
+    rating?: number | null;
+    reason?: string;
+}
+
 // Standard mapper to normalize varied backend shapes to frontend contract
-function toFrontendItem(item: any) {
+function toFrontendItem(item: ToFrontendItemInput | null | undefined): FrontendItem | null {
     if (!item) return null;
     const tmdbRaw = item.tmdbId ?? item.tmdb_id ?? item.id ?? item.tmdb ?? item.tmdbId;
     const tmdbId = tmdbRaw !== undefined && tmdbRaw !== null ? Number(tmdbRaw) : null;
+    // Return null if tmdbId is not valid - FrontendItem requires a number
+    if (tmdbId === null || !Number.isFinite(tmdbId)) return null;
     const title = item.title || item.name || item.Title || '';
-    const overview = item.overview ?? item.plot ?? item.synopsis ?? null;
+    const overview = item.overview ?? item.plot ?? item.synopsis ?? undefined;
     const mediaTypeRaw = item.mediaType ?? item.media_type ?? item.type ?? item.MediaType ?? 'movie';
     const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.toLowerCase() : 'movie';
     const releaseYear = item.releaseYear ?? (item.releaseDate ? String(item.releaseDate).substring(0,4) : (item.firstAirDate ? String(item.firstAirDate).substring(0,4) : '')) ?? '';
@@ -186,9 +237,9 @@ function toFrontendItem(item: any) {
         overview,
         mediaType: mediaType === 'tv' ? 'tv' : 'movie',
         releaseYear: releaseYear || '',
-        posterUrl,
+        posterUrl: posterUrl || undefined,
         voteAverage: voteAverage === undefined || voteAverage === null ? 0 : Number(voteAverage),
-        backdropUrl: backdropUrl || null,
+        backdropUrl: backdropUrl || undefined,
     };
 }
 
@@ -292,7 +343,7 @@ router.get('/user/watchlist', async (req, res) => {
             console.log('[Watchlist API] First item from getFullWatchlist:', JSON.stringify(list[0], null, 2));
         }
         // Normalize to frontend contract for safety
-        const mapped = (list || []).map(i => toFrontendItem(i)).filter((x: any) => x && x.tmdbId);
+        const mapped = (list || []).map(i => toFrontendItem(i)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
         // DEBUG: Log first mapped item to see what toFrontendItem returns
         if (mapped && mapped.length > 0) {
             console.log('[Watchlist API] First mapped item:', JSON.stringify(mapped[0], null, 2));
@@ -316,7 +367,7 @@ router.get('/search', async (req, res) => {
         const results = await jellySearch(q);
         
         // Map to standardized frontend shape using helper
-        let mapped = (results || []).map(r => toFrontendItem(r)).filter((x: any) => x && x.tmdbId);
+        let mapped = (results || []).map(r => toFrontendItem(r)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
         
         // Filter out items already tracked by this user (watched, watchlist, or blocked)
         if (userName || userId) {
@@ -328,7 +379,7 @@ router.get('/search', async (req, res) => {
             ]);
             
             const beforeCount = mapped.length;
-            mapped = mapped.filter((item: any) => !existingIds.has(item.tmdbId));
+            mapped = mapped.filter((item: FrontendItem) => item.tmdbId !== null && !existingIds.has(item.tmdbId));
             
             console.debug(`[Search] Filtered ${beforeCount - mapped.length} existing items for user ${userName || userId} (${mapped.length} remaining)`);
         }
@@ -457,8 +508,32 @@ router.get('/recommendations', async (req, res) => {
         const BATCH_SIZE = 40; // request 40 items per Gemini call (increased to compensate for strict verification drops)
         const MAX_ATTEMPTS = 3;
 
-        const likedItems = [ ...(history || []), ...(watchlistEntries || []) ];
-        const dislikedItems = Array.isArray(userData.blockedIds) ? userData.blockedIds : [];
+        // Convert JellyfinItem and watchlist entries to MediaItemInput for GeminiService
+        const jellyfinToMediaInput = (item: JellyfinItem): MediaItemInput => ({
+            tmdbId: item.ProviderIds?.Tmdb ?? item.ProviderIds?.tmdb,
+            title: item.Name,
+            name: item.Name,
+            mediaType: item.Type?.toLowerCase() === 'series' ? 'tv' : 'movie',
+            releaseYear: item.ProductionYear ? String(item.ProductionYear) : (item.PremiereDate ? String(item.PremiereDate).substring(0, 4) : undefined),
+            voteAverage: item.CommunityRating,
+            overview: item.Overview,
+        });
+        
+        const likedItems: MediaItemInput[] = [
+            ...(history || []).map(jellyfinToMediaInput),
+            ...(watchlistEntries || []).map(w => ({
+                tmdbId: w.tmdbId,
+                title: w.title,
+                mediaType: w.mediaType,
+                releaseYear: w.releaseYear,
+                posterUrl: w.posterUrl,
+                overview: w.overview,
+                voteAverage: w.voteAverage,
+            } as MediaItemInput))
+        ];
+        const dislikedItems: MediaItemInput[] = Array.isArray(userData.blockedIds) 
+            ? userData.blockedIds.map(id => ({ tmdbId: id } as MediaItemInput)) 
+            : [];
 
         const cacheKey = `buffer_${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}`;
         let buffer = BufferCache.get(cacheKey) || [];
@@ -485,11 +560,11 @@ router.get('/recommendations', async (req, res) => {
             }).join('\n');
 
             // Ask Gemini for a batch of recommendations using profile + exclusions
-            let rawRecs: any[] = [];
+            let rawRecs: RecommendationCandidate[] = [];
             try {
                 rawRecs = await GeminiService.getRecommendations(
                     userName || userId,
-                    { ...userData, jellyfin_history: history } as any,
+                    { ...userData, jellyfin_history: history } as UserData,
                     likedItems,
                     dislikedItems,
                     { type: filters.type, genre: filters.genre },
@@ -503,7 +578,7 @@ router.get('/recommendations', async (req, res) => {
 
             try {
                 const sampleCount = Array.isArray(rawRecs) ? Math.min(5, rawRecs.length) : 0;
-                const sample = (Array.isArray(rawRecs) ? rawRecs.slice(0, sampleCount).map(r => ({ title: r.title || r.name || '<unknown>', year: r.release_year || r.releaseYear || '' })) : []);
+                const sample = (Array.isArray(rawRecs) ? rawRecs.slice(0, sampleCount).map(r => ({ title: r.title || '<unknown>', year: r.release_year || '' })) : []);
                 console.debug(`[Gemini] Batch returned ${Array.isArray(rawRecs) ? rawRecs.length : 0} items. Sample:`, sample);
             } catch (logErr) {
                 // ignore logging errors
@@ -574,7 +649,7 @@ router.get('/recommendations', async (req, res) => {
         TasteService.triggerUpdate(userName || userId, (filters.type === 'tv') ? 'tv' : 'movie', accessToken, userId);
 
         // Normalize and present final result items to frontend contract
-        const validItems = (responseItems || []).slice(0, TARGET_COUNT).map(d => toFrontendItem(d)).filter((x: any) => x && x.tmdbId);
+        const validItems = (responseItems || []).slice(0, TARGET_COUNT).map(d => toFrontendItem(d)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
         // Audit the final array going to the frontend
         try {
             // Debug: do not log item details in production logs to avoid exposing metadata

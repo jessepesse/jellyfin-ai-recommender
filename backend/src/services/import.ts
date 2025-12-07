@@ -15,8 +15,35 @@
 import prisma from './data';
 import { searchAndEnrich } from './jellyseerr';
 import { updateMediaStatus } from './data';
+import { MediaItemInput, LegacyImportEntry } from '../types';
 
-type LegacyEntry = string | { title?: string; tmdb_id?: number; tmdbId?: number; year?: string | number; media_type?: string };
+type LegacyEntry = string | LegacyImportEntry;
+
+// Resolved item after Jellyseerr verification
+interface ResolvedImportItem {
+  title?: string;
+  tmdbId?: number;
+  mediaType: 'movie' | 'tv';
+  releaseYear?: string;
+  overview?: string;
+  posterUrl?: string;
+  backdropUrl?: string;
+  voteAverage?: number;
+}
+
+// Import payload structure (legacy JSON format)
+interface ImportPayload {
+  movies?: LegacyEntry[];
+  series?: LegacyEntry[];
+  watchlist?: {
+    movies?: LegacyEntry[];
+    series?: LegacyEntry[];
+  };
+  'watchlist.movies'?: LegacyEntry[];
+  'watchlist.series'?: LegacyEntry[];
+  items?: LegacyEntry[];
+  data?: ImportPayload;
+}
 
 export interface ImportProgress {
   username: string;
@@ -67,21 +94,21 @@ export class ImportService {
     }
   }
   // Resolve an entry to a standard shape, try Jellyseerr when tmdbId missing
-  async resolveLegacyEntry(entry: LegacyEntry, defaultMediaType: 'movie' | 'tv') {
+  async resolveLegacyEntry(entry: LegacyEntry, defaultMediaType: 'movie' | 'tv'): Promise<ResolvedImportItem | null> {
     if (!entry) return null;
     let title: string | undefined;
     let tmdbId: number | undefined;
-    let mediaType: string = defaultMediaType;
+    let mediaType: 'movie' | 'tv' = defaultMediaType;
     let releaseYear: string | undefined;
 
     if (typeof entry === 'string') {
       title = entry.trim();
     } else if (typeof entry === 'object') {
-      title = (entry as any).title ?? undefined;
-      tmdbId = (entry as any).tmdb_id ?? (entry as any).tmdbId ?? undefined;
-      mediaType = (entry as any).media_type ?? mediaType;
-      if ((entry as any).year) releaseYear = String((entry as any).year);
-      if ((entry as any).releaseDate) releaseYear = String((entry as any).releaseDate).substring(0,4);
+      title = entry.title ?? undefined;
+      tmdbId = entry.tmdb_id ?? entry.tmdbId ?? undefined;
+      mediaType = (entry.media_type === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv';
+      if (entry.year) releaseYear = String(entry.year);
+      if (entry.releaseDate) releaseYear = String(entry.releaseDate).substring(0,4);
     }
 
     if (!title && !tmdbId) return null;
@@ -103,7 +130,7 @@ export class ImportService {
           posterUrl: enriched.posterUrl ?? undefined,
           backdropUrl: enriched.backdropUrl ?? undefined,
           voteAverage: enriched.voteAverage ?? undefined,
-        } as any;
+        };
       } catch (e) {
         return null;
       }
@@ -114,35 +141,35 @@ export class ImportService {
       tmdbId: tmdbId ? Number(tmdbId) : undefined,
       mediaType: mediaType === 'tv' ? 'tv' : 'movie',
       releaseYear,
-    } as any;
+    };
   }
 
   // jsonData is parsed object (not raw string) representing legacy database.json
-  async processImport(username: string, jsonData: any, accessToken?: string) {
+  async processImport(username: string, jsonData: ImportPayload, accessToken?: string) {
     if (!username) throw new Error('username required');
     const user = await prisma.user.upsert({ where: { username }, create: { username }, update: {} });
     // Unwrap if payloads are nested under `data` (legacy export format)
-    const payload = (jsonData && typeof jsonData === 'object' && jsonData.data) ? jsonData.data : jsonData;
+    const payload: ImportPayload = (jsonData && typeof jsonData === 'object' && jsonData.data) ? jsonData.data : jsonData;
 
     // Build queue from known legacy keys
     const queue: Array<{ raw: LegacyEntry; targetStatus: string; mediaType: 'movie'|'tv' }> = [];
 
     try {
-      if (Array.isArray(payload.movies)) payload.movies.forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHED', mediaType: 'movie' }));
-      if (Array.isArray(payload.series)) payload.series.forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHED', mediaType: 'tv' }));
+      if (Array.isArray(payload.movies)) payload.movies.forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHED', mediaType: 'movie' }));
+      if (Array.isArray(payload.series)) payload.series.forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHED', mediaType: 'tv' }));
 
       // watchlist may be nested
       if (payload.watchlist) {
-        if (Array.isArray(payload.watchlist.movies)) payload.watchlist.movies.forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'movie' }));
-        if (Array.isArray(payload.watchlist.series)) payload.watchlist.series.forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'tv' }));
+        if (Array.isArray(payload.watchlist.movies)) payload.watchlist.movies.forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'movie' }));
+        if (Array.isArray(payload.watchlist.series)) payload.watchlist.series.forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'tv' }));
       }
 
       // legacy keys like watchlist_movies or similar
-      if (Array.isArray(payload['watchlist.movies'])) payload['watchlist.movies'].forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'movie' }));
-      if (Array.isArray(payload['watchlist.series'])) payload['watchlist.series'].forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'tv' }));
+      if (Array.isArray(payload['watchlist.movies'])) payload['watchlist.movies'].forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'movie' }));
+      if (Array.isArray(payload['watchlist.series'])) payload['watchlist.series'].forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'tv' }));
 
       // Allow top-level generic arrays
-      if (Array.isArray(payload.items)) payload.items.forEach((r: any) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'movie' }));
+      if (Array.isArray(payload.items)) payload.items.forEach((r: LegacyEntry) => queue.push({ raw: r, targetStatus: 'WATCHLIST', mediaType: 'movie' }));
     } catch (e) {
       // ignore malformed
     }
@@ -164,13 +191,13 @@ export class ImportService {
       for (const q of batch) {
         total++;
         try {
-          const resolved: any = await this.resolveLegacyEntry(q.raw, q.mediaType);
+          const resolved = await this.resolveLegacyEntry(q.raw, q.mediaType);
           if (!resolved || !resolved.tmdbId) {
             skipped++;
             this.updateProgress(username, { 
               processed: total, 
               skipped, 
-              currentItem: typeof q.raw === 'string' ? q.raw : (q.raw as any).title || 'Unknown'
+              currentItem: typeof q.raw === 'string' ? q.raw : ((q.raw as LegacyImportEntry).title || 'Unknown')
             });
             continue;
           }
@@ -199,7 +226,7 @@ export class ImportService {
           }
 
           // Build item payload for updateMediaStatus (it will upsert media)
-          const itemForDb: any = {
+          const itemForDb: MediaItemInput = {
             tmdbId: tmdbId,
             title: resolved.title,
             mediaType: resolved.mediaType,
@@ -214,8 +241,8 @@ export class ImportService {
           imported++;
           this.updateProgress(username, { imported, processed: total });
           console.log(`[Import] ✓ Imported '${resolved.title}' (${imported}/${queue.length - skipped})`);
-        } catch (e: any) {
-          const errorMsg = String(e?.message || e);
+        } catch (e: unknown) {
+          const errorMsg = e instanceof Error ? e.message : String(e);
           errors.push(errorMsg);
           this.updateProgress(username, { errors: errors.length, processed: total });
           console.error(`[Import] ✗ Failed to import item:`, errorMsg);

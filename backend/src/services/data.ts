@@ -1,17 +1,18 @@
 import { PrismaClient, MediaStatus } from '@prisma/client';
 import { search as jellySearch } from './jellyseerr';
 import { ImageService } from './image';
+import { MediaItem, MediaUpdateData, MediaCreateData, MediaItemInput } from '../types';
 
 const prisma = new PrismaClient();
 
-function parseTmdbId(item: any): number | null {
+function parseTmdbId(item: MediaItemInput | null | undefined): number | null {
   const raw = item?.tmdbId ?? item?.tmdb_id ?? item?.media_id ?? item?.id ?? null;
   if (raw === undefined || raw === null) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-export async function syncMediaItem(item: any) {
+export async function syncMediaItem(item: MediaItemInput) {
   const tmdbId = parseTmdbId(item);
   if (!tmdbId) throw new Error('Missing or invalid tmdbId for media');
   // Normalize title: prefer common keys and fallbacks for TV (`name`) and originals
@@ -150,7 +151,7 @@ export async function syncMediaItem(item: any) {
   return media;
 }
 
-export async function updateMediaStatus(username: string, item: any, status: MediaStatus | string, accessToken?: string) {
+export async function updateMediaStatus(username: string, item: MediaItemInput, status: MediaStatus | string, accessToken?: string) {
   // Do not log full item or access token here to avoid leaking user tokens or PII.
 
   if (!username) throw new Error('username required');
@@ -234,7 +235,7 @@ export async function getFullWatchlist(username: string) {
   }));
 }
 
-export async function removeFromWatchlist(username: string, item: any) {
+export async function removeFromWatchlist(username: string, item: MediaItemInput) {
   if (!username) throw new Error('username required');
   const tmdbId = parseTmdbId(item);
   if (!tmdbId) throw new Error('tmdbId required');

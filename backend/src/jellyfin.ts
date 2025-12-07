@@ -1,7 +1,22 @@
-import axios from 'axios';
-import { JellyfinItem, JellyfinLibrary } from './types'; // Removed JellyfinAuthResponse, JellyfinUser as authenticateUser moved
+import axios, { AxiosError } from 'axios';
+import { JellyfinItem, JellyfinLibrary, HttpError } from './types'; // Removed JellyfinAuthResponse, JellyfinUser as authenticateUser moved
 import ConfigService from './services/config';
 import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from './utils/ssrf-protection';
+
+// Query parameters interface for Jellyfin API calls
+interface JellyfinQueryParams {
+    ParentId?: string;
+    Recursive?: boolean;
+    IncludeItemTypes?: string;
+    Fields?: string;
+    SearchTerm?: string;
+    userId?: string;
+    Filters?: string;
+    SortBy?: string;
+    SortOrder?: string;
+    EnableUserData?: boolean;
+    Limit?: number;
+}
 
 export class JellyfinService {
 
@@ -69,7 +84,7 @@ export class JellyfinService {
             const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
             const headers = JellyfinService.getHeaders(accessToken);
 
-            const params: any = {
+            const params: JellyfinQueryParams = {
                 ParentId: libraryId,
                 Recursive: true,
                 IncludeItemTypes: 'Movie,Series',
@@ -113,7 +128,7 @@ export class JellyfinService {
                 const headers = JellyfinService.getHeaders(accessToken);
                 
                 // STRICT filters: Only return items the user has actually watched
-                const params: any = {
+                const params: JellyfinQueryParams = {
                     Recursive: true,
                     IncludeItemTypes: 'Movie,Series',  // Movies and TV Series only (not Episodes)
                     Filters: 'IsPlayed',               // CRITICAL: Only watched items
@@ -159,10 +174,10 @@ export class JellyfinService {
                     return new Set();
                 }
                 const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
-                const headers: any = JellyfinService.getHeaders(accessToken);
+                const headers = JellyfinService.getHeaders(accessToken);
 
                 // Fetch the user's libraries and aggregate items similarly to getItems logic
-                let libs: any[] = [];
+                let libs: JellyfinLibrary[] = [];
                 try {
                     libs = (await this.getLibraries(accessToken, serverUrl)) || [];
                 } catch (e) {
@@ -173,7 +188,7 @@ export class JellyfinService {
                     const url = validateRequestUrl(`${base}/Users/${userId}/Items`);
                     // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
                     // codeql[js/request-forgery] - User-configured Jellyfin URL, validated by validateSafeUrl
-                    return axios.get<any>(validateSafeUrl(url), { headers, params: { ParentId: l.Id, Recursive: true, IncludeItemTypes: 'Movie,Series', Fields: 'ProviderIds,ProductionYear,Name,PremiereDate' }, timeout: 15000 }).then(r => r.data.Items || []).catch(() => []);
+                    return axios.get<{ Items: JellyfinItem[] }>(validateSafeUrl(url), { headers, params: { ParentId: l.Id, Recursive: true, IncludeItemTypes: 'Movie,Series', Fields: 'ProviderIds,ProductionYear,Name,PremiereDate' }, timeout: 15000 }).then(r => r.data.Items || []).catch(() => [] as JellyfinItem[]);
                 })) : [];
                 const items = (pools || []).flat();
 
@@ -182,13 +197,13 @@ export class JellyfinService {
 
                 for (const it of items) {
                     // Try provider IDs first
-                    const providerIds = it?.ProviderIds || it?.ProviderId || {};
-                    const tmdb = providerIds?.Tmdb ?? providerIds?.TMDB ?? providerIds?.tmdb ?? null;
+                    const providerIds = it?.ProviderIds || {};
+                    const tmdb = providerIds?.Tmdb ?? providerIds?.tmdb ?? null;
                     if (tmdb) {
                         owned.add(`tmdb:${String(tmdb)}`);
                     }
 
-                    const title = it?.Name || it?.Title || it?.name || '';
+                    const title = it?.Name || '';
                     const year = it?.ProductionYear || (it?.PremiereDate ? String(it.PremiereDate).substring(0,4) : '') || '';
                     if (title) {
                         const key = `titleyear:${normalize(title)}::${String(year || '')}`;
@@ -198,8 +213,8 @@ export class JellyfinService {
 
                 return owned;
             } catch (e) {
-                const err: any = e;
-                console.error('Failed to compute owned IDs from Jellyfin:', err?.response?.status, err?.response?.data ?? err?.message ?? err);
+                const err = e as HttpError;
+                console.error('Failed to compute owned IDs from Jellyfin:', err?.status, err?.message ?? err);
                 return new Set();
             }
         }

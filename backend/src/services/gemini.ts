@@ -1,6 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { z } from 'zod';
 import ConfigService from './config';
+import { MediaItemInput, UserData, RecommendationCandidate, RecommendationFilters } from '../types';
 
 // Default model with thinking support enabled
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
@@ -9,7 +10,13 @@ const modelName = 'gemini-2.5-flash-lite';
 console.debug('Using Gemini model:', modelName);
 
 // Construct SDK client at runtime and return both the raw client, the generative model instance, and the resolved model name
-async function buildClientAndModel(): Promise<{ client: any; model: any; modelName: string }> {
+interface GeminiClientBundle {
+  client: GoogleGenerativeAI;
+  model: GenerativeModel;
+  modelName: string;
+}
+
+async function buildClientAndModel(): Promise<GeminiClientBundle> {
   const cfg = await ConfigService.getConfig();
   const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
   const apiKey = rawKey ? rawKey.trim() : '';
@@ -51,7 +58,7 @@ export class GeminiService {
    * Formats a list of items into a compact table:
    * | Title | Year |
    */
-  private static formatTable(list: any[]): string {
+  private static formatTable(list: (MediaItemInput | string)[]): string {
     if (!list || list.length === 0) return '(none)';
 
     const uniqueEntries = new Set<string>();
@@ -64,9 +71,9 @@ export class GeminiService {
       if (typeof item === 'string') {
         title = item;
       } else {
-        title = item.title || item.Name || item.name || '';
-        year = item.release_year || item.ProductionYear || item.releaseDate || item.year || '';
-        if (typeof year !== 'string') year = String(year || '');
+        title = item.title || item.name || item.originalTitle || item.Title || '';
+        const rawYear = item.release_year || item.releaseYear || item.releaseDate || item.release_date || item.year || '';
+        year = typeof rawYear !== 'string' ? String(rawYear || '') : rawYear;
       }
 
       title = String(title).replace(/\|/g, '').trim();
@@ -84,13 +91,21 @@ export class GeminiService {
     return rows.join('\n');
   }
 
-  private static buildPrompt(username: string, userData: any, likedItems: any[], dislikedItems: any[], filters?: { type?: string; genre?: string }): string {
+  private static buildPrompt(username: string, userData: UserData, likedItems: MediaItemInput[], dislikedItems: MediaItemInput[], filters?: RecommendationFilters): string {
     // Backwards-compatible buildPrompt that can accept a precomputed tasteProfile and an exclusionTable
     return (username && userData) ? this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters) : '';
   }
 
   // New prompt builder that prefers a provided taste profile and an explicit exclusion table
-  private static buildPromptWithProfile(username: string, userData: any, likedItems: any[], dislikedItems: any[], filters?: { type?: string; genre?: string }, tasteProfile?: string, exclusionTable?: string) {
+  private static buildPromptWithProfile(
+    username: string,
+    userData: UserData,
+    likedItems: MediaItemInput[],
+    dislikedItems: MediaItemInput[],
+    filters?: RecommendationFilters,
+    tasteProfile?: string,
+    exclusionTable?: string
+  ): string {
     const mediaType = filters?.type ? String(filters.type).toUpperCase() : 'MOVIE OR TV SERIES';
     const genreNote = filters?.genre ? `Focus strictly on the genre: "${filters.genre}".` : 'Recommend diverse genres that match the user\'s taste.';
 
@@ -104,13 +119,13 @@ export class GeminiService {
       
       // Filter liked items to match requested type
       contextLiked = likedItems.filter(item => {
-        const itemType = (item.mediaType || item.media_type || item.MediaType || '').toLowerCase();
+        const itemType = (item.mediaType || item.media_type || item.type || '').toLowerCase();
         return itemType === targetType;
       });
       
       // Filter disliked items to match requested type
       contextDisliked = dislikedItems.filter(item => {
-        const itemType = (item.mediaType || item.media_type || item.MediaType || '').toLowerCase();
+        const itemType = (item.mediaType || item.media_type || item.type || '').toLowerCase();
         return itemType === targetType;
       });
     }
@@ -128,10 +143,10 @@ export class GeminiService {
 
   // Summarize a user's taste profile using Gemini (compact text)
   // Thinking is automatically enabled for 2.5+ and 3.0+ models
-  public static async summarizeProfile(username: string, seedItems: any[], type: 'movie' | 'tv'): Promise<string> {
+  public static async summarizeProfile(username: string, seedItems: MediaItemInput[], type: 'movie' | 'tv'): Promise<string> {
     try {
-      const { client: genAIClient, model, modelName: runtimeModelName } = await buildClientAndModel();
-      const titles = (seedItems || []).slice(0, 80).map((s: any) => typeof s === 'string' ? s : (s.title || s.Name || s.name || '')).filter(Boolean).slice(0, 80);
+      const { model } = await buildClientAndModel();
+      const titles = (seedItems || []).slice(0, 80).map((s: MediaItemInput) => s.title || s.name || s.Title || '').filter(Boolean).slice(0, 80);
       const prompt = `Summarize the user's ${type} taste in 2-3 concise bullet points based on these titles:\n${titles.join('\n')}`;
       
       // Use modern API with proper message format
@@ -146,7 +161,8 @@ export class GeminiService {
         const body = resp?.response;
         if (body && typeof body.text === 'function') {
           const maybe = body.text();
-          text = (maybe instanceof Promise) ? await maybe : maybe;
+          // Handle both sync and async text() results
+          text = (maybe && typeof maybe === 'object' && 'then' in maybe) ? await maybe : String(maybe);
         } else if (typeof resp?.response === 'string') {
           text = resp.response;
         } else {
@@ -162,13 +178,21 @@ export class GeminiService {
     }
   }
 
-  public static async getRecommendations(username: string, userData: any, likedItems: any[], dislikedItems: any[], filters?: { type?: string; genre?: string }, tasteProfile?: string, exclusionTable?: string): Promise<any[]> {
+  public static async getRecommendations(
+    username: string,
+    userData: UserData,
+    likedItems: MediaItemInput[],
+    dislikedItems: MediaItemInput[],
+    filters?: RecommendationFilters,
+    tasteProfile?: string,
+    exclusionTable?: string
+  ): Promise<RecommendationCandidate[]> {
     const prompt = this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters, tasteProfile, exclusionTable);
 
     try {
       console.debug('Attempting to call Gemini via official SDK with model:', modelName);
 
-      const { client: genAIClient, model, modelName: runtimeModelName } = await buildClientAndModel();
+      const { model } = await buildClientAndModel();
       // Ensure prompt is a string
       const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
 
@@ -232,7 +256,7 @@ export class GeminiService {
           if (validated.success) {
             // Return parsed items but importantly DO NOT include any TMDB id from Gemini.
             // We include release_year and reason so downstream enrichment can use year matching.
-            return validated.data.map((p: any) => ({
+            return validated.data.map((p): RecommendationCandidate => ({
               title: p.title,
               media_type: p.media_type || 'movie',
               release_year: p.release_year,
@@ -255,8 +279,16 @@ export class GeminiService {
 
     // Fallback heuristic
     try {
-      const scored = (likedItems || []).slice().sort((a: any, b: any) => (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0));
-      return scored.slice(0, 10).map((s: any) => ({ title: s.Name || s.title || 'Unknown', media_type: s.MediaType || s.media_type || 'movie', tmdb_id: s.tmdb_id }));
+      const scored = (likedItems || []).slice().sort((a: MediaItemInput, b: MediaItemInput) => {
+        const ratingA = a.voteAverage ?? a.vote_average ?? a.rating ?? 0;
+        const ratingB = b.voteAverage ?? b.vote_average ?? b.rating ?? 0;
+        return Number(ratingB) - Number(ratingA);
+      });
+      return scored.slice(0, 10).map((s: MediaItemInput): RecommendationCandidate => ({
+        title: s.name || s.title || s.Title || 'Unknown',
+        media_type: s.mediaType || s.media_type || s.type || 'movie',
+        release_year: s.releaseYear || s.release_year || s.year || '',
+      }));
     } catch (e) {
       console.error('Fallback recommender error:', e);
     }
