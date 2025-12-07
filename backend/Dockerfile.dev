@@ -1,0 +1,31 @@
+# Backend Development Dockerfile with Hot Reload
+# Uses tsx watch mode for automatic reloading on code changes
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies for Prisma and health check
+RUN apk -U add --no-cache openssl curl
+
+# Copy package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install all dependencies
+RUN npm install
+
+# Generate Prisma client
+ARG DATABASE_URL="file:./prisma/dev.db"
+RUN DATABASE_URL=${DATABASE_URL} npx prisma generate
+
+# Copy source files (will be overwritten by volume mount in dev)
+COPY . .
+
+# Make start scripts executable
+RUN chmod +x start.sh 2>/dev/null || true
+
+EXPOSE 3001
+
+# Use tsx watch for hot reload in development
+CMD ["npx", "tsx", "watch", "--clear-screen=false", "src/index.ts"]

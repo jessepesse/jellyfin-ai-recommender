@@ -99,6 +99,45 @@ After first run, migrate existing images to local cache:
 docker-compose -f docker-compose.prod.yml exec backend npm run db:migrate-images
 ```
 
+### 🔧 Docker Development (Hot Reload)
+
+For development with Docker and automatic hot-reload, use the development compose file:
+
+```bash
+# Start development containers with hot reload
+docker compose -f docker-compose.development.yml up --build
+
+# Or in detached mode
+docker compose -f docker-compose.development.yml up -d --build
+```
+
+**Features:**
+- 🔄 **Hot Reload:** Code changes are automatically detected and reloaded
+- 📁 **Source Mounting:** `src/` directories are mounted read-only into containers
+- 🧪 **Isolated Dependencies:** `node_modules` stay inside containers
+- 🐛 **Development Mode:** Full error messages and debugging output
+
+**Development Access:**
+- Frontend (Vite HMR): `http://localhost:5173`
+- Backend API: `http://localhost:3001`
+
+**View Logs:**
+```bash
+# All services
+docker compose -f docker-compose.development.yml logs -f
+
+# Backend only
+docker compose -f docker-compose.development.yml logs -f backend-dev
+
+# Frontend only  
+docker compose -f docker-compose.development.yml logs -f frontend-dev
+```
+
+**Stop Development:**
+```bash
+docker compose -f docker-compose.development.yml down
+```
+
 ## 🌐 Public Deployment & Security
 
 If you plan to expose this application to the public internet (e.g., via Cloudflare Tunnel or Nginx Proxy Manager), you **must** configure the CORS policy to prevent security risks.

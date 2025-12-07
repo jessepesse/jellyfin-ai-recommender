@@ -1,0 +1,20 @@
+# Frontend Development Dockerfile with Hot Reload
+# Uses Vite dev server for HMR (Hot Module Replacement)
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies
+RUN npm install
+
+# Copy source files (will be overwritten by volume mount in dev)
+COPY . .
+
+EXPOSE 5173
+
+# Use Vite dev server with host binding for Docker networking
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

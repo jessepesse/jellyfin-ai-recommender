@@ -1,0 +1,65 @@
+# Docker Compose for Local Development with Hot Reload
+# Usage: docker compose -f docker-compose.development.yml up
+#
+# This configuration mounts source code directly into containers
+# for hot-reload during development. Changes to code are reflected immediately.
+
+services:
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: jellyfin-ai-backend-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - DATA_DIR=/app/data
+      - IMAGE_DIR=/app/images
+      - PORT=3001
+      - NODE_ENV=development
+    volumes:
+      # Source code for hot reload
+      - ./backend/src:/app/src:ro
+      - ./backend/prisma:/app/prisma:ro
+      # Data persistence
+      - ./data:/app/data
+      - ./images:/app/images
+      # Exclude node_modules (use container's installed deps)
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - jair_dev_net
+
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: jellyfin-ai-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3001
+    volumes:
+      # Source code for hot reload
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+      - ./frontend/index.html:/app/index.html:ro
+      # Exclude node_modules
+      - /app/node_modules
+    depends_on:
+      backend-dev:
+        condition: service_healthy
+    networks:
+      - jair_dev_net
+
+networks:
+  jair_dev_net:
+    driver: bridge
