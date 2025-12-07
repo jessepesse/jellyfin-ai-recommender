@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import apiRouter from './routes/api';
 import authRouter from './routes/auth'; // Import new auth router
 import { runMetadataBackfill } from './services/metadataBackfill';
+import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 
 dotenv.config();
@@ -141,6 +142,9 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api', apiRouter);
 app.use('/api/auth', authRouter); // Mount auth router
+
+// Centralized error handling middleware (must be after routes)
+app.use(errorHandler);
 
 app.listen(port, () => {
   console.info(`Server is running on http://localhost:${port}`);

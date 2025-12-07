@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AuthService, LoginSchema } from '../authService';
 import { LoginResponse } from '../types';
 import { validateLogin } from '../middleware/validators';
+import { getErrorMessage, getErrorStatusCode, logError } from '../utils/errors';
 
 const authRouter = Router();
 const authService = new AuthService();
@@ -28,15 +29,19 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
             serverUrl: workingUrl 
         } as LoginResponse);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error instanceof z.ZodError) {
             console.error('Validation error for login:', error.issues);
             return res.status(400).json({ success: false, message: 'Validation failed', errors: error.issues });
         }
-        console.error('Error during backend Jellyfin authentication:', error);
-        if (error.response && error.response.status === 401) {
+        
+        logError(error, 'auth/login');
+        const statusCode = getErrorStatusCode(error);
+        
+        if (statusCode === 401) {
             return res.status(401).json({ success: false, message: 'Invalid Jellyfin username or password.' } as LoginResponse);
         }
+        
         // Generic error message for other issues
         res.status(500).json({ success: false, message: 'An unexpected error occurred during authentication.' } as LoginResponse);
     }
