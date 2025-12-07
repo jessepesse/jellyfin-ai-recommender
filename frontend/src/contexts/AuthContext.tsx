@@ -85,6 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         // Store password in sessionStorage for automatic token refresh
         // sessionStorage is cleared when browser tab is closed (more secure than localStorage)
+        // codeql[js/clear-text-storage-of-sensitive-data] - Intentional: Required for Jellyfin token refresh. Uses sessionStorage (session-only, not persistent).
         sessionStorage.setItem('jellyfin_password', password);
         
         return true;

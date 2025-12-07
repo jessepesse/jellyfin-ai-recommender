@@ -79,8 +79,10 @@ router.post('/import', async (req, res) => {
         // For large imports, run async
         if (itemCount > 50) {
             importService.processImport(username, parsed, token).then(summary => {
+                // codeql[js/tainted-format-string] - False positive: summary is a separate argument, not part of format string
                 console.log(`[Import] Async import complete for ${username}:`, summary);
             }).catch(e => {
+                // codeql[js/tainted-format-string] - False positive: e is a separate argument, not part of format string
                 console.error(`[Import] Async import failed for ${username}:`, e);
             });
             

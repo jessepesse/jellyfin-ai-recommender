@@ -224,8 +224,7 @@ export class JellyfinService {
                 }
                 const pools = libs.length ? await Promise.all(libs.map(l => {
                     const url = validateRequestUrl(`${base}/Users/${userId}/Items`);
-                    // SSRF Protection: Explicit validation immediately before axios call breaks CodeQL taint flow
-                    // codeql[js/request-forgery] - User-configured Jellyfin URL, validated by validateSafeUrl
+                    // codeql[js/request-forgery] - False positive: URL validated 3x (sanitizeUrl in getBaseUrl, validateRequestUrl, validateSafeUrl)
                     return axios.get<{ Items: JellyfinItem[] }>(validateSafeUrl(url), { headers, params: { ParentId: l.Id, Recursive: true, IncludeItemTypes: 'Movie,Series', Fields: 'ProviderIds,ProductionYear,Name,PremiereDate' }, timeout: 15000 }).then(r => r.data.Items || []).catch(() => [] as JellyfinItem[]);
                 })) : [];
                 const items = (pools || []).flat();

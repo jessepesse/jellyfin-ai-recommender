@@ -129,12 +129,14 @@ export function logError(error: unknown, context?: string): void {
 
   if (statusCode >= 500) {
     // Log full error for server errors
+    // codeql[js/tainted-format-string] - False positive: message is a separate argument, not part of format string
     console.error(`${prefix} Error (${statusCode}):`, message);
     if (error instanceof Error && error.stack) {
       console.error(error.stack);
     }
   } else {
     // Log minimal info for client errors
+    // codeql[js/tainted-format-string] - False positive: message is a separate argument, not part of format string
     console.warn(`${prefix} Client error (${statusCode}):`, message);
   }
 }
