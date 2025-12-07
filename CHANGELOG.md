@@ -90,6 +90,13 @@ Comprehensive codebase modernization with modular architecture, unified caching,
         - Increased import limit from 5 to 10 operations per window
         - Reduced window from 15 minutes to 5 minutes for faster recovery
         - Allows better testing and troubleshooting workflows
+        
+    **Improved Jellyfin 401 Error Handling**:
+        - Added `JellyfinAuthError` class to identify authentication failures
+        - Backend now properly propagates 401 errors to frontend instead of silently failing
+        - Frontend token refresh interceptor correctly triggered on expired tokens
+        - Added `[Jellyfin] AUTH ERROR` log prefix for easier debugging
+        - Fixed Docker development proxy to use container networking (VITE_API_TARGET)
 
 ⚡ Performance & Optimization
 
