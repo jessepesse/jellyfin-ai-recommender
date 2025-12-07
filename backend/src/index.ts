@@ -4,16 +4,22 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
+// Load environment variables first
+dotenv.config();
+
+// Validate environment configuration
+import { validateEnv, getEnv } from './utils/env';
+validateEnv();
+
 import apiRouter from './routes/api';
 import authRouter from './routes/auth'; // Import new auth router
 import { runMetadataBackfill } from './services/metadataBackfill';
 import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 
-dotenv.config();
-
 const app = express();
-const port = process.env.PORT || 3001;
+const env = getEnv();
+const port = env.PORT;
 
 // Trust proxy headers for rate limiting (needed for reverse proxies like Nginx, ZimaOS)
 // This allows express-rate-limit to correctly identify users behind proxies
@@ -127,7 +133,7 @@ app.use('/api', generalLimiter); // General limiter for all other endpoints
 
 // Serve static images from local storage
 // Images are downloaded and cached to prevent broken links when Jellyseerr IP changes
-const imageDir = process.env.IMAGE_DIR || '/app/images';
+const imageDir = env.IMAGE_DIR;
 app.use('/images', express.static(imageDir));
 console.log(`[Static] Serving images from: ${imageDir}`);
 
