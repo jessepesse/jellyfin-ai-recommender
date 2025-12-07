@@ -134,11 +134,63 @@ export class GeminiService {
     const fallbackProfile = `No explicit taste profile is available for this user.\nFor the purposes of recommendation, assume a broadly-curated, mainstream taste that prefers well-rated, accessible titles across popular genres (drama, action, comedy, thriller, family).\nProvide diverse suggestions (mix of recent and classic titles) that would suit a general audience.\nEven if user history is empty, you MUST provide recommendations immediately. Do not ask clarifying questions.`;
     const profileSection = hasProfile ? tasteProfile as string : `${fallbackProfile}\n\nSeed Titles:\n${this.formatTable(Array.isArray(contextLiked) ? contextLiked.slice(0, 100) : [])}`;
     
-    // Limit exclusion context to last 100 items to reduce token usage and avoid overwhelming the model
-    const trimmedExclusionData = exclusionTable && exclusionTable.length > 0 ? exclusionTable : this.formatTable(Array.isArray(contextDisliked) ? contextDisliked.slice(-100) : []);
-    const exclusionSection = trimmedExclusionData;
+    // Send FULL exclusion table - Gemini 2.5+ has 1M+ token context, so we can send everything
+    // This is the user's complete watch history, watchlist, and blocked items
+    const exclusionSection = exclusionTable && exclusionTable.length > 0 
+      ? exclusionTable 
+      : this.formatTable(Array.isArray(contextDisliked) ? contextDisliked : []);
+    
+    // Count exclusion items for transparency
+    const exclusionCount = exclusionSection.split('\n').filter(line => line.startsWith('|')).length;
 
-    return `\n### 🧠 USER TASTE ANALYSIS\n${profileSection}\n\n### ⛔ EXCLUSION DATABASE (DO NOT SUGGEST THESE ITEMS)\n| Title | Year |\n|---|---|\n${exclusionSection}\n\n### TASK\nBased on the "Taste Analysis", recommend exactly 40 NEW items.\nStrictly avoid items in the "Exclusion Database".\n- TYPE: ${mediaType}\n- GENRE: ${genreNote}\n\n### IMPORTANT INSTRUCTIONS\n- Even if the user has no history or the profile is empty, you MUST produce recommendations immediately. Do not ask clarifying questions or for additional information.\n- Prioritize variety. Do not get stuck on one franchise or series.\n- Ensure release years are accurate. Double-check that the year matches the actual release date.\n- DO NOT output any external IDs (TMDB, IMDB, etc.). Only return titles, type, year, and a short reason.\n\n### OUTPUT FORMAT\nRespond ONLY with a JSON array of objects with keys: title, media_type (movie|tv), release_year (YYYY), reason.\n`;
+    return `
+### 🧠 USER TASTE ANALYSIS
+${profileSection}
+
+---
+
+### 🚫 MANDATORY EXCLUSION LIST (${exclusionCount} items)
+
+**CRITICAL: You MUST NOT recommend ANY title from this list. This is the user's complete watch history, watchlist, and blocked items.**
+
+| Title | Year |
+|-------|------|
+${exclusionSection}
+
+---
+
+### ⚠️ EXCLUSION RULES (ABSOLUTE - NO EXCEPTIONS)
+
+1. **NEVER recommend any title that appears in the exclusion list above**
+2. **Check EVERY recommendation against the exclusion list before including it**
+3. **If a title matches (even with slight spelling variations), DO NOT include it**
+4. **This includes sequels, prequels, and spin-offs of excluded franchises IF they appear in the list**
+5. **The user has already seen, added to watchlist, or explicitly blocked these items**
+
+---
+
+### TASK
+Based on the "Taste Analysis", recommend exactly 40 NEW and UNDISCOVERED items.
+The user wants fresh recommendations they have NOT seen before.
+
+- TYPE: ${mediaType}
+- GENRE: ${genreNote}
+
+---
+
+### IMPORTANT INSTRUCTIONS
+- **VERIFY**: Before outputting, double-check that NONE of your recommendations appear in the exclusion list
+- Even if the user has no history or the profile is empty, you MUST produce recommendations immediately. Do not ask clarifying questions.
+- Prioritize variety. Do not get stuck on one franchise or series.
+- Ensure release years are accurate. Double-check that the year matches the actual release date.
+- DO NOT output any external IDs (TMDB, IMDB, etc.). Only return titles, type, year, and a short reason.
+- If you're unsure whether something is on the exclusion list, choose a different recommendation.
+
+---
+
+### OUTPUT FORMAT
+Respond ONLY with a JSON array of objects with keys: title, media_type (movie|tv), release_year (YYYY), reason.
+`;
   }
 
   // Summarize a user's taste profile using Gemini (compact text)
