@@ -1,0 +1,244 @@
+/**
+ * Custom hook for SetupWizard state management
+ * Separates business logic from presentation
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { postSystemSetup, postSystemVerify, getSystemSetupDefaults } from '../services/api';
+
+export type ServiceStatus = 'idle' | 'testing' | 'success' | 'error';
+
+export interface ServiceTestResult {
+  status: ServiceStatus;
+  message: string;
+}
+
+export interface TestResults {
+  jellyfin: ServiceTestResult;
+  jellyseerr: ServiceTestResult;
+  gemini: ServiceTestResult;
+}
+
+export interface SetupFormData {
+  jellyfinUrl: string;
+  jellyseerrUrl: string;
+  jellyseerrApiKey: string;
+  geminiApiKey: string;
+  geminiModel: string;
+}
+
+export interface UseSetupWizardReturn {
+  // Form state
+  formData: SetupFormData;
+  setFormData: React.Dispatch<React.SetStateAction<SetupFormData>>;
+  updateField: <K extends keyof SetupFormData>(field: K, value: SetupFormData[K]) => void;
+  
+  // Test state
+  testResults: TestResults;
+  isAllTestsPassed: boolean;
+  
+  // Action states
+  isSaving: boolean;
+  isRestoring: boolean;
+  error: string | null;
+  restoreSuccess: boolean;
+  
+  // Actions
+  handleTest: () => Promise<void>;
+  handleSave: (e: React.FormEvent) => Promise<void>;
+  handleRestore: (file: File) => Promise<void>;
+  clearError: () => void;
+}
+
+const defaultTestResults: TestResults = {
+  jellyfin: { status: 'idle', message: '' },
+  jellyseerr: { status: 'idle', message: '' },
+  gemini: { status: 'idle', message: '' },
+};
+
+const defaultFormData: SetupFormData = {
+  jellyfinUrl: '',
+  jellyseerrUrl: '',
+  jellyseerrApiKey: '',
+  geminiApiKey: '',
+  geminiModel: 'gemini-2.5-flash-lite',
+};
+
+export function useSetupWizard(): UseSetupWizardReturn {
+  const [formData, setFormData] = useState<SetupFormData>(defaultFormData);
+  const [testResults, setTestResults] = useState<TestResults>(defaultTestResults);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [restoreSuccess, setRestoreSuccess] = useState(false);
+
+  // Load defaults on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const defaults = await getSystemSetupDefaults();
+        if (!mounted) return;
+        
+        setFormData(prev => ({
+          jellyfinUrl: defaults.jellyfinUrl || prev.jellyfinUrl,
+          jellyseerrUrl: defaults.jellyseerrUrl || prev.jellyseerrUrl,
+          jellyseerrApiKey: defaults.jellyseerrApiKey || prev.jellyseerrApiKey,
+          geminiApiKey: defaults.geminiApiKey || prev.geminiApiKey,
+          geminiModel: defaults.geminiModel || prev.geminiModel,
+        }));
+      } catch (e) {
+        console.warn('Failed to load setup defaults', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const updateField = useCallback(<K extends keyof SetupFormData>(field: K, value: SetupFormData[K]) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const handleTest = useCallback(async () => {
+    setError(null);
+    setTestResults({
+      jellyfin: { status: 'testing', message: '' },
+      jellyseerr: { status: 'testing', message: '' },
+      gemini: { status: 'testing', message: '' },
+    });
+
+    try {
+      const data = await postSystemVerify({
+        jellyfinUrl: formData.jellyfinUrl,
+        jellyseerrUrl: formData.jellyseerrUrl,
+        jellyseerrApiKey: formData.jellyseerrApiKey,
+        geminiApiKey: formData.geminiApiKey,
+      });
+      
+      setTestResults({
+        jellyfin: { 
+          status: data.jellyfin?.ok ? 'success' : 'error', 
+          message: data.jellyfin?.message || '' 
+        },
+        jellyseerr: { 
+          status: data.jellyseerr?.ok ? 'success' : 'error', 
+          message: data.jellyseerr?.message || '' 
+        },
+        gemini: { 
+          status: data.gemini?.ok ? 'success' : 'error', 
+          message: data.gemini?.message || '' 
+        },
+      });
+    } catch (e: any) {
+      setError(e?.message || 'Test failed');
+      setTestResults({
+        jellyfin: { status: 'error', message: '' },
+        jellyseerr: { status: 'error', message: '' },
+        gemini: { status: 'error', message: '' },
+      });
+    }
+  }, [formData]);
+
+  const handleSave = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const allPassed = 
+      testResults.jellyfin.status === 'success' && 
+      testResults.jellyseerr.status === 'success' && 
+      testResults.gemini.status === 'success';
+
+    if (!allPassed) {
+      const ok = window.confirm('Not all connection tests passed. Are you sure you want to save anyway?');
+      if (!ok) return;
+    }
+
+    setIsSaving(true);
+    try {
+      await postSystemSetup({
+        jellyfinUrl: formData.jellyfinUrl,
+        jellyseerrUrl: formData.jellyseerrUrl,
+        jellyseerrApiKey: formData.jellyseerrApiKey,
+        geminiApiKey: formData.geminiApiKey,
+        geminiModel: formData.geminiModel,
+      });
+      window.location.reload();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [formData, testResults]);
+
+  const handleRestore = useCallback(async (file: File) => {
+    setIsRestoring(true);
+    setError(null);
+    setRestoreSuccess(false);
+
+    try {
+      const fileContent = await file.text();
+      let parsed: any;
+
+      try {
+        parsed = JSON.parse(fileContent);
+      } catch {
+        setError('Invalid JSON file. Please select a valid backup file.');
+        setIsRestoring(false);
+        return;
+      }
+
+      // Extract system config if available (multi-user backups)
+      if (parsed.system_config) {
+        setFormData(prev => ({
+          jellyfinUrl: parsed.system_config.jellyfinUrl || prev.jellyfinUrl,
+          jellyseerrUrl: parsed.system_config.jellyseerrUrl || prev.jellyseerrUrl,
+          jellyseerrApiKey: parsed.system_config.jellyseerrApiKey || prev.jellyseerrApiKey,
+          geminiApiKey: parsed.system_config.geminiApiKey || prev.geminiApiKey,
+          geminiModel: parsed.system_config.geminiModel || prev.geminiModel,
+        }));
+      }
+      // Legacy single-user format
+      else if (parsed.data) {
+        const legacyData = parsed.data;
+        setFormData(prev => ({
+          jellyfinUrl: legacyData.jellyfinUrl || prev.jellyfinUrl,
+          jellyseerrUrl: legacyData.jellyseerrUrl || prev.jellyseerrUrl,
+          jellyseerrApiKey: legacyData.jellyseerrApiKey || prev.jellyseerrApiKey,
+          geminiApiKey: legacyData.geminiApiKey || prev.geminiApiKey,
+          geminiModel: legacyData.geminiModel || prev.geminiModel,
+        }));
+      }
+
+      setRestoreSuccess(true);
+      setError('✅ Backup file loaded! Configuration fields have been pre-filled. You can now test connections and save.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to read backup file');
+    } finally {
+      setIsRestoring(false);
+    }
+  }, []);
+
+  const isAllTestsPassed = 
+    testResults.jellyfin.status === 'success' && 
+    testResults.jellyseerr.status === 'success' && 
+    testResults.gemini.status === 'success';
+
+  return {
+    formData,
+    setFormData,
+    updateField,
+    testResults,
+    isAllTestsPassed,
+    isSaving,
+    isRestoring,
+    error,
+    restoreSuccess,
+    handleTest,
+    handleSave,
+    handleRestore,
+    clearError,
+  };
+}
