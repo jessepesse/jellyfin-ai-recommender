@@ -36,10 +36,9 @@ import {
   validateConfigUpdate,
   validateMediaRequest
 } from '../middleware/validators';
+import { CacheService } from '../services/cache';
 
 const router = Router();
-// Simple in-memory buffer cache for recommendation buffers (per user+type+genre)
-const BufferCache: Map<string, Enriched[]> = new Map();
 const jellyfinService = new JellyfinService();
 
 // Image Proxy Endpoint - Routes images through backend to avoid 403 from external Jellyseerr
@@ -535,8 +534,8 @@ router.get('/recommendations', async (req, res) => {
             ? userData.blockedIds.map(id => ({ tmdbId: id } as MediaItemInput)) 
             : [];
 
-        const cacheKey = `buffer_${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}`;
-        let buffer = BufferCache.get(cacheKey) || [];
+        const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}`;
+        let buffer = CacheService.get<Enriched[]>('recommendations', cacheKey) || [];
 
         let attempts = 0;
         while ((buffer.length < TARGET_COUNT) && attempts < MAX_ATTEMPTS) {
@@ -643,7 +642,7 @@ router.get('/recommendations', async (req, res) => {
         // Serve top TARGET_COUNT and persist remaining back into cache
         const responseItems = buffer.slice(0, TARGET_COUNT);
         const remaining = buffer.slice(TARGET_COUNT);
-        BufferCache.set(cacheKey, remaining);
+        CacheService.set('recommendations', cacheKey, remaining);
 
         // Trigger a background profile refresh to keep tastes up-to-date
         TasteService.triggerUpdate(userName || userId, (filters.type === 'tv') ? 'tv' : 'movie', accessToken, userId);

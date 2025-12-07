@@ -1,5 +1,5 @@
 import axios from 'axios';
-import NodeCache from 'node-cache';
+import { CacheService } from './cache';
 
 
 // NOTE: Do not rely on process.env at module-evaluation time for runtime-configured
@@ -20,10 +20,6 @@ async function getClient(): Promise<import('axios').AxiosInstance> {
   // Return axios client with validated runtime base URL and sanitized API key header
   return axios.create({ baseURL: base, headers: { 'X-Api-Key': key }, timeout: 10000 });
 }
-
-// Cache TTL: 12 hours
-const CACHE_TTL_SECONDS = 60 * 60 * 12;
-const cache = new NodeCache({ stdTTL: CACHE_TTL_SECONDS, checkperiod: 1200 });
 
 export type Enriched = {
   title: string;
@@ -85,7 +81,7 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
   const yearStr = queryYear ? String(queryYear).trim() : '';
   const typeStr = queryType ? String(queryType).toLowerCase() : '';
   const cacheKey = `${cacheKeyForTitle(queryTitle)}_verify_${yearStr}_${typeStr}`;
-  const cached = cache.get<Enriched | null>(cacheKey);
+  const cached = CacheService.get<Enriched | null>('jellyseerr', cacheKey);
   if (cached !== undefined) return cached; // could be null
 
     try {
@@ -153,7 +149,7 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
         releaseDate: releaseDate,
       };
 
-      cache.set(cacheKey, enriched);
+      CacheService.set('jellyseerr', cacheKey, enriched);
       // Detailed audit log for verification success
       try {
         console.debug(`[Jellyseerr Verify] SUCCESS: Found "${match.title || match.name || title}" | Type: ${match.mediaType || match.media_type || match.type || media_type} | Year: ${match.releaseDate || match.firstAirDate || releaseDate}`);
@@ -170,7 +166,7 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
     } catch (logErr) {
       console.warn('[Jellyseerr Verify] FAILED: (log failed)', logErr);
     }
-    cache.set(cacheKey, null);
+    CacheService.set('jellyseerr', cacheKey, null);
     return null;
   } catch (e: any) {
     console.error('Jellyseerr verify/search error for', queryTitle, e?.response?.data || e.message || e);
@@ -262,7 +258,7 @@ export async function getMediaDetails(tmdbId: string | number, mediaType: 'movie
   }
 
   const cacheKey = `jellyseerr_details_${mediaType}_${id}`;
-  const cached = cache.get<Enriched | null>(cacheKey);
+  const cached = CacheService.get<Enriched | null>('jellyseerr', cacheKey);
   if (cached !== undefined) return cached;
 
   let client;
@@ -279,7 +275,7 @@ export async function getMediaDetails(tmdbId: string | number, mediaType: 'movie
     const data = resp.data;
 
     if (!data) {
-      cache.set(cacheKey, null);
+      CacheService.set('jellyseerr', cacheKey, null);
       return null;
     }
 
@@ -300,13 +296,13 @@ export async function getMediaDetails(tmdbId: string | number, mediaType: 'movie
       releaseDate: data.releaseDate || data.firstAirDate || data.release_date || data.first_air_date || undefined,
     };
 
-    cache.set(cacheKey, enriched);
+    CacheService.set('jellyseerr', cacheKey, enriched);
     console.debug(`[Jellyseerr] Details fetched for ${mediaType} ${id}: ${enriched.title}`);
     return enriched;
   } catch (e: any) {
     if (e.response?.status === 404) {
       console.debug(`[Jellyseerr] Media not found: ${mediaType} ${id}`);
-      cache.set(cacheKey, null);
+      CacheService.set('jellyseerr', cacheKey, null);
       return null;
     }
     console.error(`[Jellyseerr] Error fetching details for ${mediaType} ${id}:`, e?.response?.data || e.message || e);
