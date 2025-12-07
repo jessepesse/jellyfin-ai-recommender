@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SystemConfig as PrismaSystemConfig } from '@prisma/client';
 import { sanitizeConfigUrl } from '../utils/ssrf-protection';
 
 const prisma = new PrismaClient();
@@ -12,15 +12,41 @@ export type SystemConfig = {
   isConfigured?: boolean;
 };
 
+// Config update payload type
+export type ConfigUpdatePayload = Partial<Omit<SystemConfig, 'isConfigured'>>;
+
+// Cache for config to reduce database queries
+let configCache: SystemConfig | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds cache TTL
+
 class ConfigService {
-  // Return config, prioritizing database values when isConfigured is true
+  /**
+   * Clear the config cache (call after updates)
+   */
+  public static clearCache(): void {
+    configCache = null;
+    cacheTimestamp = 0;
+  }
+
+  /**
+   * Return config, prioritizing database values when isConfigured is true
+   * Uses in-memory caching to reduce database load
+   */
   public static async getConfig(): Promise<SystemConfig> {
+    // Return cached config if still valid
+    const now = Date.now();
+    if (configCache && (now - cacheTimestamp) < CACHE_TTL_MS) {
+      return configCache;
+    }
+
     // Read DB row (singleton id=1)
-    let dbConfig: any = null;
+    let dbConfig: PrismaSystemConfig | null = null;
     try {
       dbConfig = await prisma.systemConfig.findUnique({ where: { id: 1 } });
     } catch (e) {
       // If table doesn't exist yet or DB not ready, ignore and fall back to envs
+      console.warn('[ConfigService] Failed to read config from DB, using env fallback');
     }
 
     // CRITICAL FIX: If database is marked as configured, ALWAYS prefer DB values
@@ -29,19 +55,19 @@ class ConfigService {
     const isDbConfigured = Boolean(dbConfig && dbConfig.isConfigured);
     
     const config: SystemConfig = {
-      jellyfinUrl: isDbConfigured && dbConfig.jellyfinUrl 
+      jellyfinUrl: isDbConfigured && dbConfig?.jellyfinUrl 
         ? dbConfig.jellyfinUrl 
         : (dbConfig?.jellyfinUrl || process.env.JELLYFIN_URL || null),
-      jellyseerrUrl: isDbConfigured && dbConfig.jellyseerrUrl 
+      jellyseerrUrl: isDbConfigured && dbConfig?.jellyseerrUrl 
         ? dbConfig.jellyseerrUrl 
         : (dbConfig?.jellyseerrUrl || process.env.JELLYSEERR_URL || null),
-      jellyseerrApiKey: isDbConfigured && dbConfig.jellyseerrApiKey 
+      jellyseerrApiKey: isDbConfigured && dbConfig?.jellyseerrApiKey 
         ? dbConfig.jellyseerrApiKey 
         : (dbConfig?.jellyseerrApiKey || process.env.JELLYSEERR_API_KEY || null),
-      geminiApiKey: isDbConfigured && dbConfig.geminiApiKey 
+      geminiApiKey: isDbConfigured && dbConfig?.geminiApiKey 
         ? dbConfig.geminiApiKey 
         : (dbConfig?.geminiApiKey || process.env.GEMINI_API_KEY || null),
-      geminiModel: isDbConfigured && dbConfig.geminiModel 
+      geminiModel: isDbConfigured && dbConfig?.geminiModel 
         ? dbConfig.geminiModel 
         : (dbConfig?.geminiModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'),
       // CRITICAL: only consider the system configured when the DB row explicitly
@@ -51,10 +77,14 @@ class ConfigService {
       isConfigured: isDbConfigured,
     };
 
+    // Update cache
+    configCache = config;
+    cacheTimestamp = now;
+
     return config;
   }
 
-  public static async saveConfig(payload: Partial<SystemConfig>) {
+  public static async saveConfig(payload: ConfigUpdatePayload): Promise<PrismaSystemConfig> {
     // SSRF Protection: Validate URLs before saving to database (permissive for user config)
     const validatedJellyfinUrl = payload.jellyfinUrl ? sanitizeConfigUrl(payload.jellyfinUrl) : undefined;
     const validatedJellyseerrUrl = payload.jellyseerrUrl ? sanitizeConfigUrl(payload.jellyseerrUrl) : undefined;
@@ -69,15 +99,25 @@ class ConfigService {
       throw new Error(`Invalid or blocked Jellyseerr URL: ${payload.jellyseerrUrl}. Ensure it uses http:// or https:// protocol.`);
     }
     
-    // Upsert singleton row with id=1
-    const data: any = {
-      jellyfinUrl: validatedJellyfinUrl ?? undefined,
-      jellyseerrUrl: validatedJellyseerrUrl ?? undefined,
-      jellyseerrApiKey: payload.jellyseerrApiKey ?? undefined,
-      geminiApiKey: payload.geminiApiKey ?? undefined,
-      geminiModel: payload.geminiModel ?? undefined,
+    // Build update data with proper typing
+    interface ConfigUpsertData {
+      jellyfinUrl?: string;
+      jellyseerrUrl?: string;
+      jellyseerrApiKey?: string;
+      geminiApiKey?: string;
+      geminiModel?: string;
+      isConfigured: boolean;
+    }
+    
+    const data: ConfigUpsertData = {
       isConfigured: true,
     };
+    
+    if (validatedJellyfinUrl) data.jellyfinUrl = validatedJellyfinUrl;
+    if (validatedJellyseerrUrl) data.jellyseerrUrl = validatedJellyseerrUrl;
+    if (payload.jellyseerrApiKey) data.jellyseerrApiKey = payload.jellyseerrApiKey;
+    if (payload.geminiApiKey) data.geminiApiKey = payload.geminiApiKey;
+    if (payload.geminiModel) data.geminiModel = payload.geminiModel;
 
     const result = await prisma.systemConfig.upsert({
       where: { id: 1 },
@@ -85,17 +125,12 @@ class ConfigService {
       create: { id: 1, ...data },
     });
 
-    // If a Gemini API key was provided, log a masked confirmation so operators
-    // can see that a key was saved without exposing the secret in logs.
-    try {
-      const savedKey = (payload && payload.geminiApiKey) ? String(payload.geminiApiKey) : (result && result.geminiApiKey ? String(result.geminiApiKey) : null);
-      if (savedKey) {
-        // Never log API keys (even masked) to prevent timing attacks and log analysis
-        console.info('SystemConfig: Gemini API key saved — will be used at runtime.');
-      }
-    } catch (e) {
-      // Never throw because of logging; best-effort only
-      console.warn('Failed to emit masked Gemini save log', e);
+    // Clear cache after saving new config
+    this.clearCache();
+
+    // If a Gemini API key was provided, log a confirmation
+    if (payload.geminiApiKey || result.geminiApiKey) {
+      console.info('SystemConfig: Gemini API key saved — will be used at runtime.');
     }
 
     return result;
