@@ -4,7 +4,79 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-[Unreleased]
+[2.0.8] - 2025-12-07
+
+🏗️ Major Refactoring & AI Improvements
+
+Comprehensive codebase modernization with modular architecture, unified caching, and improved AI recommendations.
+
+🔧 Refactoring
+
+    **Modular API Route Architecture**:
+        - Split monolithic 1097-line `api.ts` into 9 focused modules:
+          - `system.ts`: Config, setup, verify, image proxy (288 lines)
+          - `recommendations.ts`: AI recommendations, search (217 lines)
+          - `route-utils.ts`: Shared toFrontendItem helper (149 lines)
+          - `settings.ts`: Import/Export (118 lines)
+          - `actions.ts`: User actions, Jellyseerr requests (110 lines)
+          - `user.ts`: Libraries, items, watchlist (73 lines)
+          - `media.ts`: Image serving, debug (68 lines)
+          - `sync.ts`: Jellyfin sync (42 lines)
+          - `api.ts`: Combined router index (42 lines)
+        - Each module has single responsibility for easier maintenance
+        
+    **Strict TypeScript Typing**:
+        - Replaced `any` types with strict TypeScript interfaces throughout backend
+        - Added comprehensive type definitions in `types.ts`
+        - Improved IDE autocompletion and compile-time error detection
+        
+    **Centralized Error Handling**:
+        - Created `AppError` class for consistent error responses
+        - Added `errorHandler` middleware for Express
+        - Implemented `getErrorMessage` utility for safe error extraction
+        
+    **Improved ConfigService**:
+        - Added in-memory caching to reduce database reads
+        - Implemented cache invalidation on config updates
+        - Proper TypeScript typing for configuration objects
+        
+    **Frontend Hooks Extraction**:
+        - Extracted SetupWizard logic to `useSetupWizard` custom hook
+        - Separated business logic from presentation layer
+        - Reduced SetupWizard component from 248 to 134 lines
+
+✨ Features
+
+    **Unified CacheService**:
+        - Centralized caching with namespaced storage (jellyseerr, recommendations, config, taste)
+        - Replaced scattered cache implementations with single service
+        - Consistent TTLs per namespace (12h jellyseerr, 30m recommendations)
+        
+    **Zod Environment Validation**:
+        - Added schema-based validation for environment variables at startup
+        - Provides clear error messages for missing or invalid configuration
+        - Validates PORT, NODE_ENV, and optional settings
+        
+    **Docker Development Environment**:
+        - Added `docker-compose.development.yml` with hot-reload support
+        - Source mounting for automatic code change detection
+        - Separate Dockerfile.dev for backend (tsx watch) and frontend (Vite HMR)
+        - Removed redundant `docker-compose.dev.yml`
+        
+    **Improved Gemini Exclusion Handling**:
+        - Removed 100-item limit on exclusion data (Gemini 2.5+ has 1M+ token context)
+        - Added explicit MANDATORY EXCLUSION LIST section with item count
+        - Added 5 strict EXCLUSION RULES with no exceptions
+        - Emphasized verification step before outputting recommendations
+        - Improved prompt clarity about excluding watched, watchlist, and blocked items
+        
+    **Automatic Token Refresh**:
+        - Implemented axios interceptor to automatically refresh expired Jellyfin tokens
+        - On 401 errors, system attempts re-authentication using stored credentials
+        - Password stored in sessionStorage (cleared on tab close for security)
+        - Queues concurrent requests during refresh to avoid duplicate login attempts
+        - Maintains Jellyfin sync functionality without manual re-login
+        - Gracefully falls back to manual login if automatic refresh fails
 
 🐛 Bug Fixes
 
@@ -24,8 +96,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
     **High-Volume Recommendation Strategy**:
         - Increased Gemini batch size from 30 to 40 items per request
         - Compensates for strict verification drops to consistently yield 10+ valid recommendations
-        - Trimmed exclusion list sent to AI from full history to last 100 items only
-        - Reduces token usage by ~37% while maintaining quality
         - Added "Prioritize variety" and "Ensure accurate release years" to prompt instructions
         
     **Media Type Context Filtering**:
@@ -35,21 +105,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
         - Improves recommendation relevance and reduces prompt confusion
         - Saves additional tokens by filtering out irrelevant context
         
+    **Full Watch History for AI**:
+        - Send complete watch history to Gemini instead of trimmed 100 items
+        - Leverages Gemini 2.5's 1M+ token context window
+        - Ensures AI never recommends already-seen content
+        
     **Detailed Drop Reason Logging**:
         - Added comprehensive logging for recommendation pipeline
         - Tracks: Raw candidate count, hard filter drops, verification failures, duplicates
         - Log format: `[Filter] DROP: "Title" (Reason)` and `[Filter] ACCEPT: "Title"`
         - Enables debugging and optimization of verification strictness
-
-✨ Features
-
-    **Automatic Token Refresh**:
-        - Implemented axios interceptor to automatically refresh expired Jellyfin tokens
-        - On 401 errors, system attempts re-authentication using stored credentials
-        - Password stored in sessionStorage (cleared on tab close for security)
-        - Queues concurrent requests during refresh to avoid duplicate login attempts
-        - Maintains Jellyfin sync functionality without manual re-login
-        - Gracefully falls back to manual login if automatic refresh fails
 
 [2.0.7] - 2025-11-25
 
