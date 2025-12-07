@@ -3,6 +3,29 @@ import { JellyfinItem, JellyfinLibrary, HttpError } from './types'; // Removed J
 import ConfigService from './services/config';
 import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from './utils/ssrf-protection';
 
+/**
+ * Custom error for Jellyfin authentication failures (401)
+ * This error should be propagated to frontend to trigger token refresh
+ */
+export class JellyfinAuthError extends Error {
+    public readonly statusCode: number = 401;
+    public readonly isAuthError: boolean = true;
+    
+    constructor(message: string = 'Jellyfin token expired or invalid - please re-login') {
+        super(message);
+        this.name = 'JellyfinAuthError';
+        Error.captureStackTrace(this, this.constructor);
+    }
+}
+
+/**
+ * Check if an axios error is a 401 authentication error
+ */
+function isAuthError(error: unknown): boolean {
+    const err = error as AxiosError;
+    return err?.response?.status === 401;
+}
+
 // Query parameters interface for Jellyfin API calls
 interface JellyfinQueryParams {
     ParentId?: string;
@@ -57,7 +80,7 @@ export class JellyfinService {
     public async getLibraries(accessToken: string, serverUrl?: string): Promise<JellyfinLibrary[]> {
         const baseRaw = await JellyfinService.getBaseUrl(serverUrl);
         if (!baseRaw) {
-            console.warn('getLibraries: No Jellyfin base URL configured');
+            console.warn('[Jellyfin] getLibraries: No Jellyfin base URL configured');
             return [];
         }
         const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
@@ -71,8 +94,13 @@ export class JellyfinService {
             const response = await axios.get<any>(validateSafeUrl(url), { headers, timeout: 10000 });
             return response.data.Items || [];
         } catch (error) {
-            const err: any = error;
-            console.error('Error fetching Jellyfin libraries:', err?.response?.status, err?.response?.data ?? err?.message ?? err);
+            const err = error as AxiosError;
+            // Propagate 401 errors to frontend for token refresh
+            if (isAuthError(error)) {
+                console.error('[Jellyfin] AUTH ERROR: Token expired or invalid (401) - user needs to re-login');
+                throw new JellyfinAuthError();
+            }
+            console.error('[Jellyfin] Error fetching libraries:', err?.response?.status, err?.response?.data ?? err?.message ?? err);
             return [];
         }
     }
@@ -110,8 +138,13 @@ export class JellyfinService {
             });
 
         } catch (error) {
-            const err: any = error;
-            console.error('Error fetching items from library %s: status=%s', libraryId, err?.response?.status, err?.response?.data ?? err?.message ?? err);
+            const err = error as AxiosError;
+            // Propagate 401 errors to frontend for token refresh
+            if (isAuthError(error)) {
+                console.error('[Jellyfin] AUTH ERROR: Token expired or invalid (401) while fetching items - user needs to re-login');
+                throw new JellyfinAuthError();
+            }
+            console.error('[Jellyfin] Error fetching items from library %s: status=%s', libraryId, err?.response?.status, err?.response?.data ?? err?.message ?? err);
             throw error;
         }
     }
@@ -154,9 +187,14 @@ export class JellyfinService {
                     return item;
                 });
             } catch (error) {
-                const err: any = error;
+                const err = error as AxiosError;
+                // Propagate 401 errors to frontend for token refresh
+                if (isAuthError(error)) {
+                    console.error('[Jellyfin] AUTH ERROR: Token expired or invalid (401) while fetching history - user needs to re-login');
+                    throw new JellyfinAuthError();
+                }
                 // Use parameterized logging to prevent format string injection
-                console.error('Error fetching user history from Jellyfin: status=%s', err?.response?.status, err?.response?.data ?? err?.message ?? err);
+                console.error('[Jellyfin] Error fetching user history: status=%s', err?.response?.status, err?.response?.data ?? err?.message ?? err);
                 return [];
             }
         }
@@ -213,8 +251,13 @@ export class JellyfinService {
 
                 return owned;
             } catch (e) {
-                const err = e as HttpError;
-                console.error('Failed to compute owned IDs from Jellyfin:', err?.status, err?.message ?? err);
+                const err = e as AxiosError;
+                // Propagate 401 errors to frontend for token refresh
+                if (isAuthError(e)) {
+                    console.error('[Jellyfin] AUTH ERROR: Token expired or invalid (401) while fetching owned IDs - user needs to re-login');
+                    throw new JellyfinAuthError();
+                }
+                console.error('[Jellyfin] Failed to compute owned IDs:', err?.response?.status, err?.message ?? err);
                 return new Set();
             }
         }

@@ -5,6 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { validateJellyfinSync } from '../middleware/validators';
+import { JellyfinAuthError } from '../jellyfin';
 
 const router = Router();
 
@@ -39,6 +40,10 @@ router.post('/jellyfin', validateJellyfinSync, async (req: Request, res: Respons
             errors: result.errors,
         });
     } catch (e: any) {
+        // Propagate 401 to frontend for token refresh
+        if (e instanceof JellyfinAuthError) {
+            return res.status(401).json({ error: e.message, code: 'TOKEN_EXPIRED' });
+        }
         console.error('[API] Sync failed:', e);
         res.status(500).json({ 
             success: false,

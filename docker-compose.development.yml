@@ -46,7 +46,8 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_BASE_URL=http://localhost:3001
+      # Use Docker service name for container-to-container communication
+      - VITE_API_TARGET=http://backend-dev:3001
     volumes:
       # Source code for hot reload
       - ./frontend/src:/app/src:ro

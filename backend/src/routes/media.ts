@@ -5,7 +5,7 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
-import { JellyfinService } from '../jellyfin';
+import { JellyfinService, JellyfinAuthError } from '../jellyfin';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 
 const router = Router();
@@ -67,6 +67,10 @@ router.get('/debug/jellyfin', async (req, res) => {
             }))
         });
     } catch (error) {
+        // Propagate 401 to frontend for token refresh
+        if (error instanceof JellyfinAuthError) {
+            return res.status(401).json({ error: error.message, code: 'TOKEN_EXPIRED' });
+        }
         console.error('Error in debug endpoint:', error);
         res.status(500).json({ error: 'Failed to fetch debug data' });
     }

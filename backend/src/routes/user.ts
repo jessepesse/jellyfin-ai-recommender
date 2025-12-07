@@ -3,7 +3,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { JellyfinService } from '../jellyfin';
+import { JellyfinService, JellyfinAuthError } from '../jellyfin';
 import { FrontendItem } from '../types';
 import { getFullWatchlist } from '../services/data';
 import { sanitizeUrl } from '../utils/ssrf-protection';
@@ -28,6 +28,10 @@ router.get('/libraries', async (req, res) => {
         const libraries = await jellyfinService.getLibraries(accessToken, jellyfinServer);
         res.json(libraries);
     } catch (error) {
+        // Propagate 401 to frontend for token refresh
+        if (error instanceof JellyfinAuthError) {
+            return res.status(401).json({ error: error.message, code: 'TOKEN_EXPIRED' });
+        }
         console.error('Error fetching Jellyfin libraries:', error);
         res.status(500).json({ error: 'An unexpected error occurred while fetching libraries' });
     }
@@ -54,6 +58,10 @@ router.get('/items', async (req, res) => {
         const items = await jellyfinService.getItems(userId, accessToken, libraryId as string, searchTerm as string | undefined, jellyfinServer);
         res.json(items);
     } catch (error) {
+        // Propagate 401 to frontend for token refresh
+        if (error instanceof JellyfinAuthError) {
+            return res.status(401).json({ error: error.message, code: 'TOKEN_EXPIRED' });
+        }
         console.error('Error fetching Jellyfin items:', error);
         res.status(500).json({ error: 'An unexpected error occurred while fetching items' });
     }

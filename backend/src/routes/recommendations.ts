@@ -3,7 +3,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { JellyfinService } from '../jellyfin';
+import { JellyfinService, JellyfinAuthError } from '../jellyfin';
 import { JellyfinItem, FrontendItem, UserData, MediaItemInput, RecommendationCandidate } from '../types';
 import { getUserData, getFullWatchlist } from '../services/data';
 import prisma from '../services/data';
@@ -240,6 +240,10 @@ router.get('/recommendations', async (req, res) => {
         const validItems = responseItems.map(d => toFrontendItem(d)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
         res.json(validItems);
     } catch (error) {
+        // Propagate 401 to frontend for token refresh
+        if (error instanceof JellyfinAuthError) {
+            return res.status(401).json({ error: error.message, code: 'TOKEN_EXPIRED' });
+        }
         console.error('Error generating recommendations:', error);
         res.status(500).json({ error: 'An unexpected error occurred while generating recommendations' });
     }

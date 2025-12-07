@@ -4,6 +4,9 @@ import tailwindcss from 'tailwindcss'
 import autoprefixer from 'autoprefixer'
 import packageJson from './package.json'
 
+// Backend API URL - use container name in Docker, localhost in native dev
+const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:3001'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -23,7 +26,7 @@ export default defineConfig({
     proxy: {
       // Proxy /api requests to backend in development
       '/api': {
-        target: 'http://localhost:3001',
+        target: API_TARGET,
         changeOrigin: true,
       },
     },
