@@ -3,16 +3,19 @@
 
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /app/frontend
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (host context is root)
+COPY frontend/package*.json ./
+
+# Copy shared package
+COPY shared ../shared
 
 # Install all dependencies
 RUN npm install
 
 # Copy source files (will be overwritten by volume mount in dev)
-COPY . .
+COPY frontend .
 
 EXPOSE 5173
 

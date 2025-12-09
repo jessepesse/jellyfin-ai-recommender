@@ -38,7 +38,7 @@ async function buildClientAndModel(): Promise<GeminiClientBundle> {
   // Obtain the model object from the client
   const modelNameFromCfg = cfg && cfg.geminiModel ? String(cfg.geminiModel).trim() : modelName;
   const model = client.getGenerativeModel({ model: modelNameFromCfg });
-  
+
   return { client, model, modelName: modelNameFromCfg };
 }
 
@@ -109,6 +109,22 @@ export class GeminiService {
     const mediaType = filters?.type ? String(filters.type).toUpperCase() : 'MOVIE OR TV SERIES';
     const genreNote = filters?.genre ? `Focus strictly on the genre: "${filters.genre}".` : 'Recommend diverse genres that match the user\'s taste.';
 
+    let moodNote = '';
+    if (filters?.mood) {
+      const moodMap: Record<string, string> = {
+        'chill': 'Chill / Comfort / Brain Off. Recommend familiar, safe, comforting, or lighthearted content that is easy to watch.',
+        'mind-bending': 'Mind Bending / Intellectual. Recommend complex, thought-provoking, philosophical, or mystery-heavy content that requires active attention.',
+        'dark': 'Dark & Gritty. Recommend serious, realistic, intense, or visually dark content. Avoid light comedies.',
+        'adrenaline': 'Adrenaline / Action. Recommend high-octane, fast-paced, edge-of-seat thrillers or action movies.',
+        'feel-good': 'Feel Good. Recommend uplifting, happy, optimistic content that leaves the viewer in a good mood.',
+        'tearjerker': 'Tearjerker / Emotional. Recommend highly emotional dramas or romances that might make the viewer cry.',
+        'visual': 'Visually Stunning / Epic. Recommend movies/series known for their cinematography, scale, and visual beauty.'
+      };
+      const key = filters.mood.toLowerCase();
+      const desc = moodMap[key] || filters.mood;
+      moodNote = `\n- MOOD: ${desc}`;
+    }
+
     // Filter context by media type to send ONLY relevant history
     // This improves recommendation relevance and saves tokens
     let contextLiked = likedItems;
@@ -116,13 +132,13 @@ export class GeminiService {
 
     if (filters?.type) {
       const targetType = filters.type.toLowerCase();
-      
+
       // Filter liked items to match requested type
       contextLiked = likedItems.filter(item => {
         const itemType = (item.mediaType || item.media_type || item.type || '').toLowerCase();
         return itemType === targetType;
       });
-      
+
       // Filter disliked items to match requested type
       contextDisliked = dislikedItems.filter(item => {
         const itemType = (item.mediaType || item.media_type || item.type || '').toLowerCase();
@@ -133,25 +149,29 @@ export class GeminiService {
     const hasProfile = !!tasteProfile && String(tasteProfile).trim().length > 10;
     const fallbackProfile = `No explicit taste profile is available for this user.\nFor the purposes of recommendation, assume a broadly-curated, mainstream taste that prefers well-rated, accessible titles across popular genres (drama, action, comedy, thriller, family).\nProvide diverse suggestions (mix of recent and classic titles) that would suit a general audience.\nEven if user history is empty, you MUST provide recommendations immediately. Do not ask clarifying questions.`;
     const profileSection = hasProfile ? tasteProfile as string : `${fallbackProfile}\n\nSeed Titles:\n${this.formatTable(Array.isArray(contextLiked) ? contextLiked.slice(0, 100) : [])}`;
-    
+
     // Send FULL exclusion table - Gemini 2.5+ has 1M+ token context, so we can send everything
     // This is the user's complete watch history, watchlist, and blocked items
-    const exclusionSection = exclusionTable && exclusionTable.length > 0 
-      ? exclusionTable 
+    const exclusionSection = exclusionTable && exclusionTable.length > 0
+      ? exclusionTable
       : this.formatTable(Array.isArray(contextDisliked) ? contextDisliked : []);
-    
+
     // Count exclusion items for transparency
     const exclusionCount = exclusionSection.split('\n').filter(line => line.startsWith('|')).length;
 
     return `
-### 🧠 USER TASTE ANALYSIS
-${profileSection}
+### TASK
+Based on the "Taste Analysis", recommend exactly 40 NEW and UNDISCOVERED items.
+The user wants fresh recommendations they have NOT seen before.
+
+- TYPE: ${mediaType}
+- GENRE: ${genreNote}${moodNote}
 
 ---
 
 ### 🚫 MANDATORY EXCLUSION LIST (${exclusionCount} items)
-
-**CRITICAL: You MUST NOT recommend ANY title from this list. This is the user's complete watch history, watchlist, and blocked items.**
+The following items are already in the user's library or watchlist.
+**CRITICAL: You MUST NOT recommend ANY title from this list.**
 
 | Title | Year |
 |-------|------|
@@ -159,32 +179,13 @@ ${exclusionSection}
 
 ---
 
-### ⚠️ EXCLUSION RULES (ABSOLUTE - NO EXCEPTIONS)
+### ⚠️ FINAL VALIDATION RULES (ABSOLUTE - NO EXCEPTIONS)
 
-1. **NEVER recommend any title that appears in the exclusion list above**
-2. **Check EVERY recommendation against the exclusion list before including it**
-3. **If a title matches (even with slight spelling variations), DO NOT include it**
-4. **This includes sequels, prequels, and spin-offs of excluded franchises IF they appear in the list**
-5. **The user has already seen, added to watchlist, or explicitly blocked these items**
-
----
-
-### TASK
-Based on the "Taste Analysis", recommend exactly 40 NEW and UNDISCOVERED items.
-The user wants fresh recommendations they have NOT seen before.
-
-- TYPE: ${mediaType}
-- GENRE: ${genreNote}
-
----
-
-### IMPORTANT INSTRUCTIONS
-- **VERIFY**: Before outputting, double-check that NONE of your recommendations appear in the exclusion list
-- Even if the user has no history or the profile is empty, you MUST produce recommendations immediately. Do not ask clarifying questions.
-- Prioritize variety. Do not get stuck on one franchise or series.
-- Ensure release years are accurate. Double-check that the year matches the actual release date.
-- DO NOT output any external IDs (TMDB, IMDB, etc.). Only return titles, type, year, and a short reason.
-- If you're unsure whether something is on the exclusion list, choose a different recommendation.
+1. **CHECK EVERY SINGLE RECOMMENDATION AGAINST THE EXCLUSION LIST ABOVE.**
+2. **If a title (or similar variation) appears in the list, DELETE IT and find another.**
+3. **NEVER suggest a Movie/TV Show that the user has already watched.**
+4. **ensure release years are accurate.**
+5. **Prioritize variety.**
 
 ---
 
@@ -199,8 +200,20 @@ Respond ONLY with a JSON array of objects with keys: title, media_type (movie|tv
     try {
       const { model } = await buildClientAndModel();
       const titles = (seedItems || []).slice(0, 80).map((s: MediaItemInput) => s.title || s.name || s.Title || '').filter(Boolean).slice(0, 80);
-      const prompt = `Summarize the user's ${type} taste in 2-3 concise bullet points based on these titles:\n${titles.join('\n')}`;
-      
+      const prompt = `
+Analyze the user's ${type} taste based on these titles:
+${titles.join('\n')}
+
+Task:
+Generate 3 short, insightful but casual bullet points describing their specific taste (themes, moods, genres).
+
+Constraints:
+- Do NOT use markdown formatting (no **bold**, no *italics*).
+- Do NOT use headers.
+- Return ONLY the bullet points as plain text.
+- Keep each point under 20 words if possible.
+`;
+
       // Use modern API with proper message format
       const resp = await model.generateContent({
         contents: [{
@@ -255,7 +268,7 @@ Respond ONLY with a JSON array of objects with keys: title, media_type (movie|tv
         const { zodToJsonSchema } = await import('zod-to-json-schema');
         // Cast to any to avoid TypeScript incompatibilities between zod versions/types.
         const schema = (zodToJsonSchema as any)(RecommendationSchema as any);
-        
+
         // Modern API call structure for thinking models
         // Use model.generateContent with proper message format
         response = await model.generateContent({
@@ -263,9 +276,9 @@ Respond ONLY with a JSON array of objects with keys: title, media_type (movie|tv
             role: 'user',
             parts: [{ text: promptText }]
           }],
-          generationConfig: { 
-            responseMimeType: 'application/json', 
-            responseSchema: schema 
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: schema
           }
         });
       } catch (e) {

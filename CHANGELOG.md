@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.9] - 2025-12-09
+
+🏗️ Infrastructure, Testing & DevOps Overhaul
+
+Major update focusing on code quality, testing infrastructure, and developer experience.
+
+🧪 Testing Infrastructure
+
+    **Comprehensive Test Suite**:
+        - Implemented **Vitest** for both Backend and Frontend testing
+        - Added **Playwright** for End-to-End (E2E) testing
+        - **Backend**: Added unit tests for security utilities (SSRF, etc.)
+        - **Frontend**: Added component tests (React Testing Library) for Login, MediaCard, App
+        - **CI/CD**: Added GitHub Actions workflow (`test.yml`) to fast-fail on regressions
+
+🔧 Architecture & Code Quality
+
+    **Shared Types Package**:
+        - Created `@jellyfin-ai/types` workspace package
+        - Centralized proper interfaces (`SharedMediaItem`, `ApiError`, `MediaStatus`)
+        - Eliminates code duplication between frontend and backend
+        - Ensures strict type safety across the full stack
+
+    **Tailwind CSS v4 Upgrade**:
+        - Updated frontend to **Tailwind CSS v4**
+        - Migrated to generic `@import "tailwindcss";` syntax
+        - Removed legacy configuration files (`postcss.config.js`, `tailwind.config.js`)
+        - Unified dependencies with root configuration
+
+    **Structured Logging (Backend)**:
+        - Replaced `console.log` with **Pino** logger
+        - **Production**: Outputs structured JSON logs for better observability
+        - **Development**: Uses pretty-printing for readability
+        - **Security**: auto-redacts sensitive keys (passwords, tokens, API keys)
+
+    **API Documentation (OpenAPI)**:
+        - Integrated **Swagger UI** at `/api-docs`
+        - Added `swagger-jsdoc` for code-first documentation generation
+        - Documented Health Check endpoint as proof-of-concept
+
+🔒 Security & DevOps
+
+    **Strict Environment Validation**:
+        - Enhanced **Zod** validation in `utils/env.ts`
+        - **Production**: Now force-exits (`process.exit(1)`) on invalid configuration to prevent undefined behavior
+        - Integrated with structured logger for clear error reporting
+
+    **Commit & Dependency Management**:
+        - Added **Husky** + **Commitlint** to enforce Conventional Commits
+        - Added **Dependabot** configuration for automated updates (npm + Docker + Actions)
+        - Cleaned up duplicate/legacy configuration files
+
+✨ Features
+
+    **AI Taste Profiles**:
+        - Added AI-powered **Movie Taste** and **Series Taste** analysis
+        - Generates personalized text summaries of user preferences based on watch history
+        - Uses Gemini AI to analyze themes, moods, and genres
+        - Displays in the "My Stats" dashboard with async loading
+
+    **Enhanced User Statistics Dashboard**:
+        - Completely redesigned **User Stats Modal**
+        - Added **Bar Charts** for better genre visualization (replacing pie charts)
+        - Improved data accuracy for series counting and watch time
+        - Added detailed genre translations (Finnish -> English)
+        - Added polished UI with gradients and responsive layout
+
+    **Detailed Media Information**:
+        - Added **Info Modal** (`i` button) to all media cards
+        - Displays rich metadata: Genres, Runtime, Tagline, Overview
+        - Integrated direct **TMDB** links for external details
+        - Responsive design containing large backdrop header
+
+
 [2.0.8] - 2025-12-07
 
 🏗️ Major Refactoring & AI Improvements

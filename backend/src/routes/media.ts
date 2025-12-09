@@ -14,21 +14,68 @@ const jellyfinService = new JellyfinService();
 /**
  * GET /images/:filename - Serve locally cached images
  */
-router.get('/images/:filename', (req: Request, res: Response) => {
+const prisma = new PrismaClient();
+import { PrismaClient } from '@prisma/client';
+import { ImageService } from '../services/image';
+import ConfigService from '../services/config';
+
+router.get('/images/:filename', async (req: Request, res: Response) => {
     const { filename } = req.params;
-    
+
     // Security: Validate filename to prevent directory traversal
-    if (!filename || !/^(movie|tv)_\d+_(poster|backdrop)\.(jpg|png)$/.test(filename)) {
+    const match = filename.match(/^(movie|tv)_(\d+)_(poster|backdrop)\.(jpg|png)$/);
+    if (!filename || !match) {
         return res.status(400).json({ error: 'Invalid filename' });
     }
-    
-    const imagePath = path.join('/app/images', filename);
-    
-    if (!fs.existsSync(imagePath)) {
-        return res.status(404).json({ error: 'Image not found' });
+
+    const [, mediaType, tmdbIdStr, type] = match;
+    const tmdbId = parseInt(tmdbIdStr, 10);
+    const imageDir = process.env.IMAGE_DIR || '/app/images';
+    const imagePath = path.join(imageDir, filename);
+
+    // Optimize: If exists, serve immediately (fs.existsSync is synchronous but fast on local SSD/tmpfs)
+    if (fs.existsSync(imagePath)) {
+        return res.sendFile(imagePath);
     }
-    
-    res.sendFile(imagePath);
+
+    // Self-healing: File missing, checking DB for source URL
+    console.log(`[ImageHandler] Image missing: ${filename}. Attempting self-healing...`);
+    try {
+        const media = await prisma.media.findUnique({
+            where: { tmdbId: tmdbId }
+        });
+
+        if (!media) {
+            console.warn(`[ImageHandler] Media not found in DB for TMDB ID: ${tmdbId}`);
+            return res.status(404).json({ error: 'Image not found' });
+        }
+
+        const sourceUrl = type === 'poster' ? media.posterSourceUrl : media.backdropSourceUrl;
+
+        if (!sourceUrl) {
+            console.warn(`[ImageHandler] No source URL for ${type} of TMDB ID: ${tmdbId}`);
+            return res.status(404).json({ error: 'Image source not available' });
+        }
+
+        const config = await ConfigService.getConfig();
+        const headers: Record<string, string> = {};
+        if (config.jellyseerrApiKey) {
+            headers['X-Api-Key'] = config.jellyseerrApiKey;
+        }
+
+        const downloadedPath = await ImageService.download(sourceUrl, filename, headers);
+
+        if (downloadedPath && fs.existsSync(imagePath)) {
+            console.log(`[ImageHandler] Self-healing successful for: ${filename}`);
+            return res.sendFile(imagePath);
+        } else {
+            console.error(`[ImageHandler] Self-healing failed for: ${filename}`);
+            return res.status(502).json({ error: 'Failed to retrieve image from source' });
+        }
+    } catch (err) {
+        console.error(`[ImageHandler] Error during self-healing:`, err);
+        return res.status(500).json({ error: 'Internal server error while retrieving image' });
+    }
 });
 
 /**
@@ -47,7 +94,7 @@ router.get('/debug/jellyfin', async (req, res) => {
     try {
         console.log('[Debug] Fetching Jellyfin watched history for inspection...');
         const history = await jellyfinService.getUserHistory(userId, accessToken, 5, jellyfinServer);
-        
+
         res.json({
             message: 'First 5 watched items from Jellyfin',
             count: history.length,

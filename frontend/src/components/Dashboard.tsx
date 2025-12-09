@@ -10,15 +10,26 @@ import SegmentedControl from './SegmentedControl';
 import FilterGroup from './FilterGroup';
 import HeroButton from './HeroButton';
 
-const GENRES = ['Action','Comedy','Drama','Sci-Fi','Horror','Romance','Documentary','Animation','Thriller'];
+const GENRES = ['Action', 'Comedy', 'Drama', 'Sci-Fi', 'Horror', 'Romance', 'Documentary', 'Animation', 'Thriller'];
+
+const MOODS = [
+  { id: 'chill', label: 'Chill & Comfort 🛋️' },
+  { id: 'mind-bending', label: 'Mind Bending 🤯' },
+  { id: 'dark', label: 'Dark & Gritty 🌑' },
+  { id: 'adrenaline', label: 'Adrenaline 🔥' },
+  { id: 'feel-good', label: 'Feel Good ✨' },
+  { id: 'tearjerker', label: 'Tearjerker 😢' },
+  { id: 'visual', label: 'Visual / Epic 🎨' },
+];
 
 interface Props {
   currentView?: 'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
 }
 
 const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
-  const [selectedType, setSelectedType] = useState<'movie'|'tv'>('movie');
+  const [selectedType, setSelectedType] = useState<'movie' | 'tv'>('movie');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [recommendations, setRecommendations] = useState<JellyfinItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -27,15 +38,20 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     setSelectedGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   };
 
+  const toggleMood = (m: string) => {
+    setSelectedMood(prev => prev === m ? null : m);
+  };
+
   const handleGetRecommendations = async () => {
     setError(null);
     setIsLoading(true);
-      try {
+    try {
       const genreParam = selectedGenres.join(',') || undefined;
       // Build params object conditionally so we don't send undefined/null path/query values
       const params: any = {};
       if (selectedType) params.type = selectedType;
       if (genreParam) params.genre = genreParam;
+      if (selectedMood) params.mood = selectedMood;
 
       // getRecommendations signature is (targetItemId, libraryId, options)
       // We intentionally omit targetItemId and libraryId for general recommendations.
@@ -69,43 +85,51 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
         </header>
 
         {currentView === 'recommendations' && (
-        <section className="bg-slate-800/30 backdrop-blur-md border border-white/5 p-6 rounded-2xl mb-6 overflow-visible">
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm text-slate-400 mb-3 block">Content Type</label>
-              <SegmentedControl
-                options={[
-                  { id: 'movie', label: 'Movies' },
-                  { id: 'tv', label: 'TV Series' }
-                ]}
-                value={selectedType}
-                onChange={(value) => setSelectedType(value as 'movie' | 'tv')}
-                ariaLabel="Select content type"
-              />
-            </div>
+          <section className="bg-slate-800/30 backdrop-blur-md border border-white/5 p-6 rounded-2xl mb-6 overflow-visible">
+            <div className="space-y-6">
+              <div>
+                <label className="text-sm text-slate-400 mb-3 block">Content Type</label>
+                <SegmentedControl
+                  options={[
+                    { id: 'movie', label: 'Movies' },
+                    { id: 'tv', label: 'TV Series' }
+                  ]}
+                  value={selectedType}
+                  onChange={(value) => setSelectedType(value as 'movie' | 'tv')}
+                  ariaLabel="Select content type"
+                />
+              </div>
 
-            <div>
-              <label className="text-sm text-slate-400 mb-3 block">Genres</label>
-              <FilterGroup
-                chips={GENRES.map(g => ({ id: g, label: g, active: selectedGenres.includes(g) }))}
-                onToggle={toggleGenre}
-              />
-            </div>
+              <div>
+                <label className="text-sm text-slate-400 mb-3 block">Genres</label>
+                <FilterGroup
+                  chips={GENRES.map(g => ({ id: g, label: g, active: selectedGenres.includes(g) }))}
+                  onToggle={toggleGenre}
+                />
+              </div>
 
-            <div className="flex justify-center pt-2 pb-10">
-              <HeroButton onClick={handleGetRecommendations} disabled={isLoading}>
-                {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
-              </HeroButton>
+              <div>
+                <label className="text-sm text-slate-400 mb-3 block">Mood</label>
+                <FilterGroup
+                  chips={MOODS.map(m => ({ id: m.id, label: m.label, active: selectedMood === m.id }))}
+                  onToggle={toggleMood}
+                />
+              </div>
+
+              <div className="flex justify-center pt-2 pb-10">
+                <HeroButton onClick={handleGetRecommendations} disabled={isLoading}>
+                  {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
+                </HeroButton>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
         )}
 
         <section>
           {currentView === 'recommendations' && (
             <>
               {error && <div className="mb-4 text-red-400">{error}</div>}
-              <ItemList items={recommendations} onSelectItem={() => {}} isLoading={isLoading} onRemove={(tmdbId) => {
+              <ItemList items={recommendations} onSelectItem={() => { }} isLoading={isLoading} onRemove={(tmdbId) => {
                 if (!tmdbId && tmdbId !== 0) return;
                 setRecommendations(prev => prev.filter(i => {
                   const id = Number((i as any).tmdbId ?? (i as any).tmdb_id ?? (i as any).id);

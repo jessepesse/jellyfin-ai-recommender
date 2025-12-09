@@ -7,29 +7,29 @@
 services:
   backend-dev:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: backend/Dockerfile.dev
     container_name: jellyfin-ai-backend-dev
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=file:/app/data/dev.db
-      - DATA_DIR=/app/data
-      - IMAGE_DIR=/app/images
+      - DATABASE_URL=file:/app/backend/data/dev.db
+      - DATA_DIR=/app/backend/data
+      - IMAGE_DIR=/app/backend/images
       - PORT=3001
       - NODE_ENV=development
     volumes:
       # Source code for hot reload
-      - ./backend/src:/app/src:ro
-      - ./backend/prisma:/app/prisma:ro
+      - ./backend/src:/app/backend/src:ro
+      - ./backend/prisma:/app/backend/prisma:ro
       # Data persistence
-      - ./data:/app/data
-      - ./images:/app/images
+      - ./data:/app/backend/data
+      - ./images:/app/backend/images
       # Exclude node_modules (use container's installed deps)
-      - /app/node_modules
+      - /app/backend/node_modules
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:3001/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -39,8 +39,8 @@ services:
 
   frontend-dev:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: frontend/Dockerfile.dev
     container_name: jellyfin-ai-frontend-dev
     restart: unless-stopped
     ports:
@@ -50,11 +50,11 @@ services:
       - VITE_API_TARGET=http://backend-dev:3001
     volumes:
       # Source code for hot reload
-      - ./frontend/src:/app/src:ro
-      - ./frontend/public:/app/public:ro
-      - ./frontend/index.html:/app/index.html:ro
+      - ./frontend/src:/app/frontend/src:ro
+      - ./frontend/public:/app/frontend/public:ro
+      - ./frontend/index.html:/app/frontend/index.html:ro
       # Exclude node_modules
-      - /app/node_modules
+      - /app/frontend/node_modules
     depends_on:
       backend-dev:
         condition: service_healthy

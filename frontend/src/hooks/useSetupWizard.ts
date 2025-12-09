@@ -32,17 +32,17 @@ export interface UseSetupWizardReturn {
   formData: SetupFormData;
   setFormData: React.Dispatch<React.SetStateAction<SetupFormData>>;
   updateField: <K extends keyof SetupFormData>(field: K, value: SetupFormData[K]) => void;
-  
+
   // Test state
   testResults: TestResults;
   isAllTestsPassed: boolean;
-  
+
   // Action states
   isSaving: boolean;
   isRestoring: boolean;
   error: string | null;
   restoreSuccess: boolean;
-  
+
   // Actions
   handleTest: () => Promise<void>;
   handleSave: (e: React.FormEvent) => Promise<void>;
@@ -79,7 +79,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
       try {
         const defaults = await getSystemSetupDefaults();
         if (!mounted) return;
-        
+
         setFormData(prev => ({
           jellyfinUrl: defaults.jellyfinUrl || prev.jellyfinUrl,
           jellyseerrUrl: defaults.jellyseerrUrl || prev.jellyseerrUrl,
@@ -117,19 +117,19 @@ export function useSetupWizard(): UseSetupWizardReturn {
         jellyseerrApiKey: formData.jellyseerrApiKey,
         geminiApiKey: formData.geminiApiKey,
       });
-      
+
       setTestResults({
-        jellyfin: { 
-          status: data.jellyfin?.ok ? 'success' : 'error', 
-          message: data.jellyfin?.message || '' 
+        jellyfin: {
+          status: data.jellyfin?.ok ? 'success' : 'error',
+          message: data.jellyfin?.message || ''
         },
-        jellyseerr: { 
-          status: data.jellyseerr?.ok ? 'success' : 'error', 
-          message: data.jellyseerr?.message || '' 
+        jellyseerr: {
+          status: data.jellyseerr?.ok ? 'success' : 'error',
+          message: data.jellyseerr?.message || ''
         },
-        gemini: { 
-          status: data.gemini?.ok ? 'success' : 'error', 
-          message: data.gemini?.message || '' 
+        gemini: {
+          status: data.gemini?.ok ? 'success' : 'error',
+          message: data.gemini?.message || ''
         },
       });
     } catch (e: any) {
@@ -146,9 +146,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
     e.preventDefault();
     setError(null);
 
-    const allPassed = 
-      testResults.jellyfin.status === 'success' && 
-      testResults.jellyseerr.status === 'success' && 
+    const allPassed =
+      testResults.jellyfin.status === 'success' &&
+      testResults.jellyseerr.status === 'success' &&
       testResults.gemini.status === 'success';
 
     if (!allPassed) {
@@ -184,6 +184,8 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
       try {
         parsed = JSON.parse(fileContent);
+        console.log('📦 Backup file parsed:', parsed);
+        console.log('🔧 System config found:', parsed.system_config);
       } catch {
         setError('Invalid JSON file. Please select a valid backup file.');
         setIsRestoring(false);
@@ -221,9 +223,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
     }
   }, []);
 
-  const isAllTestsPassed = 
-    testResults.jellyfin.status === 'success' && 
-    testResults.jellyseerr.status === 'success' && 
+  const isAllTestsPassed =
+    testResults.jellyfin.status === 'success' &&
+    testResults.jellyseerr.status === 'success' &&
     testResults.gemini.status === 'success';
 
   return {

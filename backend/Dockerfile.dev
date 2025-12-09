@@ -3,14 +3,17 @@
 
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Install dependencies for Prisma and health check
 RUN apk -U add --no-cache openssl curl
 
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
+# Copy package files (host context is root)
+COPY backend/package*.json ./
+COPY backend/prisma ./prisma/
+
+# Copy shared package
+COPY shared ../shared
 
 # Install all dependencies
 RUN npm install
@@ -20,12 +23,13 @@ ARG DATABASE_URL="file:./prisma/dev.db"
 RUN DATABASE_URL=${DATABASE_URL} npx prisma generate
 
 # Copy source files (will be overwritten by volume mount in dev)
-COPY . .
+# We copy `backend` content into current dir (/app/backend)
+COPY backend .
 
 # Make start scripts executable
 RUN chmod +x start.sh 2>/dev/null || true
 
 EXPOSE 3001
 
-# Use tsx watch for hot reload in development
-CMD ["npx", "tsx", "watch", "--clear-screen=false", "src/index.ts"]
+# Use tsx watch for hot reload in development (with auto-migration)
+CMD ["sh", "-c", "npx prisma db push && npx tsx watch --clear-screen=false src/index.ts"]

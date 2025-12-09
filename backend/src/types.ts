@@ -1,3 +1,7 @@
+import { MediaStatus, JellyfinLibrary, SharedMediaItem as FrontendItem, ApiError } from '@jellyfin-ai/types';
+
+export { MediaStatus, JellyfinLibrary, FrontendItem, ApiError };
+
 // ============================================================
 // Jellyfin API Types
 // ============================================================
@@ -11,6 +15,9 @@ export interface JellyfinItem {
     Overview?: string;
     PremiereDate?: string;
     ProductionYear?: number;
+    RunTimeTicks?: number;
+    SeriesId?: string;
+    SeriesName?: string;
     ImageTags?: {
         Primary?: string;
     };
@@ -25,11 +32,6 @@ export interface JellyfinItem {
         Played?: boolean;
         LastPlayedDate?: string;
     };
-}
-
-export interface JellyfinLibrary {
-    Id: string;
-    Name: string;
 }
 
 export interface JellyfinUser {
@@ -53,25 +55,15 @@ export interface LoginResponse {
 // Frontend/API Response Types
 // ============================================================
 
-export interface FrontendItem {
-    tmdbId: number;
-    title: string;
-    overview?: string;
-    mediaType: 'movie' | 'tv' | string;
-    releaseYear?: string;
-    posterUrl?: string;
-    backdropUrl?: string;
-    voteAverage?: number;
-    language?: string;
-    status?: MediaStatus;
-    reason?: string;
-}
+// FrontendItem imported from shared
+
 
 // ============================================================
 // Media & Database Types
 // ============================================================
 
-export type MediaStatus = 'WATCHED' | 'WATCHLIST' | 'BLOCKED';
+// MediaStatus imported from shared
+
 
 // Flexible input type for media items from various sources (Jellyfin, Jellyseerr, imports, etc.)
 export interface MediaItemInput {
@@ -150,6 +142,7 @@ export interface EnrichedRecommendation extends MediaItem {
 export interface RecommendationFilters {
     type?: 'movie' | 'tv' | string;
     genre?: string;
+    mood?: string;
 }
 
 // ============================================================
@@ -200,11 +193,8 @@ export interface ImportResult {
 // Error Types
 // ============================================================
 
-export interface ApiError {
-    error: string;
-    message?: string;
-    detail?: string;
-}
+// ApiError imported from shared
+
 
 export interface HttpError extends Error {
     status?: number;

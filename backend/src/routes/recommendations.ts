@@ -25,12 +25,12 @@ router.get('/search', async (req, res) => {
         const q = req.query.query as string | undefined;
         const userName = req.headers['x-user-name'] as string;
         const userId = req.headers['x-user-id'] as string;
-        
+
         if (!q) return res.status(400).json({ error: 'Missing query parameter' });
-        
+
         const results = await jellySearch(q);
         let mapped = (results || []).map(r => toFrontendItem(r)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
-        
+
         // Filter out items already tracked by this user
         if (userName || userId) {
             const userData = await getUserData(userName || userId);
@@ -43,7 +43,7 @@ router.get('/search', async (req, res) => {
             mapped = mapped.filter((item: FrontendItem) => item.tmdbId !== null && !existingIds.has(item.tmdbId));
             console.debug(`[Search] Filtered ${beforeCount - mapped.length} existing items (${mapped.length} remaining)`);
         }
-        
+
         res.json(mapped);
     } catch (e) {
         console.error('Search failed', e);
@@ -55,7 +55,7 @@ router.get('/search', async (req, res) => {
  * GET /recommendations - AI-powered recommendations with buffer system
  */
 router.get('/recommendations', async (req, res) => {
-    const { libraryId, type, genre } = req.query;
+    const { libraryId, type, genre, mood } = req.query;
     const accessToken = req.headers['x-access-token'] as string;
     const userId = req.headers['x-user-id'] as string;
     const userName = req.headers['x-user-name'] as string;
@@ -121,7 +121,7 @@ router.get('/recommendations', async (req, res) => {
         (userData.watchedIds || []).forEach((id: any) => { const n = Number(id); if (Number.isFinite(n)) excludedIds.add(n); });
         (userData.watchlistIds || []).forEach((id: any) => { const n = Number(id); if (Number.isFinite(n)) excludedIds.add(n); });
         (userData.blockedIds || []).forEach((id: any) => { const n = Number(id); if (Number.isFinite(n)) excludedIds.add(n); });
-        
+
         for (const s of Array.from(ownedSet || [])) {
             if (typeof s === 'string' && s.startsWith('tmdb:')) {
                 const num = Number(s.split(':')[1]);
@@ -129,7 +129,7 @@ router.get('/recommendations', async (req, res) => {
             }
         }
 
-        const filters = { type: type as string | undefined, genre: genre as string | undefined };
+        const filters = { type: type as string | undefined, genre: genre as string | undefined, mood: req.query.mood as string | undefined };
         const { searchAndEnrich } = await (async () => await import('../services/jellyseerr'))();
 
         // Buffer-based fetch
@@ -145,7 +145,7 @@ router.get('/recommendations', async (req, res) => {
             voteAverage: item.CommunityRating,
             overview: item.Overview,
         });
-        
+
         const likedItems: MediaItemInput[] = [
             ...(history || []).map(jellyfinToMediaInput),
             ...(watchlistEntries || []).map(w => ({
@@ -158,11 +158,11 @@ router.get('/recommendations', async (req, res) => {
                 voteAverage: w.voteAverage,
             } as MediaItemInput))
         ];
-        const dislikedItems: MediaItemInput[] = Array.isArray(userData.blockedIds) 
-            ? userData.blockedIds.map(id => ({ tmdbId: id } as MediaItemInput)) 
+        const dislikedItems: MediaItemInput[] = Array.isArray(userData.blockedIds)
+            ? userData.blockedIds.map(id => ({ tmdbId: id } as MediaItemInput))
             : [];
 
-        const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}`;
+        const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}_${filters.mood || 'any'}`;
         let buffer = CacheService.get<Enriched[]>('recommendations', cacheKey) || [];
 
         let attempts = 0;
@@ -189,7 +189,7 @@ router.get('/recommendations', async (req, res) => {
                     { ...userData, jellyfin_history: history } as UserData,
                     likedItems,
                     dislikedItems,
-                    { type: filters.type, genre: filters.genre },
+                    { type: filters.type, genre: filters.genre, mood: filters.mood },
                     tasteProfile,
                     exclusionTable
                 );

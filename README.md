@@ -1,4 +1,4 @@
-# 🎬 Jellyfin AI Recommender (v2.0.8)
+# 🎬 Jellyfin AI Recommender (v2.0.9)
 
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**
@@ -9,7 +9,8 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 
 - 🤖 **AI-Powered Discovery** — Uses **Google Gemini 2.5** to analyze your taste and find hidden gems you haven't seen yet.
 - ✅ **"Trust No AI" Verification** — Every suggestion is strictly verified against Jellyseerr/TMDB to ensure valid metadata and functional links.
-- 🧠 **Dynamic Taste Profile** — The system learns your preferences from your watch history and builds a text-based taste profile to guide the AI.
+- 🧠 **Dynamic Taste Profile** — The system learns your preferences from your watch history and generates a personalized textual summary of your movie and TV tastes.
+- 📊 **User Statistics Dashboard** — Visualize your watching habits with beautiful charts, key metrics, and your detailed AI taste profile.
 - 🚫 **Smart Filtering** — Automatically hides content you already own, have watched, or explicitly blocked.
 - 📋 **Watchlist Management** — Organize your "To Watch" list with filtering (Movies vs. TV) and sorting.
 - 🔗 **Jellyseerr Integration** — Request recommended media directly with one click (Optimistic UI).

@@ -1,0 +1,55 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install root dependencies
+        run: npm ci
+      
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: ./backend
+      
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+      
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: ./frontend
+      
+      - name: TypeScript check (backend)
+        run: npm run build
+        working-directory: ./backend
+      
+      - name: TypeScript check (frontend)
+        run: npx tsc -b --noEmit
+        working-directory: ./frontend
+      
+      - name: Backend unit tests
+        run: npm test
+        working-directory: ./backend
+      
+      - name: Frontend unit tests
+        run: npm test
+        working-directory: ./frontend

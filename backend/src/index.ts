@@ -10,12 +10,16 @@ dotenv.config();
 // Validate environment configuration
 import { validateEnv, getEnv } from './utils/env';
 validateEnv();
+import { logger } from './utils/logger';
 
 import apiRouter from './routes/api';
 import authRouter from './routes/auth'; // Import new auth router
+import statsRouter from './routes/stats';
 import { runMetadataBackfill } from './services/metadataBackfill';
 import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
+import swaggerUi from 'swagger-ui-express';
+import { specs } from './config/swagger';
 
 const app = express();
 const env = getEnv();
@@ -138,6 +142,28 @@ app.use('/images', express.static(imageDir));
 console.log(`[Static] Serving images from: ${imageDir}`);
 
 // Lightweight health endpoint (no DB access) for Docker and load-balancers
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Health check
+ *     description: Returns the health status of the server
+ *     responses:
+ *       200:
+ *         description: Server is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 uptime:
+ *                   type: number
+ *                 timestamp:
+ *                   type: string
+ */
 app.get('/api/health', (_req, res) => {
   try {
     return res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
@@ -148,35 +174,37 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api', apiRouter);
 app.use('/api/auth', authRouter); // Mount auth router
+app.use('/api/stats', statsRouter);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
 // Centralized error handling middleware (must be after routes)
 app.use(errorHandler);
 
 app.listen(port, () => {
-  console.info(`Server is running on http://localhost:${port}`);
+  logger.info(`Server is running on http://localhost:${port}`);
   // Run metadata backfill at startup (non-blocking)
   (async () => {
     try {
-      console.info('Triggering metadata backfill at startup...');
+      logger.info('Triggering metadata backfill at startup...');
       await runMetadataBackfill();
     } catch (e) {
-      console.error('Startup metadata backfill failed', e);
+      logger.error({ err: e }, 'Startup metadata backfill failed');
     }
   })();
 
   // Schedule daily backfill at 03:00 server time
   try {
     cron.schedule('0 3 * * *', async () => {
-      console.info('Scheduled metadata backfill triggered (daily at 03:00)');
+      logger.info('Scheduled metadata backfill triggered (daily at 03:00)');
       try {
         await runMetadataBackfill();
       } catch (e) {
-        console.error('Scheduled metadata backfill failed', e);
+        logger.error({ err: e }, 'Scheduled metadata backfill failed');
       }
     });
-    console.info('Scheduled daily metadata backfill at 03:00');
+    logger.info('Scheduled daily metadata backfill at 03:00');
   } catch (e) {
-    console.warn('Failed to schedule metadata backfill', e);
+    logger.warn({ err: e }, 'Failed to schedule metadata backfill');
   }
 });
 

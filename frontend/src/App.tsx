@@ -21,7 +21,7 @@ const App: React.FC = () => {
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [configLoading, setConfigLoading] = useState<boolean>(true);
   // Stable hooks for UI state — must be declared unconditionally
-  const [currentView, setCurrentView] = React.useState<'recommendations'|'watchlist'|'search'|'mark-watched'|'settings'>('recommendations');
+  const [currentView, setCurrentView] = React.useState<'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings'>('recommendations');
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
   useEffect(() => {
@@ -70,8 +70,8 @@ const App: React.FC = () => {
         <div className="flex items-center justify-between px-4 py-2">
           <div className="text-lg font-semibold">Jellyfin AI Recommender</div>
           <button
-            className="p-2 rounded-md text-slate-400 hover:text-white bg-slate-800/30 hover:bg-slate-800/50 transition"
-            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 rounded-md text-slate-400 hover:text-white bg-slate-800/30 hover:bg-slate-800/50 transition cursor-pointer"
+            onClick={() => { console.log('Sidebar toggle clicked'); setIsSidebarOpen(true); }}
             aria-label="Open menu"
             title="Open menu"
           >
@@ -87,9 +87,9 @@ const App: React.FC = () => {
 
       {/* Mobile Sidebar Drawer */}
       {isSidebarOpen && (
-        <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
+        <div className="fixed inset-0 z-[60] bg-black/50 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
-      <div className={`fixed inset-y-0 left-0 z-40 transform lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform`}>
+      <div className={`fixed inset-y-0 left-0 z-[70] transform lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-all duration-300 ease-in-out`}>
         <div className="w-80">
           <Sidebar
             active={currentView}

@@ -4,6 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { logger } from './logger';
 
 /**
  * Custom application error with HTTP status code
@@ -33,28 +34,28 @@ export class AppError extends Error {
  * Common HTTP error factory functions
  */
 export const HttpErrors = {
-  badRequest: (message: string, code?: string) => 
+  badRequest: (message: string, code?: string) =>
     new AppError(message, 400, { code }),
-  
-  unauthorized: (message: string = 'Unauthorized', code?: string) => 
+
+  unauthorized: (message: string = 'Unauthorized', code?: string) =>
     new AppError(message, 401, { code }),
-  
-  forbidden: (message: string = 'Forbidden', code?: string) => 
+
+  forbidden: (message: string = 'Forbidden', code?: string) =>
     new AppError(message, 403, { code }),
-  
-  notFound: (message: string = 'Not Found', code?: string) => 
+
+  notFound: (message: string = 'Not Found', code?: string) =>
     new AppError(message, 404, { code }),
-  
-  conflict: (message: string, code?: string) => 
+
+  conflict: (message: string, code?: string) =>
     new AppError(message, 409, { code }),
-  
-  tooManyRequests: (message: string = 'Too Many Requests', code?: string) => 
+
+  tooManyRequests: (message: string = 'Too Many Requests', code?: string) =>
     new AppError(message, 429, { code }),
-  
-  internal: (message: string = 'Internal Server Error', code?: string) => 
+
+  internal: (message: string = 'Internal Server Error', code?: string) =>
     new AppError(message, 500, { code, isOperational: false }),
-  
-  serviceUnavailable: (message: string = 'Service Unavailable', code?: string) => 
+
+  serviceUnavailable: (message: string = 'Service Unavailable', code?: string) =>
     new AppError(message, 503, { code }),
 };
 
@@ -129,15 +130,10 @@ export function logError(error: unknown, context?: string): void {
 
   if (statusCode >= 500) {
     // Log full error for server errors
-    // codeql[js/tainted-format-string] - False positive: message is a separate argument, not part of format string
-    console.error(`${prefix} Error (${statusCode}):`, message);
-    if (error instanceof Error && error.stack) {
-      console.error(error.stack);
-    }
+    logger.error({ err: error, context }, `${prefix} Error (${statusCode}): ${message}`);
   } else {
     // Log minimal info for client errors
-    // codeql[js/tainted-format-string] - False positive: message is a separate argument, not part of format string
-    console.warn(`${prefix} Client error (${statusCode}):`, message);
+    logger.warn({ err: error, context }, `${prefix} Client error (${statusCode}): ${message}`);
   }
 }
 
