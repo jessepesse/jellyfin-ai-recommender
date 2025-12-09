@@ -1,7 +1,7 @@
 # Backend Development Dockerfile with Hot Reload
 # Uses tsx watch mode for automatic reloading on code changes
 
-FROM node:20-alpine
+FROM node:25-alpine
 
 WORKDIR /app/backend
 
