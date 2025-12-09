@@ -23,7 +23,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@jellyfin-ai/types": "file:../shared",
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "^7.1.0",
     "axios": "^1.13.2",
     "body-parser": "2.2.1",
     "cors": "^2.8.5",
