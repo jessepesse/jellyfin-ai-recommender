@@ -23,7 +23,7 @@
     "@vitest/coverage-v8": "^4.0.15",
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
-    "jiti": "^1.21.6",
+    "jiti": "^2.6.1",
     "jsdom": "^27.3.0",
     "vitest": "^4.0.15"
   },
