@@ -66,7 +66,8 @@ Initialize the SQLite database and apply the schema:
 
 cd backend
 npm run db:migrate
-# This uses dotenv-cli to load your .env (if present) and run prisma migrate
+npm run db:generate  # Generate Prisma client types
+# This uses dotenv-cli to load your .env (if present) and run prisma
 
 
 5. Run the App (Development)
