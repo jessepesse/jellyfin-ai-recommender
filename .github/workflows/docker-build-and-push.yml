@@ -48,7 +48,7 @@ jobs:
 
       # Vaihe 3: Build backend Docker image
       - name: Build and push backend Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/Dockerfile
@@ -68,7 +68,7 @@ jobs:
 
       # Vaihe 4: Build frontend Docker image
       - name: Build and push frontend Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./frontend/Dockerfile
