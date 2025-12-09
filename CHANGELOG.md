@@ -10,6 +10,27 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 Major update focusing on code quality, testing infrastructure, and developer experience.
 
+🔧 Prisma 7 Migration
+
+    **Driver Adapter Architecture**:
+        - Upgraded to **Prisma 7.1.0** with new driver adapter pattern
+        - Added `@prisma/adapter-better-sqlite3` for SQLite connections
+        - Created `prisma.config.ts` for CLI configuration
+        - Centralized PrismaClient in `src/db.ts` with singleton pattern
+        - Updated all service/route files to use shared database connection
+
+    **Schema Updates**:
+        - New provider: `prisma-client` (replaces `prisma-client-js`)
+        - Required `output` field: `../src/generated/prisma`
+        - Datasource URL moved from schema to `prisma.config.ts`
+
+🚀 CI/CD Improvements
+
+    **Optimized Test Workflow**:
+        - Tests now run only on: tags (`v*`), releases, PRs, and manual dispatch
+        - Removed automatic CI on every push to main (saves GitHub Actions minutes)
+        - Added `prisma generate` step before TypeScript build
+
 🧪 Testing Infrastructure
 
     **Comprehensive Test Suite**:
