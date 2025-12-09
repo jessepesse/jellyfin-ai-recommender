@@ -27,7 +27,7 @@ jobs:
 
       # Vaihe 1: Ladataan koodi GitHub-repositoriosta ajoympäristöön
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Vaihe 1.5: Extract version from package.json
       - name: Extract version from package.json
