@@ -16,8 +16,9 @@ const ManualSearchView: React.FC = () => {
     try {
       const res = await searchJellyseerr(term);
       setResults(res || []);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || e.message || 'Search failed');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } }; message?: string };
+      setError(err?.response?.data?.error || err.message || 'Search failed');
       setResults([]);
     } finally {
       setLoading(false);
@@ -51,7 +52,7 @@ const ManualSearchView: React.FC = () => {
       ) : null}
 
       <div className="mt-6">
-        <ItemList items={results} onSelectItem={() => {}} isLoading={loading} variant="search" onRemove={handleRemove} />
+        <ItemList items={results} onSelectItem={() => { }} isLoading={loading} variant="search" onRemove={handleRemove} />
       </div>
     </div>
   );

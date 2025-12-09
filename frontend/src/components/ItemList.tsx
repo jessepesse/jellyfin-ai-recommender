@@ -13,9 +13,7 @@ interface Props {
 
 const ItemList: React.FC<Props> = ({ items, onSelectItem, isLoading = false, onRemove, variant = 'default' }) => {
     const skeletonCount = 8;
-    // Debug: log incoming items to verify shape
-    // eslint-disable-next-line no-console
-    // Intentionally not logging item contents to avoid exposing user data in console
+
 
     return (
         <div>

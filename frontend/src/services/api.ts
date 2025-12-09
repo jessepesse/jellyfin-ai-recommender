@@ -61,10 +61,10 @@ apiClient.interceptors.response.use(
                     if (response.data.success && response.data.jellyfinAuth) {
                         const newToken = response.data.jellyfinAuth.AccessToken;
                         localStorage.setItem('jellyfin_token', newToken);
-                        
+
                         // Update original request with new token
                         originalRequest.headers['x-access-token'] = newToken;
-                        
+
                         // Notify all waiting requests
                         onTokenRefreshed(newToken);
                         isRefreshing = false;
@@ -101,7 +101,7 @@ function authHeaders() {
             const parsed = JSON.parse(user);
             if (parsed.id) headers['x-user-id'] = parsed.id;
             if (parsed.name) headers['x-user-name'] = parsed.name;
-        } catch (e) {
+        } catch {
             // ignore
         }
     }
@@ -119,7 +119,7 @@ export const getItems = async (libraryId: string, searchTerm?: string): Promise<
 };
 
 export const getRecommendations = async (targetItemId: string, libraryId: string, options?: { type?: string; genre?: string }): Promise<JellyfinItem[]> => {
-    const params: any = { targetItemId, libraryId };
+    const params: Record<string, string> = { targetItemId, libraryId };
     if (options?.type) params.type = options.type;
     if (options?.genre) params.genre = options.genre;
     const response = await apiClient.get('/recommendations', { params, ...authHeaders() });
@@ -136,22 +136,22 @@ export const searchJellyseerr = async (query: string): Promise<JellyfinItem[]> =
     return response.data;
 };
 
-export const postRemoveFromWatchlist = async (item: any) => {
+export const postRemoveFromWatchlist = async (item: Pick<JellyfinItem, 'tmdbId' | 'title'> & Partial<JellyfinItem>) => {
     const response = await apiClient.post('/actions/watchlist/remove', { item }, authHeaders());
     return response.data;
 };
 
-export const postActionWatched = async (item: any) => {
+export const postActionWatched = async (item: Pick<JellyfinItem, 'tmdbId' | 'title'> & Partial<JellyfinItem>) => {
     const response = await apiClient.post('/actions/watched', { item }, authHeaders());
     return response.data;
 };
 
-export const postActionWatchlist = async (item: any) => {
+export const postActionWatchlist = async (item: Pick<JellyfinItem, 'tmdbId' | 'title'> & Partial<JellyfinItem>) => {
     const response = await apiClient.post('/actions/watchlist', { item }, authHeaders());
     return response.data;
 };
 
-export const postActionBlock = async (item: any) => {
+export const postActionBlock = async (item: Pick<JellyfinItem, 'tmdbId' | 'title'> & Partial<JellyfinItem>) => {
     const response = await apiClient.post('/actions/block', { item }, authHeaders());
     return response.data;
 };
@@ -161,7 +161,7 @@ export const postJellyseerrRequest = async (mediaId: number, mediaType: 'movie' 
     return response.data;
 };
 
-export const postSettingsImport = async (jsonPayload: any) => {
+export const postSettingsImport = async (jsonPayload: Record<string, unknown> | string) => {
     // Accept either an object or a raw string. Backend will parse if provided as jsonContent string.
     const body = typeof jsonPayload === 'string' ? { jsonContent: jsonPayload } : jsonPayload;
     const response = await apiClient.post('/settings/import', body, authHeaders());

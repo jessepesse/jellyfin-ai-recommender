@@ -132,8 +132,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
           message: data.gemini?.message || ''
         },
       });
-    } catch (e: any) {
-      setError(e?.message || 'Test failed');
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setError(err?.message || 'Test failed');
       setTestResults({
         jellyfin: { status: 'error', message: '' },
         jellyseerr: { status: 'error', message: '' },
@@ -166,8 +167,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
         geminiModel: formData.geminiModel,
       });
       window.location.reload();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to save settings');
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setError(error?.message || 'Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -180,12 +182,11 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
     try {
       const fileContent = await file.text();
-      let parsed: any;
+      let parsed: { system_config?: SetupFormData; data?: SetupFormData } | null = null;
 
       try {
         parsed = JSON.parse(fileContent);
         console.log('📦 Backup file parsed:', parsed);
-        console.log('🔧 System config found:', parsed.system_config);
       } catch {
         setError('Invalid JSON file. Please select a valid backup file.');
         setIsRestoring(false);
@@ -193,17 +194,17 @@ export function useSetupWizard(): UseSetupWizardReturn {
       }
 
       // Extract system config if available (multi-user backups)
-      if (parsed.system_config) {
+      if (parsed?.system_config) {
         setFormData(prev => ({
-          jellyfinUrl: parsed.system_config.jellyfinUrl || prev.jellyfinUrl,
-          jellyseerrUrl: parsed.system_config.jellyseerrUrl || prev.jellyseerrUrl,
-          jellyseerrApiKey: parsed.system_config.jellyseerrApiKey || prev.jellyseerrApiKey,
-          geminiApiKey: parsed.system_config.geminiApiKey || prev.geminiApiKey,
-          geminiModel: parsed.system_config.geminiModel || prev.geminiModel,
+          jellyfinUrl: parsed!.system_config?.jellyfinUrl || prev.jellyfinUrl,
+          jellyseerrUrl: parsed!.system_config?.jellyseerrUrl || prev.jellyseerrUrl,
+          jellyseerrApiKey: parsed!.system_config?.jellyseerrApiKey || prev.jellyseerrApiKey,
+          geminiApiKey: parsed!.system_config?.geminiApiKey || prev.geminiApiKey,
+          geminiModel: parsed!.system_config?.geminiModel || prev.geminiModel,
         }));
       }
       // Legacy single-user format
-      else if (parsed.data) {
+      else if (parsed?.data) {
         const legacyData = parsed.data;
         setFormData(prev => ({
           jellyfinUrl: legacyData.jellyfinUrl || prev.jellyfinUrl,
@@ -216,8 +217,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
       setRestoreSuccess(true);
       setError('✅ Backup file loaded! Configuration fields have been pre-filled. You can now test connections and save.');
-    } catch (err: any) {
-      setError(err?.message || 'Failed to read backup file');
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setError(error?.message || 'Failed to read backup file');
     } finally {
       setIsRestoring(false);
     }

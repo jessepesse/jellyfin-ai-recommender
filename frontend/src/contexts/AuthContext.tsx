@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext } from 'react';
 import type { ReactNode } from 'react';
 import axios from 'axios';
 
@@ -23,34 +23,40 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Define the AuthProvider component
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [serverUrl, setServerUrl] = useState<string | null>(null);
-
-  // Attempt to load auth state from local storage on initial render
-  useEffect(() => {
-    const storedToken = localStorage.getItem('jellyfin_token');
-    const storedUser = localStorage.getItem('jellyfin_user');
-    const storedServer = localStorage.getItem('jellyfin_server');
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      try {
-        setUser(JSON.parse(storedUser));
-        if (storedServer) setServerUrl(storedServer);
-        setIsAuthenticated(true);
-      } catch (e) {
-        console.error("Failed to parse stored user data:", e);
-        logout(); // Clear invalid stored data
-      }
+  // Initialize state from local storage to avoid useEffect re-renders
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = localStorage.getItem('jellyfin_user');
+    try {
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
     }
-  }, []);
+  });
+
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('jellyfin_token'));
+
+  const [serverUrl, setServerUrl] = useState<string | null>(() => localStorage.getItem('jellyfin_server'));
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return !!(localStorage.getItem('jellyfin_token') && localStorage.getItem('jellyfin_user'));
+  });
+
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    setIsAuthenticated(false);
+    setServerUrl(null);
+    localStorage.removeItem('jellyfin_token');
+    localStorage.removeItem('jellyfin_user');
+    localStorage.removeItem('jellyfin_server');
+    sessionStorage.removeItem('jellyfin_password');
+  };
 
   const login = async (username: string, password: string, serverUrl?: string): Promise<boolean> => {
     try {
       // Use relative path /api (proxied by Vite in dev, Nginx in production)
       // Or use VITE_BACKEND_URL if explicitly set for custom backend
-      const baseUrl = import.meta.env.VITE_BACKEND_URL 
+      const baseUrl = import.meta.env.VITE_BACKEND_URL
         ? import.meta.env.VITE_BACKEND_URL + '/api'
         : '/api';
       const response = await axios.post(`${baseUrl}/auth/login`, {
@@ -82,33 +88,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (newServer) {
           localStorage.setItem('jellyfin_server', newServer);
         }
-        
+
         // Store password in sessionStorage for automatic token refresh
         // sessionStorage is cleared when browser tab is closed (more secure than localStorage)
         // codeql[js/clear-text-storage-of-sensitive-data] - Intentional: Required for Jellyfin token refresh. Uses sessionStorage (session-only, not persistent).
         sessionStorage.setItem('jellyfin_password', password);
-        
+
         return true;
       } else {
         console.error('Login failed:', response.data.message);
         return false;
       }
-    } catch (error: any) {
-      console.error('Login request error:', error.response?.data?.message || error.message);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      console.error('Login request error:', err.response?.data?.message || err.message);
       // Optionally re-throw or handle error in UI
       return false;
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    setIsAuthenticated(false);
-    setServerUrl(null);
-    localStorage.removeItem('jellyfin_token');
-    localStorage.removeItem('jellyfin_user');
-    localStorage.removeItem('jellyfin_server');
-    sessionStorage.removeItem('jellyfin_password');
   };
 
   const authContextValue: AuthContextType = {
@@ -124,6 +120,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 // Custom hook to use the Auth Context
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {

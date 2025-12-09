@@ -11,13 +11,21 @@ interface Props {
   variant?: 'default' | 'watchlist' | 'search';
 }
 
+interface AugmentedItem extends JellyfinItem {
+  media_type?: string;
+  tmdb_id?: number;
+  releaseDate?: string;
+  name?: string;
+  id?: number;
+}
+
 const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'default' }) => {
   // Backend guarantees `posterUrl` and `title` when using Strict Verification
   const imgSrc = item.posterUrl || '';
   const titleText = item.title || 'Unknown Title';
+  const rawItem = item as AugmentedItem;
 
   // Debug logging to help diagnose rendering issues
-  // eslint-disable-next-line no-console
   console.log('[MediaCard] Rendering:', { title: titleText, posterUrl: item.posterUrl, imgSrc });
 
   const [requesting, setRequesting] = useState(false);
@@ -25,7 +33,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
   const [showInfo, setShowInfo] = useState(false);
 
   // Normalize media type once for all handlers ('movie' | 'tv')
-  const currentMediaType = ((item.mediaType || (item as any).media_type || 'movie') as string).toLowerCase().includes('tv') ? 'tv' : 'movie';
+  const currentMediaType = ((item.mediaType || rawItem.media_type || 'movie') as string).toLowerCase().includes('tv') ? 'tv' : 'movie';
   const tmdbLink = `https://www.themoviedb.org/${currentMediaType}/${item.tmdbId}`;
 
   return (
@@ -35,7 +43,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
         onClick={() => onClick && onClick(item)}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter') onClick && onClick(item); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && onClick) onClick(item); }}
       >
         {/* RESPONSIVE IMAGE CONTAINER: aspect-video on mobile, aspect-[2/3] on desktop */}
         <div className="relative w-full aspect-video md:aspect-[2/3]">
@@ -130,20 +138,20 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   if (typeof onRemove === 'function') onRemove(id as number);
                   // Build strict payload item to avoid missing fields
                   const payloadItem = {
-                    tmdbId: item.tmdbId ?? (item as any).tmdb_id ?? null,
-                    title: item.title ?? (item as any).name ?? 'Unknown Title',
-                    mediaType: (item.mediaType || (item as any).media_type || 'movie').toString().toLowerCase(),
+                    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
+                    title: item.title ?? rawItem.name ?? 'Unknown Title',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
                     posterUrl: item.posterUrl ?? null,
-                    releaseYear: item.releaseYear ?? ((item as any).releaseDate ? String((item as any).releaseDate).substring(0, 4) : null),
+                    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
                     // Rich metadata
                     overview: item.overview ?? '',
                     voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                     backdropUrl: item.backdropUrl ?? '',
                   };
-                  // eslint-disable-next-line @typescript-eslint/no-floating-promises
                   postActionWatchlist(payloadItem)
                     .then(() => {
-                      try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch (e) { /* ignore */ }
+                      try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
                     })
                     .catch(() => {/* TODO: handle rollback if needed */ });
                 }} className="p-3 md:p-2 rounded-md text-white hover:text-yellow-300 active:scale-95 transition-transform focus:outline-none">
@@ -156,11 +164,12 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   // Optimistically remove from UI
                   if (typeof onRemove === 'function') onRemove(id as number);
                   const payloadItemRem = {
-                    tmdbId: item.tmdbId ?? (item as any).tmdb_id ?? null,
-                    title: item.title ?? (item as any).name ?? 'Unknown Title',
-                    mediaType: (item.mediaType || (item as any).media_type || 'movie').toString().toLowerCase(),
+                    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
+                    title: item.title ?? rawItem.name ?? 'Unknown Title',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
                     posterUrl: item.posterUrl ?? null,
-                    releaseYear: item.releaseYear ?? ((item as any).releaseDate ? String((item as any).releaseDate).substring(0, 4) : null),
+                    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
                     // Rich metadata
                     overview: item.overview ?? '',
                     voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
@@ -168,7 +177,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   };
                   postRemoveFromWatchlist(payloadItemRem)
                     .then(() => {
-                      try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch (err) { /* ignore */ }
+                      try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
                     })
                     .catch(err => {
                       console.error('Failed to remove from watchlist', err);
@@ -184,17 +193,17 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 const id = Number(item.tmdbId);
                 if (typeof onRemove === 'function') onRemove(id as number);
                 const payloadItemWatched = {
-                  tmdbId: item.tmdbId ?? (item as any).tmdb_id ?? null,
-                  title: item.title ?? (item as any).name ?? 'Unknown Title',
-                  mediaType: (item.mediaType || (item as any).media_type || 'movie').toString().toLowerCase(),
+                  tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
+                  title: item.title ?? rawItem.name ?? 'Unknown Title',
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
                   posterUrl: item.posterUrl ?? null,
-                  releaseYear: item.releaseYear ?? ((item as any).releaseDate ? String((item as any).releaseDate).substring(0, 4) : null),
+                  releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
                   // Rich metadata
                   overview: item.overview ?? '',
                   voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                   backdropUrl: item.backdropUrl ?? '',
                 };
-                // eslint-disable-next-line @typescript-eslint/no-floating-promises
                 postActionWatched(payloadItemWatched).catch(() => {/* TODO: handle rollback if needed */ });
               }} className="p-3 md:p-2 rounded-md text-white hover:text-green-300 active:scale-95 transition-transform focus:outline-none">
                 <Eye className="w-6 h-6 md:w-5 md:h-5" />
@@ -206,32 +215,32 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 const id = Number(item.tmdbId);
                 if (typeof onRemove === 'function') onRemove(id as number);
                 const payloadItemBlock = {
-                  tmdbId: item.tmdbId ?? (item as any).tmdb_id ?? null,
-                  title: item.title ?? (item as any).name ?? 'Unknown Title',
-                  mediaType: (item.mediaType || (item as any).media_type || 'movie').toString().toLowerCase(),
+                  tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
+                  title: item.title ?? rawItem.name ?? 'Unknown Title',
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
                   posterUrl: item.posterUrl ?? null,
-                  releaseYear: item.releaseYear ?? ((item as any).releaseDate ? String((item as any).releaseDate).substring(0, 4) : null),
+                  releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
                   // Rich metadata
                   overview: item.overview ?? '',
                   voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                   backdropUrl: item.backdropUrl ?? '',
                 };
-                // eslint-disable-next-line @typescript-eslint/no-floating-promises
                 postActionBlock(payloadItemBlock).catch(() => {/* TODO: handle rollback if needed */ });
               }} className="p-3 md:p-2 rounded-md text-white hover:text-red-500 active:scale-95 transition-transform focus:outline-none">
                 <Ban className="w-6 h-6 md:w-5 md:h-5" />
               </button>
             </div>
           </div>
-        </div>
 
-        <div className="p-3">
-          <p className="truncate font-semibold" title={titleText}>{titleText}</p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-sm text-gray-400">{item.releaseYear}</p>
-            {item.CommunityRating ? (
-              <p className="text-sm text-gray-300">{Math.round(item.CommunityRating)}</p>
-            ) : null}
+          <div className="p-3">
+            <p className="truncate font-semibold" title={titleText}>{titleText}</p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-sm text-gray-400">{item.releaseYear}</p>
+              {item.CommunityRating ? (
+                <p className="text-sm text-gray-300">{Math.round(item.CommunityRating)}</p>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -319,7 +328,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                       const payloadItemRem = {
                         tmdbId: item.tmdbId ?? null,
                         title: item.title ?? 'Unknown Title',
-                        mediaType: currentMediaType,
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        mediaType: (currentMediaType as any),
                         posterUrl: item.posterUrl ?? null,
                         releaseYear: item.releaseYear,
                         overview: item.overview ?? '',
@@ -332,7 +342,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                       const payloadItem = {
                         tmdbId: item.tmdbId ?? null,
                         title: item.title ?? 'Unknown Title',
-                        mediaType: currentMediaType,
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        mediaType: (currentMediaType as any),
                         posterUrl: item.posterUrl ?? null,
                         releaseYear: item.releaseYear,
                         overview: item.overview ?? '',
@@ -358,7 +369,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                     const payloadItemWatched = {
                       tmdbId: item.tmdbId ?? null,
                       title: item.title ?? 'Unknown Title',
-                      mediaType: currentMediaType,
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      mediaType: (currentMediaType as any),
                       posterUrl: item.posterUrl ?? null,
                       releaseYear: item.releaseYear,
                       overview: item.overview ?? '',
@@ -383,7 +395,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                     const payloadItemBlock = {
                       tmdbId: item.tmdbId ?? null,
                       title: item.title ?? 'Unknown Title',
-                      mediaType: currentMediaType,
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      mediaType: (currentMediaType as any),
                       posterUrl: item.posterUrl ?? null,
                       releaseYear: item.releaseYear,
                       overview: item.overview ?? '',

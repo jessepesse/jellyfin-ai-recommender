@@ -8,6 +8,7 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\" -n backend,frontend -c cyan,magenta",
+    "test": "npm --prefix backend run test && npm --prefix frontend run test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "prepare": "husky"

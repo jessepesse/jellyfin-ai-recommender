@@ -9,23 +9,26 @@ type SortType = 'added-newest' | 'release-newest' | 'title-asc';
 
 const WatchlistView: React.FC = () => {
   const [items, setItems] = useState<JellyfinItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // UI state
   const [filter, setFilter] = useState<FilterType>('all');
   const [sort, setSort] = useState<SortType>('added-newest');
 
+  // ...
+
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
     getUserWatchlist()
       .then(data => {
         if (!mounted) return;
         setItems(data || []);
       })
       .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load watchlist'))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
 
     // Listen for global watchlist changes (e.g., added from Recommendations)
     const handler = () => {

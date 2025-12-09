@@ -15,3 +15,5 @@ export interface Settings {
     jellyfinUrl?: string;
     apiKey?: string;
 }
+
+export type AppView = 'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings';

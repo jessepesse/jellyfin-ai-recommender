@@ -90,13 +90,14 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     res.data.genres = res.data.genres.map((g: { name: string; value: number }) => ({
                         ...g,
                         name: GENRE_TRANSLATIONS[g.name] || g.name
-                    })).sort((a: any, b: any) => b.value - a.value); // Sort descending for chart
+                    })).sort((a: { value: number }, b: { value: number }) => b.value - a.value); // Sort descending for chart
                 }
 
                 setData(res.data);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('Failed to fetch stats', err);
-                setError(err.response?.data?.error || 'Failed to load statistics.');
+                const error = err as { response?: { data?: { error?: string } } };
+                setError(error.response?.data?.error || 'Failed to load statistics.');
             } finally {
                 setLoading(false);
             }

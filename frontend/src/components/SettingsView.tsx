@@ -18,24 +18,31 @@ interface ImportProgress {
   completed: boolean;
 }
 
+interface ImportSummary {
+  total: number;
+  imported: number;
+  skipped: number;
+  errors: number;
+}
+
 const SettingsView: React.FC = () => {
   const { user } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [eventSource, setEventSource] = useState<EventSource | null>(null);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (file: File) => {
     if (!file) return;
-    
+
     // Validate file type
     if (!file.name.endsWith('.json')) {
       setError('Please select a valid JSON file');
@@ -96,15 +103,15 @@ const SettingsView: React.FC = () => {
   // Connect to SSE for import progress
   const connectToProgressStream = () => {
     if (!user?.id) return;
-    
+
     const username = user.name || user.id;
     const es = new EventSource(`/api/settings/import/progress/${username}`);
-    
+
     es.onmessage = (event) => {
       try {
         const progress = JSON.parse(event.data);
         setImportProgress(progress);
-        
+
         // When import completes, close SSE and show final result
         if (progress.completed) {
           setLoading(false);
@@ -121,13 +128,13 @@ const SettingsView: React.FC = () => {
         console.error('Failed to parse progress:', e);
       }
     };
-    
+
     es.onerror = () => {
       console.error('SSE connection error');
       es.close();
       setEventSource(null);
     };
-    
+
     setEventSource(es);
   };
 
@@ -150,13 +157,13 @@ const SettingsView: React.FC = () => {
     setResult(null);
     setImportProgress(null);
     setLoading(true);
-    
+
     try {
       // Validate JSON before sending
-      let parsed: any;
+      let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(fileContent);
-      } catch (parseErr) {
+      } catch {
         throw new Error('Invalid JSON format');
       }
 
@@ -164,7 +171,7 @@ const SettingsView: React.FC = () => {
       connectToProgressStream();
 
       const res = await postSettingsImport(parsed);
-      
+
       // Check if async import
       if (res.async) {
         // Keep loading state, progress will update via SSE
@@ -178,8 +185,9 @@ const SettingsView: React.FC = () => {
           setEventSource(null);
         }
       }
-    } catch (e: any) {
-      setError(String(e?.message || e));
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setError(String(err?.message || e));
       setLoading(false);
       if (eventSource) {
         eventSource.close();
@@ -207,8 +215,9 @@ const SettingsView: React.FC = () => {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      setExportError(String(e?.response?.data?.message || e?.message || 'Export failed'));
+    } catch (e) {
+      const err = e as Error & { response?: { data?: { message?: string } } };
+      setExportError(err?.response?.data?.message || err?.message || 'Export failed');
     } finally {
       setExportLoading(false);
     }
@@ -227,15 +236,14 @@ const SettingsView: React.FC = () => {
 
       <GlassCard>
         <h3 className="text-lg font-semibold mb-4 text-slate-300">Legacy & New database.json Import</h3>
-        
+
         {/* File Upload Zone */}
         {!selectedFile ? (
           <div
-            className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${
-              dragActive 
-                ? 'border-cyan-500 bg-cyan-500/10' 
-                : 'border-slate-700 bg-slate-800/30 hover:border-cyan-500/50 hover:bg-slate-800/50'
-            }`}
+            className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${dragActive
+              ? 'border-cyan-500 bg-cyan-500/10'
+              : 'border-slate-700 bg-slate-800/30 hover:border-cyan-500/50 hover:bg-slate-800/50'
+              }`}
             onClick={() => fileInputRef.current?.click()}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -309,15 +317,15 @@ const SettingsView: React.FC = () => {
                 {Math.round((importProgress.processed / importProgress.total) * 100)}%
               </span>
             </div>
-            
+
             {/* Progress Bar */}
             <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-              <div 
+              <div
                 className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
                 style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
               />
             </div>
-            
+
             {/* Current Item & Stats */}
             <div className="mt-3 space-y-1 text-xs text-slate-400">
               {importProgress.currentItem && (
@@ -367,7 +375,7 @@ const SettingsView: React.FC = () => {
       <GlassCard className="mt-6">
         <h3 className="text-lg font-semibold mb-4 text-slate-300">Export Database</h3>
         <p className="text-sm text-slate-400 mb-6">
-          Download a JSON backup of your current watched history, watchlist, and blocked items. 
+          Download a JSON backup of your current watched history, watchlist, and blocked items.
           The exported file can be re-imported using the Import tool above.
         </p>
 

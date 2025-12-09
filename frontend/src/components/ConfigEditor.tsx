@@ -11,12 +11,17 @@ const ConfigEditor: React.FC = () => {
     geminiApiKey: '',
     geminiModel: 'gemini-2.5-flash-lite',
   });
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [verifyResults, setVerifyResults] = useState<any>(null);
+  interface VerifyResult {
+    valid: boolean;
+    message?: string;
+  }
+
+  const [verifyResults, setVerifyResults] = useState<Record<string, VerifyResult> | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -35,7 +40,7 @@ const ConfigEditor: React.FC = () => {
           geminiModel: response.config.geminiModel || 'gemini-2.5-flash-lite',
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load config', error);
       setMessage({ type: 'error', text: 'Failed to load configuration' });
     } finally {
@@ -57,15 +62,16 @@ const ConfigEditor: React.FC = () => {
       });
 
       setVerifyResults(response.results || {});
-      
-      const allValid = Object.values(response.results || {}).every((r: any) => r.valid);
+
+      const allValid = Object.values(response.results || {}).every((r: unknown) => (r as VerifyResult).valid);
       setMessage({
         type: allValid ? 'success' : 'error',
         text: allValid ? 'All connections verified successfully!' : 'Some connections failed. Check details below.',
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
       console.error('Connection test failed', error);
-      setMessage({ type: 'error', text: error.response?.data?.error || 'Connection test failed' });
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Connection test failed' });
     } finally {
       setTesting(false);
     }
@@ -76,7 +82,7 @@ const ConfigEditor: React.FC = () => {
       setSaving(true);
       setMessage(null);
 
-      const payload: any = {
+      const payload = {
         jellyfinUrl: config.jellyfinUrl || undefined,
         jellyseerrUrl: config.jellyseerrUrl || undefined,
         jellyseerrApiKey: config.jellyseerrApiKey || undefined,
@@ -85,22 +91,23 @@ const ConfigEditor: React.FC = () => {
       };
 
       const response = await putSystemConfigEditor(payload);
-      
+
       // Check if Jellyseerr URL changed - user needs to re-download images
       if (response.jellyseerrUrlChanged) {
-        setMessage({ 
-          type: 'info', 
-          text: 'Configuration saved! Jellyseerr URL changed - images will be re-downloaded automatically on next media sync, or run: docker-compose exec backend npm run db:migrate-images' 
+        setMessage({
+          type: 'info',
+          text: 'Configuration saved! Jellyseerr URL changed - images will be re-downloaded automatically on next media sync, or run: docker-compose exec backend npm run db:migrate-images'
         });
       } else {
         setMessage({ type: 'success', text: 'Configuration saved successfully!' });
       }
-      
+
       // Reload to show masked keys
       setTimeout(() => loadConfig(), 1500);
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } } };
       console.error('Failed to save config', error);
-      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to save configuration' });
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save configuration' });
     } finally {
       setSaving(false);
     }
@@ -129,18 +136,16 @@ const ConfigEditor: React.FC = () => {
       </p>
 
       {message && (
-        <div className={`mb-4 p-4 rounded-lg flex items-start gap-3 ${
-          message.type === 'success' ? 'bg-green-500/10 border border-green-500/20' :
+        <div className={`mb-4 p-4 rounded-lg flex items-start gap-3 ${message.type === 'success' ? 'bg-green-500/10 border border-green-500/20' :
           message.type === 'error' ? 'bg-red-500/10 border border-red-500/20' :
-          'bg-blue-500/10 border border-blue-500/20'
-        }`}>
+            'bg-blue-500/10 border border-blue-500/20'
+          }`}>
           {message.type === 'success' && <Check className="w-5 h-5 text-green-400 mt-0.5" />}
           {message.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 mt-0.5" />}
-          <span className={`${
-            message.type === 'success' ? 'text-green-300' :
+          <span className={`${message.type === 'success' ? 'text-green-300' :
             message.type === 'error' ? 'text-red-300' :
-            'text-blue-300'
-          }`}>{message.text}</span>
+              'text-blue-300'
+            }`}>{message.text}</span>
         </div>
       )}
 
@@ -229,10 +234,9 @@ const ConfigEditor: React.FC = () => {
       {verifyResults && (
         <div className="mt-6 space-y-2">
           <h4 className="text-sm font-semibold text-slate-300 mb-3">Connection Test Results:</h4>
-          {Object.entries(verifyResults).map(([service, result]: [string, any]) => (
-            <div key={service} className={`flex items-center gap-3 p-3 rounded-lg ${
-              result.valid ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'
-            }`}>
+          {Object.entries(verifyResults).map(([service, result]: [string, VerifyResult]) => (
+            <div key={service} className={`flex items-center gap-3 p-3 rounded-lg ${result.valid ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'
+              }`}>
               {result.valid ? (
                 <Check className="w-5 h-5 text-green-400" />
               ) : (

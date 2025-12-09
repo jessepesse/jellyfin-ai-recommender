@@ -58,7 +58,8 @@ describe('Login', () => {
         await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
         await waitFor(() => {
-            expect(mockLogin).toHaveBeenCalledWith('testuser', 'testpass');
+            // Updated to match the actual call in Login.tsx which includes serverUrl
+            expect(mockLogin).toHaveBeenCalledWith('testuser', 'testpass', '');
         });
     });
 
@@ -71,7 +72,8 @@ describe('Login', () => {
         await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
         await waitFor(() => {
-            expect(screen.getByText(/invalid username or password/i)).toBeInTheDocument();
+            // Check for the new error message
+            expect(screen.getByText(/login failed/i)).toBeInTheDocument();
         });
     });
 

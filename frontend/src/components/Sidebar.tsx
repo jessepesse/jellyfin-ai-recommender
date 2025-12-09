@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UserStatsModal from './UserStatsModal';
+import type { AppView } from '../types';
 
 type NavItem = {
-  id: string;
+  id: AppView;
   label: string;
 };
 
@@ -16,15 +17,19 @@ const navItems: NavItem[] = [
 ];
 
 interface SidebarProps {
-  active: string;
-  onNavigate: (id: string) => void;
+  active: AppView;
+  onNavigate: (id: AppView) => void;
   onClose?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
   const { user, logout } = useAuth();
   const [showStats, setShowStats] = useState(false);
-  const displayName = (user && ((user as any).Name || (user as any).name)) || 'Local User';
+
+  // Use a safer cast or type guard in real app
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const u = user as any;
+  const displayName = (u?.Name || u?.name) || 'Local User';
   const avatarLetter = String(displayName || 'U').charAt(0).toUpperCase();
 
   return (

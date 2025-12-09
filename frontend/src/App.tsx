@@ -7,6 +7,7 @@ import { getSystemStatus } from './services/api';
 import ErrorBoundary from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
 import { Menu } from 'lucide-react';
+import type { AppView } from './types';
 
 const FullPageSpinner = () => (
   <div className="min-h-screen flex items-center justify-center bg-[#0b0b15] text-white">
@@ -15,14 +16,15 @@ const FullPageSpinner = () => (
 );
 
 const App: React.FC = () => {
-  const { user } = useAuth() as any; // useAuth currently exposes `user` and `isAuthenticated`
-  const authLoading = false; // AuthContext doesn't provide a loading flag; assume false
+  const { user } = useAuth();
+  const [currentView, setCurrentView] = useState<AppView>('recommendations');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [configLoading, setConfigLoading] = useState<boolean>(true);
   // Stable hooks for UI state — must be declared unconditionally
-  const [currentView, setCurrentView] = React.useState<'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings'>('recommendations');
-  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  // const [currentView, setCurrentView] = React.useState<AppView>('recommendations'); // This line was removed as it's now declared above
+  // const [isSidebarOpen, setIsSidebarOpen] = React.useState(false); // This line was removed as it's now declared above
 
   useEffect(() => {
     let mounted = true;
@@ -47,7 +49,7 @@ const App: React.FC = () => {
   // Debug: render state intentionally omitted from production logs
 
   // 1. Loading State
-  if (authLoading || configLoading || isConfigured === null) {
+  if (configLoading || isConfigured === null) {
     return <FullPageSpinner />;
   }
 
@@ -82,7 +84,7 @@ const App: React.FC = () => {
 
       {/* Sidebar - large desktop */}
       <div className="hidden lg:block lg:flex-none lg:p-6 z-20">
-        <Sidebar active={currentView} onNavigate={(id) => setCurrentView(id as any)} />
+        <Sidebar active={currentView} onNavigate={(id: AppView) => setCurrentView(id)} />
       </div>
 
       {/* Mobile Sidebar Drawer */}
@@ -93,7 +95,7 @@ const App: React.FC = () => {
         <div className="w-80">
           <Sidebar
             active={currentView}
-            onNavigate={(id) => { setCurrentView(id as any); setIsSidebarOpen(false); }}
+            onNavigate={(id: AppView) => { setCurrentView(id); setIsSidebarOpen(false); }}
             onClose={() => setIsSidebarOpen(false)}
           />
         </div>

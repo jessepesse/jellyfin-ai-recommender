@@ -48,7 +48,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     try {
       const genreParam = selectedGenres.join(',') || undefined;
       // Build params object conditionally so we don't send undefined/null path/query values
-      const params: any = {};
+      const params: Record<string, string | undefined> = {};
       if (selectedType) params.type = selectedType;
       if (genreParam) params.genre = genreParam;
       if (selectedMood) params.mood = selectedMood;
@@ -60,13 +60,14 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
       // Avoid logging raw API responses in production (may contain PII)
 
       // Backend guarantees strict items with tmdbId and posterUrl. Use them directly.
-      let itemsArray: any[] = [];
+      let itemsArray: JellyfinItem[] = [];
       if (Array.isArray(recs)) itemsArray = recs;
-      else if (recs && Array.isArray((recs as any).data)) itemsArray = (recs as any).data;
+      else if (recs && Array.isArray((recs as { data: JellyfinItem[] }).data)) itemsArray = (recs as { data: JellyfinItem[] }).data;
 
-      setRecommendations(itemsArray as any[]);
-    } catch (e: any) {
-      setError(e.response?.data?.error || e.message || 'Failed to fetch recommendations');
+      setRecommendations(itemsArray);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } }; message?: string };
+      setError(err.response?.data?.error || err.message || 'Failed to fetch recommendations');
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +133,8 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
               <ItemList items={recommendations} onSelectItem={() => { }} isLoading={isLoading} onRemove={(tmdbId) => {
                 if (!tmdbId && tmdbId !== 0) return;
                 setRecommendations(prev => prev.filter(i => {
-                  const id = Number((i as any).tmdbId ?? (i as any).tmdb_id ?? (i as any).id);
+                  const item = i as JellyfinItem & { tmdb_id?: number; id?: number };
+                  const id = Number(item.tmdbId ?? item.tmdb_id ?? item.id);
                   return id !== Number(tmdbId);
                 }));
               }} />
