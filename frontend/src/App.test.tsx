@@ -6,9 +6,10 @@ import { AuthProvider } from './contexts/AuthContext';
 // Mock the API service
 vi.mock('./services/api', () => ({
     getSystemStatus: vi.fn(),
+    getSystemSetupDefaults: vi.fn(),
 }));
 
-import { getSystemStatus } from './services/api';
+import { getSystemStatus, getSystemSetupDefaults } from './services/api';
 
 describe('App', () => {
     beforeEach(() => {
@@ -21,6 +22,7 @@ describe('App', () => {
     it('renders loading spinner initially', () => {
         // Mock a pending promise to keep loading state
         vi.mocked(getSystemStatus).mockImplementation(() => new Promise(() => { }));
+        vi.mocked(getSystemSetupDefaults).mockResolvedValue({});
 
         render(
             <AuthProvider>
