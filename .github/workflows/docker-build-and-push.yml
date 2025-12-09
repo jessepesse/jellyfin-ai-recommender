@@ -53,6 +53,8 @@ jobs:
           context: .
           file: ./backend/Dockerfile
           push: true
+          build-args: |
+            DATABASE_URL=file:./prisma/dev.db
           tags: |
             ghcr.io/${{ github.repository }}-backend:latest
             ghcr.io/${{ github.repository }}-backend:${{ steps.version.outputs.version }}
