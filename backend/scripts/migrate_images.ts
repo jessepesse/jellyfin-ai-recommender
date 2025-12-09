@@ -16,7 +16,7 @@
  *   or: ts-node backend/scripts/migrate_images.ts
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../src/db';
 import { ImageService } from '../src/services/image';
 import { searchAndVerify } from '../src/services/jellyseerr';
 import dotenv from 'dotenv';
@@ -24,8 +24,6 @@ import path from 'path';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });
-
-const prisma = new PrismaClient();
 
 interface MigrationStats {
     total: number;
@@ -80,7 +78,7 @@ async function migrateImages() {
                     console.log('  ✓ Poster already local');
                 } else if (isExternal) {
                     console.log(`  ⬇ Downloading poster: ${media.posterUrl.substring(0, 60)}...`);
-                    
+
                     const filename = ImageService.getLocalFilename(media.tmdbId, media.mediaType, 'poster');
                     let localPath = await ImageService.download(media.posterUrl, filename);
 
@@ -119,7 +117,7 @@ async function migrateImages() {
                     console.log('  ✓ Backdrop already local');
                 } else if (isExternal) {
                     console.log(`  ⬇ Downloading backdrop: ${media.backdropUrl.substring(0, 60)}...`);
-                    
+
                     const filename = ImageService.getLocalFilename(media.tmdbId, media.mediaType, 'backdrop');
                     let localPath = await ImageService.download(media.backdropUrl, filename);
 

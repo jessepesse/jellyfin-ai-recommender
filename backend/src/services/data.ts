@@ -1,9 +1,8 @@
-import { PrismaClient, MediaStatus } from '@prisma/client';
+import { MediaStatus } from '../generated/prisma/client';
 import { search as jellySearch } from './jellyseerr';
 import { ImageService } from './image';
 import { MediaItem, MediaUpdateData, MediaCreateData, MediaItemInput } from '../types';
-
-const prisma = new PrismaClient();
+import prisma from '../db';
 
 function parseTmdbId(item: MediaItemInput | null | undefined): number | null {
   const raw = item?.tmdbId ?? item?.tmdb_id ?? item?.media_id ?? item?.id ?? null;
@@ -122,21 +121,21 @@ export async function syncMediaItem(item: MediaItemInput) {
           const candidates = await jellySearch(validTitle);
           if (Array.isArray(candidates) && candidates.length > 0) {
             const first = candidates.find(c => c.tmdb_id && Number(c.tmdb_id) === tmdbId) || candidates[0];
-              const poster = first.posterUrl ?? null;
-              if (poster) {
-                await prisma.media.update({ where: { id: media.id }, data: { posterUrl: poster } });
-                media.posterUrl = poster;
-              }
-              // Backfill other rich fields from Jellyseerr candidate when available
-              const toUpdate: any = {};
-              if (first.overview) toUpdate.overview = first.overview;
-              if (first.backdropUrl) toUpdate.backdropUrl = first.backdropUrl;
-              if (first.voteAverage !== undefined && first.voteAverage !== null) toUpdate.voteAverage = Number(first.voteAverage);
-              if (first.language) toUpdate.language = String(first.language);
-              if (Object.keys(toUpdate).length > 0) {
-                await prisma.media.update({ where: { id: media.id }, data: toUpdate });
-                Object.assign(media, toUpdate);
-              }
+            const poster = first.posterUrl ?? null;
+            if (poster) {
+              await prisma.media.update({ where: { id: media.id }, data: { posterUrl: poster } });
+              media.posterUrl = poster;
+            }
+            // Backfill other rich fields from Jellyseerr candidate when available
+            const toUpdate: any = {};
+            if (first.overview) toUpdate.overview = first.overview;
+            if (first.backdropUrl) toUpdate.backdropUrl = first.backdropUrl;
+            if (first.voteAverage !== undefined && first.voteAverage !== null) toUpdate.voteAverage = Number(first.voteAverage);
+            if (first.language) toUpdate.language = String(first.language);
+            if (Object.keys(toUpdate).length > 0) {
+              await prisma.media.update({ where: { id: media.id }, data: toUpdate });
+              Object.assign(media, toUpdate);
+            }
           }
         } catch (inner) {
           // swallow search errors but log
@@ -171,7 +170,7 @@ export async function updateMediaStatus(username: string, item: MediaItemInput, 
   // Minimal debug: log the user and tmdb id and intended status (no tokens or payloads)
   try {
     console.debug(`[DB Save] user=${username} tmdb=${tmdbId} status=${statusVal}`);
-  } catch {}
+  } catch { }
 
   const upserted = await prisma.userMedia.upsert({
     where: { userId_mediaId: { userId: user.id, mediaId: media.id } },

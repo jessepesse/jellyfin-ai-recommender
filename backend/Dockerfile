@@ -2,12 +2,13 @@ FROM node:25-alpine
 
 WORKDIR /app/backend
 
-# Install OpenSSL for Prisma and ts-node for backup script
-RUN apk -U add --no-cache openssl curl
+# Install OpenSSL for Prisma, curl, and build tools for better-sqlite3 native compilation
+RUN apk -U add --no-cache openssl curl python3 make g++
 
 # Copy package files
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma/
+COPY backend/prisma.config.ts ./
 
 # Copy shared package
 COPY shared ../shared
@@ -21,10 +22,8 @@ COPY backend .
 # Make start.sh executable (must be after COPY)
 RUN chmod +x start.sh
 
-# Use a build-time ARG for DATABASE_URL
-ARG DATABASE_URL="file:./prisma/dev.db"
-# Run prisma generate
-RUN DATABASE_URL=${DATABASE_URL} npx prisma generate
+# Run prisma generate (Prisma 7 uses prisma.config.ts for datasource URL)
+RUN DATABASE_URL="file:./prisma/dev.db" npx prisma generate
 RUN npm run build
 
 EXPOSE 3001

@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../db';
 
 interface ExportedItem {
   title: string;
@@ -75,7 +73,7 @@ export async function exportUserData(username: string): Promise<ExportData> {
   // Map database records to legacy format
   for (const record of userMediaRecords) {
     const media = record.media;
-    
+
     const item: ExportedItem = {
       title: media.title,
       tmdb_id: media.tmdbId,

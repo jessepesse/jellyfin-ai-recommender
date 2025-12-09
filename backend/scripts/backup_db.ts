@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../src/db';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const prisma = new PrismaClient();
 
 interface BackupData {
   version: string;
@@ -89,7 +87,7 @@ async function backupDatabase() {
       // Organize media by status and type
       for (const userMedia of user.media) {
         const media = userMedia.media;
-        
+
         const item = {
           title: media.title,
           tmdb_id: media.tmdbId,
@@ -125,7 +123,7 @@ async function backupDatabase() {
     // Determine output path
     const dataDir = process.env.DATA_DIR || path.join(__dirname, '../../data');
     const outputPath = path.join(dataDir, 'backup_latest.json');
-    
+
     // Also create a timestamped backup
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const timestampedPath = path.join(dataDir, `backup_${timestamp}.json`);
@@ -142,9 +140,9 @@ async function backupDatabase() {
 
     const stats = {
       users: backupData.users.length,
-      totalMedia: backupData.users.reduce((sum, u) => 
-        sum + u.data.movies.length + u.data.series.length + 
-        u.data.watchlist.movies.length + u.data.watchlist.series.length + 
+      totalMedia: backupData.users.reduce((sum, u) =>
+        sum + u.data.movies.length + u.data.series.length +
+        u.data.watchlist.movies.length + u.data.watchlist.series.length +
         u.data.do_not_recommend.length, 0)
     };
 

@@ -7,6 +7,9 @@ import path from 'path';
 import fs from 'fs';
 import { JellyfinService, JellyfinAuthError } from '../jellyfin';
 import { sanitizeUrl } from '../utils/ssrf-protection';
+import { ImageService } from '../services/image';
+import ConfigService from '../services/config';
+import prisma from '../db';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
@@ -14,10 +17,6 @@ const jellyfinService = new JellyfinService();
 /**
  * GET /images/:filename - Serve locally cached images
  */
-const prisma = new PrismaClient();
-import { PrismaClient } from '@prisma/client';
-import { ImageService } from '../services/image';
-import ConfigService from '../services/config';
 
 router.get('/images/:filename', async (req: Request, res: Response) => {
     const { filename } = req.params;

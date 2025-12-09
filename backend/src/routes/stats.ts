@@ -1,12 +1,11 @@
 
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { JellyfinService, JellyfinAuthError } from '../jellyfin';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { GeminiService } from '../services/gemini';
+import prisma from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 const jellyfinService = new JellyfinService();
 
 /**

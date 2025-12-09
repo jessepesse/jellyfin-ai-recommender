@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../src/db';
 
 async function main() {
-  const prisma = new PrismaClient();
   try {
     console.log('Starting DB clean script');
 
@@ -24,14 +23,14 @@ async function main() {
     // Optional: report userMedia summary grouped by status
     const counts = await prisma.userMedia.groupBy({ by: ['status'], _count: { _all: true } });
     console.log('UserMedia counts by status:');
-    counts.forEach(c => console.log(`  ${c.status}: ${c._count._all}`));
+    counts.forEach((c: { status: string; _count: { _all: number } }) => console.log(`  ${c.status}: ${c._count._all}`));
 
     console.log('DB clean script finished successfully.');
   } catch (e) {
     console.error('DB clean script failed:', e);
     process.exitCode = 1;
   } finally {
-    try { await prisma.$disconnect(); } catch {}
+    try { await prisma.$disconnect(); } catch { }
   }
 }
 

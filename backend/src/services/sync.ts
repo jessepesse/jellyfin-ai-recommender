@@ -2,9 +2,8 @@ import { JellyfinService } from '../jellyfin';
 import * as JellyseerrService from './jellyseerr';
 import * as DataService from './data';
 import { extractTmdbIds, normalizeJellyfinItem } from './jellyfin-normalizer';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db';
 
-const prisma = new PrismaClient();
 const jellyfinService = new JellyfinService();
 
 export interface SyncResult {
@@ -68,7 +67,7 @@ export async function syncHistory(
       try {
         // Extract TMDB ID from ProviderIds.Tmdb
         const tmdbRaw = item.ProviderIds?.Tmdb ?? item.ProviderIds?.tmdb ?? null;
-        
+
         if (!tmdbRaw) {
           console.debug(`[Sync] Skipping "${item.Name}" - no TMDB ID`);
           result.skipped++;
@@ -100,7 +99,7 @@ export async function syncHistory(
 
         if (!enriched) {
           console.warn(`[Sync] Failed to fetch metadata from Jellyseerr for TMDB ${tmdbId}`);
-          
+
           // Fallback: use Jellyfin data if enrichment fails
           const normalized = normalizeJellyfinItem(item);
           if (normalized && normalized.tmdbId) {

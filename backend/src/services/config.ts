@@ -1,7 +1,6 @@
-import { PrismaClient, SystemConfig as PrismaSystemConfig } from '@prisma/client';
+import { SystemConfig as PrismaSystemConfig } from '../generated/prisma/client';
 import { sanitizeConfigUrl } from '../utils/ssrf-protection';
-
-const prisma = new PrismaClient();
+import prisma from '../db';
 
 export type SystemConfig = {
   jellyfinUrl?: string | null;
@@ -53,22 +52,22 @@ class ConfigService {
     // over environment variables. This ensures UI changes persist and take effect.
     // Only fall back to env vars if DB value is null/empty OR system not configured yet.
     const isDbConfigured = Boolean(dbConfig && dbConfig.isConfigured);
-    
+
     const config: SystemConfig = {
-      jellyfinUrl: isDbConfigured && dbConfig?.jellyfinUrl 
-        ? dbConfig.jellyfinUrl 
+      jellyfinUrl: isDbConfigured && dbConfig?.jellyfinUrl
+        ? dbConfig.jellyfinUrl
         : (dbConfig?.jellyfinUrl || process.env.JELLYFIN_URL || null),
-      jellyseerrUrl: isDbConfigured && dbConfig?.jellyseerrUrl 
-        ? dbConfig.jellyseerrUrl 
+      jellyseerrUrl: isDbConfigured && dbConfig?.jellyseerrUrl
+        ? dbConfig.jellyseerrUrl
         : (dbConfig?.jellyseerrUrl || process.env.JELLYSEERR_URL || null),
-      jellyseerrApiKey: isDbConfigured && dbConfig?.jellyseerrApiKey 
-        ? dbConfig.jellyseerrApiKey 
+      jellyseerrApiKey: isDbConfigured && dbConfig?.jellyseerrApiKey
+        ? dbConfig.jellyseerrApiKey
         : (dbConfig?.jellyseerrApiKey || process.env.JELLYSEERR_API_KEY || null),
-      geminiApiKey: isDbConfigured && dbConfig?.geminiApiKey 
-        ? dbConfig.geminiApiKey 
+      geminiApiKey: isDbConfigured && dbConfig?.geminiApiKey
+        ? dbConfig.geminiApiKey
         : (dbConfig?.geminiApiKey || process.env.GEMINI_API_KEY || null),
-      geminiModel: isDbConfigured && dbConfig?.geminiModel 
-        ? dbConfig.geminiModel 
+      geminiModel: isDbConfigured && dbConfig?.geminiModel
+        ? dbConfig.geminiModel
         : (dbConfig?.geminiModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'),
       // CRITICAL: only consider the system configured when the DB row explicitly
       // marks `isConfigured` true. Presence of environment variables should NOT
@@ -88,7 +87,7 @@ class ConfigService {
     // SSRF Protection: Validate URLs before saving to database (permissive for user config)
     const validatedJellyfinUrl = payload.jellyfinUrl ? sanitizeConfigUrl(payload.jellyfinUrl) : undefined;
     const validatedJellyseerrUrl = payload.jellyseerrUrl ? sanitizeConfigUrl(payload.jellyseerrUrl) : undefined;
-    
+
     // Throw error if URL validation fails with detailed message
     if (payload.jellyfinUrl && !validatedJellyfinUrl) {
       console.error(`[ConfigService] Jellyfin URL validation failed for: ${payload.jellyfinUrl}`);
@@ -98,7 +97,7 @@ class ConfigService {
       console.error(`[ConfigService] Jellyseerr URL validation failed for: ${payload.jellyseerrUrl}`);
       throw new Error(`Invalid or blocked Jellyseerr URL: ${payload.jellyseerrUrl}. Ensure it uses http:// or https:// protocol.`);
     }
-    
+
     // Build update data with proper typing
     interface ConfigUpsertData {
       jellyfinUrl?: string;
@@ -108,11 +107,11 @@ class ConfigService {
       geminiModel?: string;
       isConfigured: boolean;
     }
-    
+
     const data: ConfigUpsertData = {
       isConfigured: true,
     };
-    
+
     if (validatedJellyfinUrl) data.jellyfinUrl = validatedJellyfinUrl;
     if (validatedJellyseerrUrl) data.jellyseerrUrl = validatedJellyseerrUrl;
     if (payload.jellyseerrApiKey) data.jellyseerrApiKey = payload.jellyseerrApiKey;

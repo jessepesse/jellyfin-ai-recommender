@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../src/db';
 
 async function main() {
-  const prisma = new PrismaClient();
   try {
     console.log('Wipe DB script starting — this will DELETE media, userMedia, and users.');
 
@@ -34,7 +33,7 @@ async function main() {
     console.error('Wipe DB script failed:', e);
     process.exitCode = 1;
   } finally {
-    try { await prisma.$disconnect(); } catch {}
+    try { await prisma.$disconnect(); } catch { }
   }
 }
 
