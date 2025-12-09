@@ -23,7 +23,7 @@ jobs:
       # Vaihe 0: Set up Docker Buildx
       # Uses official action that handles idempotency (reuses existing builder)
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       # Vaihe 1: Ladataan koodi GitHub-repositoriosta ajoympäristöön
       - name: Checkout repository
