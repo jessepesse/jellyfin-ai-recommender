@@ -38,6 +38,10 @@ jobs:
         run: npm run lint
         working-directory: ./frontend
       
+      - name: Generate Prisma Client
+        run: DATABASE_URL="file:./prisma/dev.db" npx prisma generate
+        working-directory: ./backend
+      
       - name: TypeScript check (backend)
         run: npm run build
         working-directory: ./backend
