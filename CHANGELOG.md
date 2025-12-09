@@ -4,13 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-[2.0.9] - 2025-12-09
-
-🏗️ Infrastructure, Testing & DevOps Overhaul
-
-Major update focusing on code quality, testing infrastructure, and developer experience.
+[2.0.10] - 2025-12-09
 
 🔧 Prisma 7 Migration
+
+Major upgrade to Prisma ORM with new driver adapter architecture.
 
     **Driver Adapter Architecture**:
         - Upgraded to **Prisma 7.1.0** with new driver adapter pattern
@@ -30,6 +28,14 @@ Major update focusing on code quality, testing infrastructure, and developer exp
         - Tests now run only on: tags (`v*`), releases, PRs, and manual dispatch
         - Removed automatic CI on every push to main (saves GitHub Actions minutes)
         - Added `prisma generate` step before TypeScript build
+
+---
+
+[2.0.9] - 2025-12-08
+
+🏗️ Infrastructure, Testing & DevOps Overhaul
+
+Major update focusing on code quality, testing infrastructure, and developer experience.
 
 🧪 Testing Infrastructure
 
