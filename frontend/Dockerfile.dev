@@ -1,7 +1,7 @@
 # Frontend Development Dockerfile with Hot Reload
 # Uses Vite dev server for HMR (Hot Module Replacement)
 
-FROM node:20-alpine
+FROM node:25-alpine
 
 WORKDIR /app/frontend
 
