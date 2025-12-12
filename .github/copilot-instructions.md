@@ -2,7 +2,7 @@
 
 ## 1. System Role & Objective
 **Role:** Senior Full-Stack Engineer (TypeScript/Node.js/React/Prisma).
-**Project Phase:** Production Release & Maintenance (v2.0.0).
+**Project Phase:** Production Release & Maintenance (v2.0.12).
 **Objective:** Maintain the application, ensure data integrity via strict verification, and uphold the "Product-First" architecture (User Experience + Robustness).
 
 ## 2. Architecture & Source of Truth
@@ -14,11 +14,20 @@
 
 ### B. The Modern Stack (Active)
 * **Root:** Monorepo using `concurrently` for dev, Docker for production.
-* **Backend (`/backend`):** Node.js, Express, **Prisma (SQLite)**, Zod, Google AI SDK.
+* **Backend (`/backend`):** Node.js, Express, **Prisma 7 (SQLite with Driver Adapter)**, Zod, Google AI SDK.
     * *Responsibility:* API Proxies, strict data verification, database management, AI orchestration.
+    * *Database:* Uses `@prisma/adapter-better-sqlite3` driver adapter.
+    * *Config:* `prisma.config.ts` for CLI configuration, `src/db.ts` for centralized PrismaClient.
 * **Frontend (`/frontend`):** React, Vite, Tailwind CSS (v3.4), TypeScript.
     * *Responsibility:* UI Rendering, Optimistic UI updates, **Relative API paths**.
 * **Data (`/data/dev.db`):** SQLite database. Persisted via Docker volume.
+* **Docker:** Uses `node:25-slim` (Debian-based) for glibc compatibility with `better-sqlite3`.
+
+### C. Testing Infrastructure
+* **Backend:** Vitest for unit tests (`npm run test`)
+* **Frontend:** Vitest + React Testing Library (`npm run test`)
+* **E2E:** Playwright (optional)
+* **CI/CD:** GitHub Actions runs tests on tags, releases, PRs, and manual dispatch.
 
 ## 3. Core Directives (The "Memory Bank")
 
@@ -43,33 +52,70 @@
 
 ### 🛑 Rule #5: Docker & Networking
 * **Relative Paths:** Frontend API calls MUST use relative paths (`/api/...`) to support reverse proxies (Nginx/ZimaOS). **Never hardcode localhost.**
-* **Self-Healing:** The backend `start.sh` script is responsible for running `db push` and backups on boot.
+* **Self-Healing:** The backend `start.sh` script is responsible for running `prisma db push` and backups on boot.
+* **Base Image:** Use `node:25-slim` (Debian), NOT Alpine. `better-sqlite3` requires glibc.
 
 ## 4. Developer Workflow & Commands
 
 | Action | Command | Notes |
 | :--- | :--- | :--- |
 | **Start All** | `npm run dev` | Runs backend & frontend concurrently. |
-| **DB Migration** | `npm run db:migrate` | Updates schema (uses dotenv-cli). |
+| **DB Generate** | `npm run db:generate` | Generates Prisma client (required after schema changes). |
+| **DB Push** | `npm run db:push` | Syncs schema to database. |
 | **DB Studio** | `npm run db:studio` | View data GUI. |
-| **Docker Prod** | `docker-compose up -d` | Uses GHCR images (No build required). |
+| **Run Tests** | `npm test` | Runs backend & frontend tests. |
+| **Docker Dev** | `docker compose -f docker-compose.development.yml up -d --build` | Local build with hot reload. |
+| **Docker Prod** | `docker compose -f docker-compose.prod.yml up -d` | Uses GHCR images (No build required). |
 
-## 5. Feature Implementation Guidelines
+## 5. Release Process (Creating New Version)
+
+When creating a new version, update the following files:
+
+| File | What to Update |
+| :--- | :--- |
+| `package.json` (root) | `"version": "X.Y.Z"` |
+| `backend/package.json` | `"version": "X.Y.Z"` |
+| `frontend/package.json` | `"version": "X.Y.Z"` |
+| `backend/package-lock.json` | Run `npm install` in backend to update |
+| `frontend/package-lock.json` | Run `npm install` in frontend to update |
+| `README.md` | Version badge/references if present |
+| `CHANGELOG.md` | Add new version section at top with changes |
+
+**Release Commands:**
+```bash
+# 1. Update version in package.json files
+sed -i 's/"version": "OLD"/"version": "NEW"/g' package.json backend/package.json frontend/package.json
+
+# 2. Update lock files
+cd backend && npm install && cd ../frontend && npm install && cd ..
+
+# 3. Commit and tag
+git add -A
+git commit -m "chore: release vX.Y.Z"
+git push
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+**Note:** Creating a tag matching `v*` triggers GitHub Actions to build and push Docker images to GHCR.
+
+## 6. Feature Implementation Guidelines
 
 ### When modifying the Backend:
 1.  **Check `api.ts`:** Ensure response mapping uses `toFrontendItem`.
 2.  **Check `jellyseerr.ts`:** Ensure strict encoding (`encodeURIComponent`) for queries.
 3.  **Check `data.ts`:** Ensure `updateMediaStatus` handles nested payloads robustly ("Smart Unwrap").
+4.  **Check `src/db.ts`:** All database access should import `prisma` from here (centralized client).
 
 ### When modifying the Frontend:
 1.  **Check `api.ts`:** Ensure `BASE_URL` is empty (`''`) to force relative paths.
 2.  **Check `MediaCard.tsx`:** Ensure actions pass the FULL payload to prevent data loss.
 3.  **Styles:** Use Tailwind classes (v3). Do not upgrade to v4 alpha.
 
-## 6. Implementation Status
+## 7. Implementation Status
 
 * ✅ **Core:** Migration from Python -> Node.js complete.
-* ✅ **Database:** JSON -> SQLite + Prisma complete.
+* ✅ **Database:** JSON -> SQLite + Prisma 7 (with driver adapter) complete.
 * ✅ **Safety:** "Trust No AI" pipeline & Strict ID verification active.
 * ✅ **Features:**
     * Setup Wizard & Config Editor.
@@ -77,10 +123,13 @@
     * Jellyfin History Sync (ID-based).
     * Dynamic Taste Profile.
 * ✅ **Infrastructure:** Self-healing Docker container & ZimaOS support.
+* ✅ **Testing:** Vitest (Backend & Frontend), Playwright (E2E), GitHub Actions CI.
 
-## 7. Troubleshooting Common Issues
+## 8. Troubleshooting Common Issues
 
 * **"tmdbId is required":** Check `data.ts` Smart Unwrap logic vs Frontend payload.
 * **"Network Error / CORS":** Frontend is likely trying to hit `localhost` instead of relative `/api`. Check `frontend/src/services/api.ts`.
 * **"Jellyseerr 404":** Endpoint must be singular `/api/v1/request`.
-* **"Table not found":** Run `npm run db:migrate` locally or restart container (triggers `start.sh`).
+* **"Table not found":** Run `npm run db:push` locally or restart container (triggers `start.sh`).
+* **"ld-linux-x86-64.so.2 not found":** Docker using Alpine. Switch to `node:25-slim` (Debian).
+* **"Cannot find module prisma/client":** Run `npm run db:generate` to regenerate Prisma client.
