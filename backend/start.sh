@@ -28,9 +28,10 @@ else
 fi
 
 # Step 2: Schema Sync with Prisma DB Push
+# Prisma 7 uses prisma.config.ts for schema location
 echo "🔄 Syncing database schema..."
 echo "   Running: npx prisma db push --accept-data-loss"
-if npx prisma db push --accept-data-loss --schema="$PRISMA_DIR/schema.prisma"; then
+if npx prisma db push --accept-data-loss; then
     echo "✅ Database schema synced successfully"
 else
     echo "❌ Schema sync failed!"
@@ -38,8 +39,9 @@ else
 fi
 
 # Step 3: Generate Prisma Client
+# Prisma 7 uses prisma.config.ts for schema location
 echo "🔧 Generating Prisma Client..."
-if npx prisma generate --schema="$PRISMA_DIR/schema.prisma"; then
+if npx prisma generate; then
     echo "✅ Prisma Client generated successfully"
 else
     echo "❌ Prisma Client generation failed!"
