@@ -1,9 +1,9 @@
-FROM node:25-alpine
+FROM node:25-slim
 
 WORKDIR /app/backend
 
 # Install OpenSSL for Prisma, curl, and build tools for better-sqlite3 native compilation
-RUN apk -U add --no-cache openssl curl python3 make g++
+RUN apt-get update && apt-get install -y openssl curl python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY backend/package*.json ./

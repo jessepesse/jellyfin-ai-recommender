@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+[2.0.12] - 2025-12-12
+
+🐛 Bug Fixes
+
+    **UI Fixes**:
+        - Fixed sidebar initial state causing buttons to be unclickable
+        - Fixed scroll issues in Watchlist and Recommendations views
+        - Changed `overflow-visible` to `overflow-hidden` for proper scrolling
+
+    **Docker Compatibility**:
+        - Switched from `node:25-alpine` to `node:25-slim` (Debian-based)
+        - Fixes `better-sqlite3` native binary requiring glibc
+        - Resolves "ld-linux-x86-64.so.2: No such file or directory" error
+
+---
+
 [2.0.10] - 2025-12-09
 
 🔧 Prisma 7 Migration
