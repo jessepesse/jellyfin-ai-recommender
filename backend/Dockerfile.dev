@@ -5,8 +5,8 @@ FROM node:25-alpine
 
 WORKDIR /app/backend
 
-# Install dependencies for Prisma and health check
-RUN apk -U add --no-cache openssl curl
+# Install dependencies for Prisma, health check, and better-sqlite3 native compilation
+RUN apk -U add --no-cache openssl curl python3 make g++
 
 # Copy package files (host context is root)
 COPY backend/package*.json ./

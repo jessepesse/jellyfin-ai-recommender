@@ -18,7 +18,7 @@ const FullPageSpinner = () => (
 const App: React.FC = () => {
   const { user } = useAuth();
   const [currentView, setCurrentView] = useState<AppView>('recommendations');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [configLoading, setConfigLoading] = useState<boolean>(true);
@@ -66,7 +66,7 @@ const App: React.FC = () => {
   // 4. App State (Logged In)
 
   return (
-    <div className="flex h-screen bg-[#0b0b15] text-white overflow-visible">
+    <div className="flex h-screen bg-[#0b0b15] text-white overflow-hidden">
       {/* Top bar with menu button - visible at all sizes */}
       <div className="w-full fixed top-0 left-0 right-0 z-50 bg-[#0b0b15] border-b border-white/5 lg:hidden">
         <div className="flex items-center justify-between px-4 py-2">
