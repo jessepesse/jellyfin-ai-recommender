@@ -13,19 +13,20 @@ const router = Router();
  */
 router.get('/import/progress/:username', (req, res) => {
     const { username } = req.params;
-    
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
-    
-    console.log(`[SSE] Client connected for import progress: ${username}`);
-    
+
+    console.log(`[SSE] Client connected for import progress: "${username}"`);
+
     const initialProgress = importService.getProgress(username);
+    console.log(`[SSE] Initial progress for "${username}":`, initialProgress ? 'found' : 'not found');
     if (initialProgress) {
         res.write(`data: ${JSON.stringify(initialProgress)}\n\n`);
     }
-    
+
     const interval = setInterval(() => {
         const progress = importService.getProgress(username);
         if (progress) {
@@ -38,7 +39,7 @@ router.get('/import/progress/:username', (req, res) => {
             res.write(`data: ${JSON.stringify({ active: false })}\n\n`);
         }
     }, 500);
-    
+
     req.on('close', () => {
         clearInterval(interval);
         console.log(`[SSE] Client disconnected: ${username}`);
@@ -53,7 +54,7 @@ router.post('/import', async (req, res) => {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
         const token = req.headers['x-access-token'] as string | undefined;
-        
+
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const payload = req.body;
@@ -67,8 +68,14 @@ router.post('/import', async (req, res) => {
         }
 
         const username = userName || userId;
-        
-        const itemCount = 
+
+        console.log(`[Import] Username for progress tracking: "${username}" (userName: "${userName}", userId: "${userId}")`);
+        console.log(`[Import] Received payload keys:`, Object.keys(parsed || {}));
+        console.log(`[Import] Parsed.data keys:`, parsed?.data ? Object.keys(parsed.data) : 'no data key');
+        console.log(`[Import] Direct movies array:`, Array.isArray(parsed?.movies) ? parsed.movies.length : 'not array');
+        console.log(`[Import] Nested data.movies:`, Array.isArray(parsed?.data?.movies) ? parsed.data.movies.length : 'not array');
+
+        const itemCount =
             (Array.isArray(parsed?.data?.movies) ? parsed.data.movies.length : 0) +
             (Array.isArray(parsed?.data?.series) ? parsed.data.series.length : 0) +
             (Array.isArray(parsed?.data?.watchlist?.movies) ? parsed.data.watchlist.movies.length : 0) +
@@ -85,9 +92,9 @@ router.post('/import', async (req, res) => {
                 // codeql[js/tainted-format-string] - False positive: e is a separate argument, not part of format string
                 console.error(`[Import] Async import failed for ${username}:`, e);
             });
-            
-            return res.json({ 
-                ok: true, 
+
+            return res.json({
+                ok: true,
                 async: true,
                 message: `Import started in background. Processing ~${itemCount} items.`,
                 estimatedMinutes: Math.ceil(itemCount / 20)
@@ -110,7 +117,7 @@ router.get('/export', async (req, res) => {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
         const token = req.headers['x-access-token'] as string | undefined;
-        
+
         if (!userId || !token) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
@@ -122,7 +129,7 @@ router.get('/export', async (req, res) => {
         const filename = `jellyfin-backup-${new Date().toISOString().split('T')[0]}.json`;
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        
+
         res.json(exportData);
     } catch (e) {
         console.error('Export failed', e);
