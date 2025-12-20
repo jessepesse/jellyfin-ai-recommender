@@ -68,7 +68,7 @@ class ConfigService {
         : (dbConfig?.geminiApiKey || process.env.GEMINI_API_KEY || null),
       geminiModel: isDbConfigured && dbConfig?.geminiModel
         ? dbConfig.geminiModel
-        : (dbConfig?.geminiModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'),
+        : (dbConfig?.geminiModel || process.env.GEMINI_MODEL || 'gemini-3-flash-preview'),
       // CRITICAL: only consider the system configured when the DB row explicitly
       // marks `isConfigured` true. Presence of environment variables should NOT
       // cause the application to treat the system as configured — the Setup

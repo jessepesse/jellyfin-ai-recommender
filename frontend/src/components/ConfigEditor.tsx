@@ -9,7 +9,7 @@ const ConfigEditor: React.FC = () => {
     jellyseerrUrl: '',
     jellyseerrApiKey: '',
     geminiApiKey: '',
-    geminiModel: 'gemini-2.5-flash-lite',
+    geminiModel: 'gemini-3-flash-preview',
   });
 
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ const ConfigEditor: React.FC = () => {
           jellyseerrUrl: response.config.jellyseerrUrl || '',
           jellyseerrApiKey: response.config.jellyseerrApiKey || '',
           geminiApiKey: response.config.geminiApiKey || '',
-          geminiModel: response.config.geminiModel || 'gemini-2.5-flash-lite',
+          geminiModel: response.config.geminiModel || 'gemini-3-flash-preview',
         });
       }
     } catch (error) {
@@ -222,7 +222,7 @@ const ConfigEditor: React.FC = () => {
             onChange={(e) => setConfig({ ...config, geminiModel: e.target.value })}
             className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
-            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (Recommended)</option>
+            <option value="gemini-3-flash-preview">gemini-3-flash-preview (Recommended)</option>
             <option value="gemini-2.5-flash">gemini-2.5-flash</option>
             <option value="gemini-2.5-pro">gemini-2.5-pro</option>
             <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>

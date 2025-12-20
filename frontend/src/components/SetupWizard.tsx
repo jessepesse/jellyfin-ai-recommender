@@ -109,7 +109,7 @@ const SetupWizard: React.FC = () => {
 
             <label className="text-sm">Gemini Model</label>
             <select className="p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition" value={formData.geminiModel} onChange={e => updateField('geminiModel', e.target.value)}>
-              <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (Recommended)</option>
+              <option value="gemini-3-flash-preview">gemini-3-flash-preview (Recommended)</option>
               <option value="gemini-2.5-flash">gemini-2.5-flash</option>
               <option value="gemini-2.5-pro">gemini-2.5-pro</option>
               <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>

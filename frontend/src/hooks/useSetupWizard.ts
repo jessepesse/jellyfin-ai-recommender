@@ -61,7 +61,7 @@ const defaultFormData: SetupFormData = {
   jellyseerrUrl: '',
   jellyseerrApiKey: '',
   geminiApiKey: '',
-  geminiModel: 'gemini-2.5-flash-lite',
+  geminiModel: 'gemini-3-flash-preview',
 };
 
 export function useSetupWizard(): UseSetupWizardReturn {

@@ -6,7 +6,7 @@ import { MediaItemInput, UserData, RecommendationCandidate, RecommendationFilter
 // Default model with thinking support enabled
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
 // Thinking dynamically adjusts based on prompt complexity
-const modelName = 'gemini-2.5-flash-lite';
+const modelName = 'gemini-3-flash-preview';
 console.debug('Using Gemini model:', modelName);
 
 // Construct SDK client at runtime and return both the raw client, the generative model instance, and the resolved model name

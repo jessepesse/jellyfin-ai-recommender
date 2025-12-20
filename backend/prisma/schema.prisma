@@ -60,7 +60,7 @@ model SystemConfig {
   jellyseerrUrl    String?
   jellyseerrApiKey String?
   geminiApiKey     String?
-  geminiModel      String  @default("gemini-2.5-flash-lite")
+  geminiModel      String  @default("gemini-3-flash-preview")
   isConfigured     Boolean @default(false)
 }
 

@@ -22,7 +22,7 @@ const envSchema = z.object({
   // API keys (non-empty strings when present)
   JELLYSEERR_API_KEY: z.string().min(1).optional(),
   GEMINI_API_KEY: z.string().min(1).optional(),
-  GEMINI_MODEL: z.string().min(1).default('gemini-2.5-flash-lite'),
+  GEMINI_MODEL: z.string().min(1).default('gemini-3-flash-preview'),
 
   // CORS configuration
   CORS_ORIGIN: z.string().url().optional(),

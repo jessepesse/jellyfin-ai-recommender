@@ -101,7 +101,7 @@ router.get('/setup-defaults', async (req, res) => {
             jellyseerrUrl: process.env.JELLYSEERR_URL || dbCfg?.jellyseerrUrl || null,
             jellyseerrApiKey: process.env.JELLYSEERR_API_KEY || dbCfg?.jellyseerrApiKey || null,
             geminiApiKey: process.env.GEMINI_API_KEY || dbCfg?.geminiApiKey || null,
-            geminiModel: process.env.GEMINI_MODEL || dbCfg?.geminiModel || 'gemini-2.5-flash-lite',
+            geminiModel: process.env.GEMINI_MODEL || dbCfg?.geminiModel || 'gemini-3-flash-preview',
         };
         res.json(defaults);
     } catch (e) {
@@ -251,7 +251,7 @@ router.get('/config-editor', async (req, res) => {
             jellyseerrUrl: cfg.jellyseerrUrl || '',
             jellyseerrApiKey: maskApiKey(cfg.jellyseerrApiKey),
             geminiApiKey: maskApiKey(cfg.geminiApiKey),
-            geminiModel: cfg.geminiModel || 'gemini-2.5-flash-lite',
+            geminiModel: cfg.geminiModel || 'gemini-3-flash-preview',
             isConfigured: cfg.isConfigured || false,
         };
 
@@ -278,7 +278,7 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
         const updatePayload: Record<string, string | null> = {
             jellyfinUrl: payload.jellyfinUrl || null,
             jellyseerrUrl: payload.jellyseerrUrl || null,
-            geminiModel: payload.geminiModel || 'gemini-2.5-flash-lite',
+            geminiModel: payload.geminiModel || 'gemini-3-flash-preview',
         };
 
         if (payload.jellyseerrApiKey && !isMasked(payload.jellyseerrApiKey)) {
