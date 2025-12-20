@@ -4,7 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-[2.0.12] - 2025-12-12
+## [Unreleased]
+
+### ✨ Features
+
+- **Default AI Model**: Changed default model from `gemini-2.5-flash-lite` to `gemini-3-flash-preview`
+- **Thinking Levels**: Added AI thinking level configuration for Gemini 3 models
+  - Gemini 3 Pro: `high` (maximizes reasoning depth)
+  - Gemini 3 Flash: `medium` (balanced thinking)
+- **Improved Prompt**: Enhanced recommendation prompt with TMDb specialist role
+  - "Poison list" terminology for stronger exclusion signals
+  - "Discovery First" focus on hidden gems and non-mainstream hits
+  - "No Franchise Stacking" rule (max 1 item per franchise)
+  - Better variety mixing genres
+
+### 🐛 Bug Fixes
+
+- **Nginx Timeout**: Increased proxy timeout from 60s to 180s for slow AI models
+- **Deprecated Dependencies**: Fixed npm deprecated package warnings using overrides
+  - `glob` upgraded to v10.4.0
+  - `inflight` replaced with `@pnpm/npm-lifecycle`
+  - `lodash.get`/`lodash.isequal` redirected to `lodash@4.17.21`
+
+---
+
+## [2.0.13] - 2025-12-12
+
+### Fixed
+
+- Increased nginx proxy timeout to 180s for slow AI models (e.g., gemini-3-pro-preview)
+- Added debug logging for import progress username tracking
+
+---
+
+## [2.0.12] - 2025-12-12
 
 🐛 Bug Fixes
 
