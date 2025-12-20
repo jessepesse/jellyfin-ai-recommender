@@ -179,18 +179,22 @@ export class GeminiService {
     const exclusionCount = exclusionSection.split('\n').filter(line => line.startsWith('|')).length;
 
     return `
-### TASK
-Based on the "Taste Analysis", recommend exactly 40 NEW and UNDISCOVERED items.
-The user wants fresh recommendations they have NOT seen before.
+### ROLE
+Act as a senior film critic and expert database curator (TMDb specialist).
+Your goal is to recommend **exactly 40** distinct items that perfectly match the user's taste profile but are NOT in their current library.
 
-- TYPE: ${mediaType}
-- GENRE: ${genreNote}${moodNote}
+### CONTEXT & TASTE PROFILE
+- **Media Type:** ${mediaType}
+- **Vibe/Genre:** ${genreNote}${moodNote}
+
+${hasProfile ? `**Taste Analysis:**\n${profileSection}` : profileSection}
 
 ---
 
-### 🚫 MANDATORY EXCLUSION LIST (${exclusionCount} items)
-The following items are already in the user's library or watchlist.
-**CRITICAL: You MUST NOT recommend ANY title from this list.**
+### �️ EXCLUSION DATA (POISON LIST) - ${exclusionCount} items
+The user has ALREADY watched/collected the following items.
+**CRITICAL RULE:** Do NOT recommend anything from this list. Treat these titles as "poison".
+If you are about to suggest a sequel/prequel to a movie in this list, SKIP IT unless it is significantly better rated.
 
 | Title | Year |
 |-------|------|
@@ -198,18 +202,26 @@ ${exclusionSection}
 
 ---
 
-### ⚠️ FINAL VALIDATION RULES (ABSOLUTE - NO EXCEPTIONS)
-
-1. **CHECK EVERY SINGLE RECOMMENDATION AGAINST THE EXCLUSION LIST ABOVE.**
-2. **If a title (or similar variation) appears in the list, DELETE IT and find another.**
-3. **NEVER suggest a Movie/TV Show that the user has already watched.**
-4. **ensure release years are accurate.**
-5. **Prioritize variety.**
+### 💎 SELECTION RULES
+1. **Discovery First:** Focus on hidden gems, highly-rated non-mainstream hits, or classics the user might have missed.
+2. **No Franchise Stacking:** Do NOT recommend more than 1 item from the same franchise (e.g., if you suggest "Alien", do not suggest "Aliens").
+3. **Accuracy:** Use the EXACT theatrical release year from TMDb. If unsure, skip the item.
+4. **Variety:** Mix genres slightly. If the user likes Sci-Fi, include some Sci-Fi Horror or Sci-Fi Thriller, not just Space Operas.
+5. **No Poison:** NEVER suggest anything from the POISON LIST above. Double-check every recommendation.
 
 ---
 
-### OUTPUT FORMAT
-Respond ONLY with a JSON array of objects with keys: title, media_type (movie|tv), release_year (YYYY), reason.
+### 📝 OUTPUT FORMAT
+Return **ONLY** a raw JSON array (no markdown, no backticks).
+Each object must strictly follow this schema:
+[
+  {
+    "title": "Exact TMDb Title",
+    "media_type": "${mediaType === 'MOVIE OR TV SERIES' ? 'movie' : mediaType.toLowerCase()}",
+    "release_year": "YYYY",
+    "reason": "A short, punchy sentence why this fits the vibe."
+  }
+]
 `;
   }
 
