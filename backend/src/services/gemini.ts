@@ -37,7 +37,26 @@ async function buildClientAndModel(): Promise<GeminiClientBundle> {
 
   // Obtain the model object from the client
   const modelNameFromCfg = cfg && cfg.geminiModel ? String(cfg.geminiModel).trim() : modelName;
-  const model = client.getGenerativeModel({ model: modelNameFromCfg });
+
+  // Configure thinking level for Gemini 3 Flash/Pro models
+  // Flash supports: minimal, low, medium, high
+  // Pro supports: low, high (default)
+  // Use 'high' for Pro (maximizes reasoning depth for recommendations)
+  // Use 'medium' for Flash (balanced thinking for most tasks)
+  const isGemini3Model = modelNameFromCfg.includes('gemini-3');
+  const isProModel = modelNameFromCfg.includes('-pro');
+  const thinkingLevel = isProModel ? 'high' : 'medium';
+
+  const thinkingConfig = isGemini3Model ? {
+    thinkingConfig: {
+      thinkingBudget: thinkingLevel as 'low' | 'medium' | 'high'
+    }
+  } : {};
+
+  const model = client.getGenerativeModel({
+    model: modelNameFromCfg,
+    ...thinkingConfig
+  });
 
   return { client, model, modelName: modelNameFromCfg };
 }
