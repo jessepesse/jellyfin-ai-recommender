@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [Unreleased]
+## [2.1.0] - 2025-12-21
 
 ### ✨ Features
 
@@ -17,6 +17,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - "Discovery First" focus on hidden gems and non-mainstream hits
   - "No Franchise Stacking" rule (max 1 item per franchise)
   - Better variety mixing genres
+- **Docker Quick Start**: Added comprehensive Docker installation guide to README
 
 ### 🐛 Bug Fixes
 
@@ -25,6 +26,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - `glob` upgraded to v10.4.0
   - `inflight` replaced with `@pnpm/npm-lifecycle`
   - `lodash.get`/`lodash.isequal` redirected to `lodash@4.17.21`
+
+### 📦 Dependencies
+
+- `better-sqlite3` 11.10.0 → 12.5.0
+- `@types/node` 24.10.2 → 25.0.2
+- `react` 19.2.1 → 19.2.3
+- `tailwindcss` 4.1.17 → 4.1.18
+- `@tailwindcss/vite` 4.1.17 → 4.1.18
+- `lucide-react` 0.554.0 → 0.561.0
+- `eslint-plugin-react-refresh` 0.4.24 → 0.4.25
 
 ---
 
