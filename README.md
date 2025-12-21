@@ -22,6 +22,77 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 🔧 **Production-Ready Rate Limiting** — Smart rate limiting supports large imports (1000+ items) with separate limits per operation type.
 - 🌐 **Reverse Proxy Support** — Full support for Nginx, ZimaOS, and other reverse proxy environments with proper header forwarding.
 
+---
+
+## 🐳 Quick Start (Docker)
+
+The fastest way to get started. **Recommended for most users.**
+
+### Prerequisites
+
+| Requirement | Description |
+|-------------|-------------|
+| **Docker & Docker Compose** | [Install Docker](https://docs.docker.com/get-docker/) |
+| **Jellyfin Server** | Your media server URL (e.g., `http://192.168.1.100:8096`) |
+| **Jellyseerr** | For metadata enrichment & requests (e.g., `http://192.168.1.100:5055`) |
+| **Google Gemini API Key** | Free at [Google AI Studio](https://aistudio.google.com/apikey) |
+
+### 1. Create `docker-compose.yml`
+
+```yaml
+services:
+  frontend:
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender-frontend:latest
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    image: ghcr.io/jessepesse/jellyfin-ai-recommender-backend:latest
+    volumes:
+      - ./data:/data          # SQLite database
+      - ./images:/app/images  # Cached posters/backdrops
+    environment:
+      - DATABASE_URL=file:/data/dev.db
+      - IMAGE_DIR=/app/images
+      # Optional: Set these here OR configure via Setup Wizard in browser
+      # - JELLYFIN_URL=http://your-jellyfin:8096
+      # - JELLYSEERR_URL=http://your-jellyseerr:5055
+      # - JELLYSEERR_API_KEY=your-api-key
+      # - GEMINI_API_KEY=your-gemini-key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+### 2. Start the Application
+
+```bash
+docker compose up -d
+```
+
+### 3. First Boot (Setup Wizard)
+
+1. Open **http://localhost:5173** in your browser
+2. The **Setup Wizard** will guide you through configuration:
+   - Enter your Jellyfin server URL
+   - Enter your Jellyseerr URL and API key
+   - Enter your Google Gemini API key
+3. Log in with your Jellyfin credentials
+4. Start getting AI-powered recommendations! 🎉
+
+### Updating
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+---
+
 ## 🏗️ Architecture
 
 This project is a full-stack monorepo split into a separate Frontend and Backend.
