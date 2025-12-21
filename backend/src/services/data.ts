@@ -3,6 +3,7 @@ import { search as jellySearch } from './jellyseerr';
 import { ImageService } from './image';
 import { MediaItem, MediaUpdateData, MediaCreateData, MediaItemInput } from '../types';
 import prisma from '../db';
+import { enrichMedia } from './enrichment';
 
 function parseTmdbId(item: MediaItemInput | null | undefined): number | null {
   const raw = item?.tmdbId ?? item?.tmdb_id ?? item?.media_id ?? item?.id ?? null;
@@ -176,6 +177,12 @@ export async function updateMediaStatus(username: string, item: MediaItemInput, 
     where: { userId_mediaId: { userId: user.id, mediaId: media.id } },
     create: { userId: user.id, mediaId: media.id, status: statusVal },
     update: { status: statusVal },
+  });
+
+  // Async enrichment: fetch keywords, credits, similar, recommendations in background
+  // Don't await - let user action complete immediately
+  enrichMedia(media.id).catch((err) => {
+    console.warn(`[Enrichment] Background enrichment failed for media ${media.id}:`, err?.message || err);
   });
 
   return upserted;

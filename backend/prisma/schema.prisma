@@ -36,6 +36,19 @@ model Media {
   language    String?
   releaseYear String?
   
+  // Enriched metadata (Phase 1)
+  keywords          String?   // JSON array: ["cyberpunk", "dystopia", "neo-noir"]
+  director          String?   // "Denis Villeneuve"
+  topCast           String?   // JSON array: ["Ryan Gosling", "Ana de Armas"]
+  tagline           String?   // "The key to the future is finally unearthed."
+  
+  // TMDB relationships (cached)
+  similarIds        String?   // JSON array of TMDB IDs: [157336, 329865, 27205]
+  recommendationIds String?   // JSON array of TMDB IDs: [438631, 76600, 19995]
+  
+  // Enrichment timestamp (for cache invalidation)
+  enrichedAt        DateTime?
+  
   // Relations
   users       UserMedia[]
 }

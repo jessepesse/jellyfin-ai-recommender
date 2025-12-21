@@ -84,8 +84,8 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
   const cached = CacheService.get<Enriched | null>('jellyseerr', cacheKey);
   if (cached !== undefined) return cached; // could be null
 
-    try {
-      // Manually encode the query to guarantee compliance with Jellyseerr's strict URL rules.
+  try {
+    // Manually encode the query to guarantee compliance with Jellyseerr's strict URL rules.
     const encodedQuery = strictEncode(String(queryTitle));
     let client;
     try {
@@ -338,4 +338,156 @@ export async function requestMediaByTmdb(tmdbId: number, mediaType: 'movie' | 't
     throw e;
   }
 }
- 
+
+/**
+ * Get similar media items from TMDB via Jellyseerr
+ * @param tmdbId - TMDB ID (numeric)
+ * @param mediaType - 'movie' or 'tv'
+ * @returns Array of TMDB IDs for similar items
+ */
+export async function getSimilar(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<number[]> {
+  const cacheKey = `jellyseerr_similar_${mediaType}_${tmdbId}`;
+  const cached = CacheService.get<number[]>('jellyseerr', cacheKey);
+  if (cached !== undefined) return cached;
+
+  let client;
+  try {
+    client = await getClient();
+  } catch (cfgErr) {
+    console.warn('[Jellyseerr] Not configured; skipping similar lookup');
+    return [];
+  }
+
+  try {
+    const endpoint = mediaType === 'movie'
+      ? `/api/v1/movie/${tmdbId}/similar`
+      : `/api/v1/tv/${tmdbId}/similar`;
+    const resp = await client.get(endpoint);
+    const results = resp.data?.results || [];
+    const ids = results.map((r: any) => Number(r.id)).filter((id: number) => Number.isFinite(id) && id > 0);
+
+    CacheService.set('jellyseerr', cacheKey, ids);
+    console.debug(`[Jellyseerr] Similar fetched for ${mediaType} ${tmdbId}: ${ids.length} items`);
+    return ids;
+  } catch (e: any) {
+    console.error(`[Jellyseerr] Error fetching similar for ${mediaType} ${tmdbId}:`, e?.response?.data || e.message || e);
+    return [];
+  }
+}
+
+/**
+ * Get recommended media items from TMDB via Jellyseerr
+ * @param tmdbId - TMDB ID (numeric)
+ * @param mediaType - 'movie' or 'tv'
+ * @returns Array of TMDB IDs for recommended items
+ */
+export async function getRecommendations(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<number[]> {
+  const cacheKey = `jellyseerr_recommendations_${mediaType}_${tmdbId}`;
+  const cached = CacheService.get<number[]>('jellyseerr', cacheKey);
+  if (cached !== undefined) return cached;
+
+  let client;
+  try {
+    client = await getClient();
+  } catch (cfgErr) {
+    console.warn('[Jellyseerr] Not configured; skipping recommendations lookup');
+    return [];
+  }
+
+  try {
+    const endpoint = mediaType === 'movie'
+      ? `/api/v1/movie/${tmdbId}/recommendations`
+      : `/api/v1/tv/${tmdbId}/recommendations`;
+    const resp = await client.get(endpoint);
+    const results = resp.data?.results || [];
+    const ids = results.map((r: any) => Number(r.id)).filter((id: number) => Number.isFinite(id) && id > 0);
+
+    CacheService.set('jellyseerr', cacheKey, ids);
+    console.debug(`[Jellyseerr] Recommendations fetched for ${mediaType} ${tmdbId}: ${ids.length} items`);
+    return ids;
+  } catch (e: any) {
+    console.error(`[Jellyseerr] Error fetching recommendations for ${mediaType} ${tmdbId}:`, e?.response?.data || e.message || e);
+    return [];
+  }
+}
+
+/**
+ * Full details response type with enriched metadata
+ */
+export type FullMediaDetails = {
+  keywords: string[];
+  director?: string;
+  topCast: string[];
+  tagline?: string;
+  similar: number[];
+  recommendations: number[];
+};
+
+/**
+ * Get full media details including keywords, credits, similar, and recommendations
+ * @param tmdbId - TMDB ID (numeric)
+ * @param mediaType - 'movie' or 'tv'
+ * @returns Full enriched metadata
+ */
+export async function getFullDetails(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<FullMediaDetails | null> {
+  const cacheKey = `jellyseerr_fulldetails_${mediaType}_${tmdbId}`;
+  const cached = CacheService.get<FullMediaDetails>('jellyseerr', cacheKey);
+  if (cached !== undefined) return cached;
+
+  let client;
+  try {
+    client = await getClient();
+  } catch (cfgErr) {
+    console.warn('[Jellyseerr] Not configured; skipping full details lookup');
+    return null;
+  }
+
+  try {
+    const endpoint = mediaType === 'movie' ? `/api/v1/movie/${tmdbId}` : `/api/v1/tv/${tmdbId}`;
+    const resp = await client.get(endpoint);
+    const data = resp.data;
+
+    if (!data) return null;
+
+    // Extract keywords
+    const keywordsData = data.keywords?.keywords || data.keywords?.results || data.keywords || [];
+    const keywords = (Array.isArray(keywordsData) ? keywordsData : [])
+      .map((k: any) => k.name || k)
+      .filter(Boolean)
+      .slice(0, 10);
+
+    // Extract director from crew
+    const crew = data.credits?.crew || [];
+    const director = crew.find((c: any) => c.job === 'Director' || c.job === 'Series Director')?.name;
+
+    // Extract top cast
+    const cast = data.credits?.cast || [];
+    const topCast = cast.slice(0, 5).map((c: any) => c.name).filter(Boolean);
+
+    // Extract tagline
+    const tagline = data.tagline || undefined;
+
+    // Fetch similar and recommendations in parallel
+    const [similar, recommendations] = await Promise.all([
+      getSimilar(tmdbId, mediaType),
+      getRecommendations(tmdbId, mediaType),
+    ]);
+
+    const result: FullMediaDetails = {
+      keywords,
+      director,
+      topCast,
+      tagline,
+      similar,
+      recommendations,
+    };
+
+    CacheService.set('jellyseerr', cacheKey, result);
+    console.debug(`[Jellyseerr] Full details fetched for ${mediaType} ${tmdbId}: ${keywords.length} keywords, ${topCast.length} cast`);
+    return result;
+  } catch (e: any) {
+    console.error(`[Jellyseerr] Error fetching full details for ${mediaType} ${tmdbId}:`, e?.response?.data || e.message || e);
+    return null;
+  }
+}
+
