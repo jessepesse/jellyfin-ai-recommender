@@ -13,7 +13,7 @@ import { search as jellySearch, Enriched, getMediaDetails } from '../services/je
 import { CacheService } from '../services/cache';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
-import { getAnchorItems, collectCandidateIds, buildAnchorContext } from '../services/anchor-recommendations';
+import { getAnchorItems, collectCandidateIds, buildAnchorContext, MOOD_KEYWORDS } from '../services/anchor-recommendations';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
@@ -170,7 +170,8 @@ router.get('/recommendations', async (req, res) => {
         // Try to get candidates from user's enriched history first
         const mediaTypeFilter = filters.type === 'tv' ? 'tv' : filters.type === 'movie' ? 'movie' : undefined;
         const genreFilter = filters.genre || undefined;
-        const anchors = await getAnchorItems(userName || userId, mediaTypeFilter, genreFilter, 10);
+        const moodFilter = filters.mood || undefined;
+        const anchors = await getAnchorItems(userName || userId, mediaTypeFilter, genreFilter, moodFilter, 10);
 
         if (anchors.length > 0 && buffer.length < TARGET_COUNT) {
             const anchorGenres = anchors.flatMap(a => a.genres).slice(0, 3);
@@ -216,18 +217,43 @@ router.get('/recommendations', async (req, res) => {
                         }
                     }
 
-                    // Get basic details
+                    // Get basic details first for overview check
                     const details = await getMediaDetails(tmdbId, candidateType);
-                    if (details && details.tmdb_id) {
-                        candidatesForRanking.push({
-                            tmdbId: details.tmdb_id,
-                            title: details.title,
-                            genres: fullDetails.genres,
-                            overview: details.overview,
-                            voteAverage: details.voteAverage,
-                        });
-                        console.debug(`[Anchor] CANDIDATE: "${details.title}" [${fullDetails.genres.slice(0, 2).join(', ')}] ⭐${details.voteAverage?.toFixed(1) || 'N/A'}`);
+                    if (!details || !details.tmdb_id) continue;
+
+                    // Filter by mood keywords if specified
+                    if (moodFilter && MOOD_KEYWORDS[moodFilter]) {
+                        const moodKeywords = MOOD_KEYWORDS[moodFilter];
+                        const candidateKeywords = fullDetails.keywords || [];
+                        const keywordsLower = candidateKeywords.map((k: string) => k.toLowerCase());
+
+                        const hasMatchingKeyword = moodKeywords.some(mk =>
+                            keywordsLower.some((k: string) => k.includes(mk.toLowerCase()) || mk.toLowerCase().includes(k))
+                        );
+
+                        // Also check overview for mood match as fallback
+                        const overviewLower = (details.overview || '').toLowerCase();
+                        const hasOverviewMatch = moodKeywords.some(mk => overviewLower.includes(mk.toLowerCase()));
+
+                        if (!hasMatchingKeyword && !hasOverviewMatch) {
+                            // Only skip if we already have some candidates
+                            if (candidatesForRanking.length >= 10) {
+                                console.debug(`[Anchor] MOOD SKIP: "${details.title}" - no keywords match mood "${moodFilter}"`);
+                                continue;
+                            }
+                        } else {
+                            console.debug(`[Anchor] MOOD MATCH: "${details.title}" matches mood "${moodFilter}"`);
+                        }
                     }
+
+                    candidatesForRanking.push({
+                        tmdbId: details.tmdb_id,
+                        title: details.title,
+                        genres: fullDetails.genres,
+                        overview: details.overview,
+                        voteAverage: details.voteAverage,
+                    });
+                    console.debug(`[Anchor] CANDIDATE: "${details.title}" [${fullDetails.genres.slice(0, 2).join(', ')}] ⭐${details.voteAverage?.toFixed(1) || 'N/A'}`);
                     await new Promise(resolve => setTimeout(resolve, 25));
                 } catch (e) {
                     // Skip failed fetches
@@ -252,7 +278,7 @@ router.get('/recommendations', async (req, res) => {
                     TARGET_COUNT - buffer.length
                 );
 
-                console.debug(`[Gemini Ranking] Approved ${rankedCandidates.length} items`);
+                console.debug(`[Gemini Ranking] Mood="${filters.mood || 'none'}" Genre="${genreFilter || 'none'}" - Approved ${rankedCandidates.length} items`);
 
                 // Phase 3: Add Gemini-approved items to buffer
                 for (const ranked of rankedCandidates) {

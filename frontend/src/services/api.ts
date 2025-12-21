@@ -118,10 +118,11 @@ export const getItems = async (libraryId: string, searchTerm?: string): Promise<
     return response.data;
 };
 
-export const getRecommendations = async (targetItemId: string, libraryId: string, options?: { type?: string; genre?: string }): Promise<JellyfinItem[]> => {
+export const getRecommendations = async (targetItemId: string, libraryId: string, options?: { type?: string; genre?: string; mood?: string }): Promise<JellyfinItem[]> => {
     const params: Record<string, string> = { targetItemId, libraryId };
     if (options?.type) params.type = options.type;
     if (options?.genre) params.genre = options.genre;
+    if (options?.mood) params.mood = options.mood;
     const response = await apiClient.get('/recommendations', { params, ...authHeaders() });
     return response.data;
 };

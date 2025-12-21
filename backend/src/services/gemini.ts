@@ -421,8 +421,18 @@ Constraints:
     if (candidates.length === 0) return [];
 
     try {
-      const { client, model, modelName } = await buildClientAndModel();
-      console.debug(`[Gemini Ranking] Using model: ${modelName} for ${candidates.length} candidates`);
+      // Create model WITHOUT thinking config for pure JSON output
+      const cfg = await ConfigService.getConfig();
+      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
+      const apiKey = rawKey.trim();
+      if (!apiKey) throw new Error('Gemini API key not configured');
+
+      const googleClient = new GoogleGenerativeAI(apiKey);
+      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
+
+      // Use model WITHOUT thinking config for JSON tasks
+      const model = googleClient.getGenerativeModel({ model: modelName });
+      console.debug(`[Gemini Ranking] Using model: ${modelName} for ${candidates.length} candidates (no thinking)`);
 
       // Format candidates for prompt
       const candidateList = candidates.slice(0, 30).map((c, i) =>
@@ -439,63 +449,74 @@ Constraints:
       const genreContext = userContext.requestedGenre
         ? `Requested genre: ${userContext.requestedGenre}`
         : '';
-      const moodContext = userContext.requestedMood
-        ? `Requested mood: ${userContext.requestedMood}`
+
+      // Provide detailed mood descriptions for Gemini
+      const moodDescriptions: Record<string, string> = {
+        'mind-bending': 'MIND-BENDING: Complex plots, twist endings, psychological themes, surreal, nonlinear timelines, makes you think',
+        'dark': 'DARK & GRITTY: Noir, dystopian, crime, violence, morally ambiguous, intense, serious themes',
+        'adrenaline': 'ADRENALINE: Action-packed, thrilling, car chases, explosions, heists, high stakes, intense',
+        'chill': 'CHILL & COMFORT: Relaxing, heartwarming, slice of life, feel-good, cozy, low-stakes, peaceful',
+        'feel-good': 'FEEL-GOOD: Uplifting, happy endings, comedy, romance, family-friendly, optimistic, warm',
+        'tearjerker': 'TEARJERKER: Emotional, tragic, loss, grief, moving, will make you cry, bittersweet',
+        'visual': 'VISUAL/EPIC: Stunning visuals, epic scope, fantasy worlds, sci-fi, cinematographic masterpiece',
+      };
+      const moodContext = userContext.requestedMood && moodDescriptions[userContext.requestedMood]
+        ? `CRITICAL - User wants this mood: ${moodDescriptions[userContext.requestedMood]}. PRIORITIZE titles matching this mood!`
         : '';
 
-      const prompt = `You are a harsh film critic evaluating movie/TV recommendations. You have HIGH STANDARDS.
+      const prompt = `You are a movie recommender. Pick the ${limit} best titles from this list for a user.
 
 ${tasteContext}
 ${favoritesContext}
 ${genreContext}
 ${moodContext}
 
-CANDIDATES TO EVALUATE:
+CANDIDATES:
 ${candidateList}
 
-TASK: Select UP TO ${limit} BEST recommendations from the candidates above.
+Return JSON array of ${limit} best picks: [{"tmdbId": 123, "title": "Name"}, ...]
 
-QUALITY CRITERIA (be strict!):
-1. Quality - Must be genuinely good, well-reviewed, acclaimed by critics OR cult classics
-2. Relevance - Must match user's taste and requested filters closely
-3. Variety - Avoid similar themes/styles, provide diverse picks
-4. Discovery - Favor hidden gems over obvious mainstream blockbusters
-5. REJECT low-rated garbage, generic uninspired content, and poor matches
+ONLY JSON. NO TEXT.`;
 
-IMPORTANT: If a candidate is mediocre or doesn't fit well, DO NOT include it.
-Return FEWER than ${limit} items if the remaining candidates are trash.
-
-Return ONLY valid JSON array with format:
-[
-  {"tmdbId": 12345, "title": "Movie Title", "reason": "Brief explanation why it's great"},
-  ...
-]
-
-Be concise with reasons (max 15 words each). Return empty array [] if ALL candidates are garbage.`;
+      // Debug: log prompt size and first candidate
+      console.debug(`[Gemini Ranking] Prompt length: ${prompt.length} chars, first candidate: ${candidates[0]?.title}`);
 
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 2000,
-          responseMimeType: 'application/json',  // Force JSON output
+          temperature: 0.5,
+          maxOutputTokens: 8000,  // Increased to prevent truncation
         },
       });
 
-      const responseText = result.response.text();
+      // Debug: Check response structure and finish reason
+      const candidate = result.response.candidates?.[0];
+      console.debug(`[Gemini Ranking] Response candidates count: ${result.response.candidates?.length || 0}, finishReason: ${candidate?.finishReason || 'unknown'}`);
 
-      // Parse JSON from response
-      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        console.warn('[Gemini Ranking] No valid JSON in response');
-        // Fallback: return top candidates by rating
-        return candidates
-          .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
-          .slice(0, limit)
-          .map(c => ({ tmdbId: c.tmdbId, title: c.title, reason: 'Top rated' }));
+      const responseText = result.response.text();
+      console.debug(`[Gemini Ranking] Raw response length: ${responseText.length} chars`);
+      console.debug(`[Gemini Ranking] Response content (escaped): ${JSON.stringify(responseText).substring(0, 500)}`);
+
+      // Try parsing directly first (responseMimeType should give clean JSON)
+      let parsed: any[] = [];
+      try {
+        parsed = JSON.parse(responseText);
+        console.debug(`[Gemini Ranking] Direct parse succeeded with ${parsed.length} items`);
+      } catch (directParseError) {
+        console.debug(`[Gemini Ranking] Direct parse failed: ${(directParseError as Error).message}`);
+        // If direct parse fails, try regex extraction
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+          console.warn('[Gemini Ranking] No valid JSON in response, first 300 chars:', JSON.stringify(responseText.substring(0, 300)));
+          // Fallback: return top candidates by rating
+          return candidates
+            .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
+            .slice(0, limit)
+            .map(c => ({ tmdbId: c.tmdbId, title: c.title, reason: 'Top rated' }));
+        }
+        parsed = JSON.parse(jsonMatch[0]);
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
       console.debug(`[Gemini Ranking] Selected ${parsed.length} items from ${candidates.length} candidates`);
 
       return parsed.slice(0, limit);

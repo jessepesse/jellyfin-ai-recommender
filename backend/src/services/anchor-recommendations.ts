@@ -20,12 +20,27 @@ export interface AnchorItem {
 }
 
 /**
+ * Mood to TMDB keywords mapping for contextual filtering
+ * Each mood maps to relevant keywords that indicate matching content
+ */
+export const MOOD_KEYWORDS: Record<string, string[]> = {
+    'mind-bending': ['twist ending', 'nonlinear timeline', 'surreal', 'psychological', 'dream', 'time travel', 'mind game', 'plot twist', 'unreliable narrator'],
+    'dark': ['dark hero', 'violence', 'neo-noir', 'dystopia', 'crime', 'conspiracy', 'revenge', 'serial killer', 'dark comedy', 'moral ambiguity'],
+    'adrenaline': ['car chase', 'explosion', 'fight', 'heist', 'survival', 'action hero', 'martial arts', 'spy', 'chase', 'high stakes'],
+    'chill': ['feel-good', 'friendship', 'slice of life', 'heartwarming', 'cozy', 'comfort', 'small town', 'nature', 'meditation', 'peaceful'],
+    'feel-good': ['comedy', 'romance', 'happy ending', 'family', 'underdog', 'redemption', 'love story', 'friendship', 'wedding', 'coming of age'],
+    'tearjerker': ['tragedy', 'death', 'loss', 'emotional', 'grief', 'terminal illness', 'sacrifice', 'farewell', 'bittersweet', 'tear jerker'],
+    'visual': ['epic', 'visually stunning', 'fantasy world', 'sci-fi', 'beautiful scenery', 'cinematography', 'visual effects', 'futuristic', 'surreal', 'animation'],
+};
+
+/**
  * Get anchor items for a user based on their history
  * Prioritizes recently watched items that have been enriched
  * 
  * @param username - User's username
  * @param mediaType - 'movie' or 'tv' filter (optional)
  * @param genre - Genre name filter (optional, e.g. "Science Fiction", "Drama")
+ * @param mood - Mood filter (optional, e.g. "mind-bending", "dark", "adrenaline")
  * @param limit - Number of anchors to return (default 5)
  * @returns Array of anchor items with enriched metadata
  */
@@ -33,6 +48,7 @@ export async function getAnchorItems(
     username: string,
     mediaType?: string,
     genre?: string,
+    mood?: string,
     limit: number = 5
 ): Promise<AnchorItem[]> {
     // Find user's watched/watchlist items that are enriched
@@ -43,8 +59,9 @@ export async function getAnchorItems(
     if (!user) return [];
 
     // Query media items associated with user that have enrichment data
-    // Fetch more items if we need to filter by genre
-    const fetchLimit = genre ? limit * 4 : limit * 2;
+    // Fetch more items if we need to filter by genre or mood
+    const hasFilters = genre || mood;
+    const fetchLimit = hasFilters ? limit * 5 : limit * 2;
 
     const userMedia = await prisma.userMedia.findMany({
         where: {
@@ -91,6 +108,22 @@ export async function getAnchorItems(
                     g.toLowerCase().includes(genreLower) || genreLower.includes(g.toLowerCase())
                 );
                 if (!hasMatchingGenre) continue;
+            }
+
+            // Filter by mood keywords if specified
+            if (mood && MOOD_KEYWORDS[mood]) {
+                const moodKeywords = MOOD_KEYWORDS[mood];
+                const keywordsLower = keywords.map((k: string) => k.toLowerCase());
+                const hasMatchingKeyword = moodKeywords.some(mk =>
+                    keywordsLower.some((k: string) => k.includes(mk.toLowerCase()) || mk.toLowerCase().includes(k))
+                );
+                if (!hasMatchingKeyword) {
+                    // Don't strictly filter, but deprioritize - only skip if we have enough anchors
+                    if (anchors.length >= limit * 0.5) {
+                        console.debug(`[Anchor] MOOD SKIP: "${media.title}" - keywords [${keywords.slice(0, 3).join(', ')}] don't match mood "${mood}"`);
+                        continue;
+                    }
+                }
             }
 
             // Animation limiter only - prevent all-anime anchor sets
