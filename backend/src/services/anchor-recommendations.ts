@@ -12,6 +12,7 @@ export interface AnchorItem {
     tmdbId: number;
     title: string;
     mediaType: string;
+    genres: string[];
     keywords: string[];
     director?: string;
     similarIds: number[];
@@ -24,12 +25,14 @@ export interface AnchorItem {
  * 
  * @param username - User's username
  * @param mediaType - 'movie' or 'tv' filter (optional)
+ * @param genre - Genre name filter (optional, e.g. "Science Fiction", "Drama")
  * @param limit - Number of anchors to return (default 5)
  * @returns Array of anchor items with enriched metadata
  */
 export async function getAnchorItems(
     username: string,
     mediaType?: string,
+    genre?: string,
     limit: number = 5
 ): Promise<AnchorItem[]> {
     // Find user's watched/watchlist items that are enriched
@@ -40,6 +43,9 @@ export async function getAnchorItems(
     if (!user) return [];
 
     // Query media items associated with user that have enrichment data
+    // Fetch more items if we need to filter by genre
+    const fetchLimit = genre ? limit * 4 : limit * 2;
+
     const userMedia = await prisma.userMedia.findMany({
         where: {
             userId: user.id,
@@ -55,10 +61,14 @@ export async function getAnchorItems(
         orderBy: {
             updatedAt: 'desc',
         },
-        take: limit * 2, // Fetch extra in case some are missing data
+        take: fetchLimit,
     });
 
     const anchors: AnchorItem[] = [];
+
+    // Track Animation count only (no primary genre diversification)
+    let animationCount = 0;
+    const MAX_ANIMATION = 4; // Max 4 animated items out of 10 anchors
 
     for (const um of userMedia) {
         if (anchors.length >= limit) break;
@@ -67,17 +77,38 @@ export async function getAnchorItems(
         if (!media.similarIds && !media.recommendationIds) continue;
 
         try {
+            const genres = media.genres ? JSON.parse(media.genres) : [];
             const keywords = media.keywords ? JSON.parse(media.keywords) : [];
             const similarIds = media.similarIds ? JSON.parse(media.similarIds) : [];
             const recommendationIds = media.recommendationIds ? JSON.parse(media.recommendationIds) : [];
 
             if (similarIds.length === 0 && recommendationIds.length === 0) continue;
 
+            // Filter by genre if specified
+            if (genre) {
+                const genreLower = genre.toLowerCase();
+                const hasMatchingGenre = genres.some((g: string) =>
+                    g.toLowerCase().includes(genreLower) || genreLower.includes(g.toLowerCase())
+                );
+                if (!hasMatchingGenre) continue;
+            }
+
+            // Animation limiter only - prevent all-anime anchor sets
+            const isAnimation = genres.some((g: string) => g.toLowerCase().includes('animation'));
+            if (isAnimation && animationCount >= MAX_ANIMATION) {
+                console.debug(`[Anchor] DIVERSIFY SKIP: "${media.title}" - already have ${MAX_ANIMATION} Animation anchors`);
+                continue;
+            }
+            if (isAnimation) {
+                animationCount++;
+            }
+
             anchors.push({
                 id: media.id,
                 tmdbId: media.tmdbId,
                 title: media.title,
                 mediaType: media.mediaType,
+                genres,
                 keywords,
                 director: media.director || undefined,
                 similarIds,

@@ -50,6 +50,7 @@ export async function enrichMedia(mediaId: number): Promise<boolean> {
         await prisma.media.update({
             where: { id: mediaId },
             data: {
+                genres: JSON.stringify(fullDetails.genres),
                 keywords: JSON.stringify(fullDetails.keywords),
                 director: fullDetails.director || null,
                 topCast: JSON.stringify(fullDetails.topCast),
@@ -60,7 +61,7 @@ export async function enrichMedia(mediaId: number): Promise<boolean> {
             },
         });
 
-        console.info(`[Enrichment] Successfully enriched ${media.title}: ${fullDetails.keywords.length} keywords, ${fullDetails.topCast.length} cast, ${fullDetails.similar.length} similar, ${fullDetails.recommendations.length} recommendations`);
+        console.info(`[Enrichment] Successfully enriched ${media.title}: ${fullDetails.genres.length} genres, ${fullDetails.keywords.length} keywords, ${fullDetails.topCast.length} cast, ${fullDetails.similar.length} similar, ${fullDetails.recommendations.length} recommendations`);
         return true;
     } catch (error: any) {
         console.error(`[Enrichment] Error enriching media ${mediaId}:`, error?.message || error);

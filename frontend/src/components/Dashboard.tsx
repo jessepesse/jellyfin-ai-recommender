@@ -10,7 +10,12 @@ import SegmentedControl from './SegmentedControl';
 import FilterGroup from './FilterGroup';
 import HeroButton from './HeroButton';
 
-const GENRES = ['Action', 'Comedy', 'Drama', 'Sci-Fi', 'Horror', 'Romance', 'Documentary', 'Animation', 'Thriller'];
+// Official TMDB genre names for proper matching with enriched data
+const GENRES = [
+  'Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
+  'Documentary', 'Drama', 'Fantasy', 'Horror', 'Mystery',
+  'Romance', 'Science Fiction', 'Thriller', 'War', 'Western'
+];
 
 const MOODS = [
   { id: 'chill', label: 'Chill & Comfort 🛋️' },

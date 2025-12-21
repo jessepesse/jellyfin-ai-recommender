@@ -9,10 +9,11 @@ import { getUserData, getFullWatchlist } from '../services/data';
 import prisma from '../services/data';
 import { GeminiService } from '../services/gemini';
 import { TasteService } from '../services/taste';
-import { search as jellySearch, Enriched } from '../services/jellyseerr';
+import { search as jellySearch, Enriched, getMediaDetails } from '../services/jellyseerr';
 import { CacheService } from '../services/cache';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
+import { getAnchorItems, collectCandidateIds, buildAnchorContext } from '../services/anchor-recommendations';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
@@ -164,6 +165,114 @@ router.get('/recommendations', async (req, res) => {
 
         const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}_${filters.mood || 'any'}`;
         let buffer = CacheService.get<Enriched[]>('recommendations', cacheKey) || [];
+
+        // --- ANCHOR-BASED CANDIDATE PRE-FETCH ---
+        // Try to get candidates from user's enriched history first
+        const mediaTypeFilter = filters.type === 'tv' ? 'tv' : filters.type === 'movie' ? 'movie' : undefined;
+        const genreFilter = filters.genre || undefined;
+        const anchors = await getAnchorItems(userName || userId, mediaTypeFilter, genreFilter, 10);
+
+        if (anchors.length > 0 && buffer.length < TARGET_COUNT) {
+            const anchorGenres = anchors.flatMap(a => a.genres).slice(0, 3);
+            console.debug(`[Anchor] Found ${anchors.length} anchor items for ${userName || userId} (genres: ${anchorGenres.join(', ') || 'any'})`);
+            const candidateIds = collectCandidateIds(anchors, excludedIds);
+            console.debug(`[Anchor] Collected ${candidateIds.length} candidate IDs from anchors`);
+
+            // Fetch details for candidates (limit to 50 to allow for filtering)
+            const candidateType: 'movie' | 'tv' = filters.type === 'tv' ? 'tv' : 'movie';
+            const { getFullDetails } = await import('../services/jellyseerr');
+
+            // Phase 1: Collect all matching candidates with their details
+            const candidatesForRanking: Array<{
+                tmdbId: number;
+                title: string;
+                genres: string[];
+                overview?: string;
+                voteAverage?: number;
+            }> = [];
+
+            for (const tmdbId of candidateIds.slice(0, 80)) {
+                if (candidatesForRanking.length >= 40) break; // Collect enough for Gemini to have good selection
+
+                // Check if already in any exclusion list BEFORE fetching details
+                if (excludedIds.has(tmdbId)) {
+                    console.debug(`[Anchor] SKIP: "${tmdbId}" - already in exclusion list`);
+                    continue;
+                }
+
+                try {
+                    const fullDetails = await getFullDetails(tmdbId, candidateType);
+                    if (!fullDetails) continue;
+
+                    // Filter by genre if specified
+                    if (genreFilter) {
+                        const genreLower = genreFilter.toLowerCase();
+                        const hasMatchingGenre = fullDetails.genres.some((g: string) =>
+                            g.toLowerCase().includes(genreLower) || genreLower.includes(g.toLowerCase())
+                        );
+                        if (!hasMatchingGenre) {
+                            console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match "${genreFilter}"`);
+                            continue;
+                        }
+                    }
+
+                    // Get basic details
+                    const details = await getMediaDetails(tmdbId, candidateType);
+                    if (details && details.tmdb_id) {
+                        candidatesForRanking.push({
+                            tmdbId: details.tmdb_id,
+                            title: details.title,
+                            genres: fullDetails.genres,
+                            overview: details.overview,
+                            voteAverage: details.voteAverage,
+                        });
+                        console.debug(`[Anchor] CANDIDATE: "${details.title}" [${fullDetails.genres.slice(0, 2).join(', ')}] ⭐${details.voteAverage?.toFixed(1) || 'N/A'}`);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 25));
+                } catch (e) {
+                    // Skip failed fetches
+                }
+            }
+
+            console.debug(`[Anchor] Collected ${candidatesForRanking.length} candidates for Gemini ranking`);
+
+            // Phase 2: Send to Gemini for quality ranking
+            if (candidatesForRanking.length > 0) {
+                let tasteProfile = await TasteService.getProfile(userName || userId, candidateType);
+                const recentFavorites = anchors.slice(0, 3).map(a => a.title);
+
+                const rankedCandidates = await GeminiService.rankCandidates(
+                    candidatesForRanking,
+                    {
+                        tasteProfile: tasteProfile || undefined,
+                        recentFavorites,
+                        requestedGenre: genreFilter,
+                        requestedMood: filters.mood,
+                    },
+                    TARGET_COUNT - buffer.length
+                );
+
+                console.debug(`[Gemini Ranking] Approved ${rankedCandidates.length} items`);
+
+                // Phase 3: Add Gemini-approved items to buffer
+                for (const ranked of rankedCandidates) {
+                    if (buffer.length >= TARGET_COUNT) break;
+                    const candidate = candidatesForRanking.find(c => c.tmdbId === ranked.tmdbId);
+                    if (!candidate) continue;
+
+                    // Fetch full enriched data for the approved item
+                    const details = await getMediaDetails(ranked.tmdbId, candidateType);
+                    if (details && details.tmdb_id && !buffer.find(b => Number(b.tmdb_id) === ranked.tmdbId)) {
+                        buffer.push(details);
+                        excludedIds.add(ranked.tmdbId);
+                        console.log(`[Anchor+Gemini] ACCEPT: "${ranked.title}" - ${ranked.reason}`);
+                    }
+                }
+            }
+
+            console.debug(`[Anchor] Buffer now has ${buffer.length}/${TARGET_COUNT} items`);
+        }
+        // --- END ANCHOR-BASED PRE-FETCH ---
 
         let attempts = 0;
         while ((buffer.length < TARGET_COUNT) && attempts < MAX_ATTEMPTS) {

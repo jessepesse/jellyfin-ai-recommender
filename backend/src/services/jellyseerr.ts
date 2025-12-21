@@ -415,6 +415,7 @@ export async function getRecommendations(tmdbId: number, mediaType: 'movie' | 't
  * Full details response type with enriched metadata
  */
 export type FullMediaDetails = {
+  genres: string[];  // TMDB genre names: ["Science Fiction", "Action"]
   keywords: string[];
   director?: string;
   topCast: string[];
@@ -449,6 +450,12 @@ export async function getFullDetails(tmdbId: number, mediaType: 'movie' | 'tv'):
 
     if (!data) return null;
 
+    // Extract genres
+    const genresData = data.genres || [];
+    const genres = (Array.isArray(genresData) ? genresData : [])
+      .map((g: any) => g.name || g)
+      .filter(Boolean);
+
     // Extract keywords
     const keywordsData = data.keywords?.keywords || data.keywords?.results || data.keywords || [];
     const keywords = (Array.isArray(keywordsData) ? keywordsData : [])
@@ -474,6 +481,7 @@ export async function getFullDetails(tmdbId: number, mediaType: 'movie' | 'tv'):
     ]);
 
     const result: FullMediaDetails = {
+      genres,
       keywords,
       director,
       topCast,
@@ -483,7 +491,7 @@ export async function getFullDetails(tmdbId: number, mediaType: 'movie' | 'tv'):
     };
 
     CacheService.set('jellyseerr', cacheKey, result);
-    console.debug(`[Jellyseerr] Full details fetched for ${mediaType} ${tmdbId}: ${keywords.length} keywords, ${topCast.length} cast`);
+    console.debug(`[Jellyseerr] Full details fetched for ${mediaType} ${tmdbId}: ${genres.length} genres, ${keywords.length} keywords, ${topCast.length} cast`);
     return result;
   } catch (e: any) {
     console.error(`[Jellyseerr] Error fetching full details for ${mediaType} ${tmdbId}:`, e?.response?.data || e.message || e);

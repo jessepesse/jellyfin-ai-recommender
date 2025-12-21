@@ -391,5 +391,122 @@ Constraints:
 
     return [];
   }
+
+  /**
+   * Rank and filter anchor-based candidates using Gemini
+   * Takes pre-fetched TMDB candidates and asks Gemini to evaluate quality and relevance
+   * 
+   * @param candidates - Array of candidate objects with title, genres, overview
+   * @param userContext - User's taste profile and preferences
+   * @param filters - Genre, mood, type filters
+   * @param limit - Max results to return (default 10)
+   * @returns Ranked array of candidate titles with reasons
+   */
+  static async rankCandidates(
+    candidates: Array<{
+      tmdbId: number;
+      title: string;
+      genres: string[];
+      overview?: string;
+      voteAverage?: number;
+    }>,
+    userContext: {
+      tasteProfile?: string;
+      recentFavorites?: string[];
+      requestedGenre?: string;
+      requestedMood?: string;
+    },
+    limit: number = 10
+  ): Promise<Array<{ tmdbId: number; title: string; reason: string }>> {
+    if (candidates.length === 0) return [];
+
+    try {
+      const { client, model, modelName } = await buildClientAndModel();
+      console.debug(`[Gemini Ranking] Using model: ${modelName} for ${candidates.length} candidates`);
+
+      // Format candidates for prompt
+      const candidateList = candidates.slice(0, 30).map((c, i) =>
+        `${i + 1}. "${c.title}" [${c.genres.join(', ')}] - Rating: ${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || 'No description').substring(0, 100)}...`
+      ).join('\n');
+
+      // Build context
+      const tasteContext = userContext.tasteProfile
+        ? `User's taste profile: ${userContext.tasteProfile}`
+        : '';
+      const favoritesContext = userContext.recentFavorites?.length
+        ? `Recent favorites: ${userContext.recentFavorites.slice(0, 5).join(', ')}`
+        : '';
+      const genreContext = userContext.requestedGenre
+        ? `Requested genre: ${userContext.requestedGenre}`
+        : '';
+      const moodContext = userContext.requestedMood
+        ? `Requested mood: ${userContext.requestedMood}`
+        : '';
+
+      const prompt = `You are a harsh film critic evaluating movie/TV recommendations. You have HIGH STANDARDS.
+
+${tasteContext}
+${favoritesContext}
+${genreContext}
+${moodContext}
+
+CANDIDATES TO EVALUATE:
+${candidateList}
+
+TASK: Select UP TO ${limit} BEST recommendations from the candidates above.
+
+QUALITY CRITERIA (be strict!):
+1. Quality - Must be genuinely good, well-reviewed, acclaimed by critics OR cult classics
+2. Relevance - Must match user's taste and requested filters closely
+3. Variety - Avoid similar themes/styles, provide diverse picks
+4. Discovery - Favor hidden gems over obvious mainstream blockbusters
+5. REJECT low-rated garbage, generic uninspired content, and poor matches
+
+IMPORTANT: If a candidate is mediocre or doesn't fit well, DO NOT include it.
+Return FEWER than ${limit} items if the remaining candidates are trash.
+
+Return ONLY valid JSON array with format:
+[
+  {"tmdbId": 12345, "title": "Movie Title", "reason": "Brief explanation why it's great"},
+  ...
+]
+
+Be concise with reasons (max 15 words each). Return empty array [] if ALL candidates are garbage.`;
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2000,
+          responseMimeType: 'application/json',  // Force JSON output
+        },
+      });
+
+      const responseText = result.response.text();
+
+      // Parse JSON from response
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        console.warn('[Gemini Ranking] No valid JSON in response');
+        // Fallback: return top candidates by rating
+        return candidates
+          .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
+          .slice(0, limit)
+          .map(c => ({ tmdbId: c.tmdbId, title: c.title, reason: 'Top rated' }));
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.debug(`[Gemini Ranking] Selected ${parsed.length} items from ${candidates.length} candidates`);
+
+      return parsed.slice(0, limit);
+    } catch (e: any) {
+      console.error('[Gemini Ranking] Error:', e?.message || e);
+      // Fallback: return top candidates by rating
+      return candidates
+        .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
+        .slice(0, limit)
+        .map(c => ({ tmdbId: c.tmdbId, title: c.title, reason: 'Fallback recommendation' }));
+    }
+  }
 }
 

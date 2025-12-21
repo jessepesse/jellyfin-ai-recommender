@@ -16,6 +16,7 @@ import apiRouter from './routes/api';
 import authRouter from './routes/auth'; // Import new auth router
 import statsRouter from './routes/stats';
 import { runMetadataBackfill } from './services/metadataBackfill';
+import { runEnrichmentBackfill } from './services/enrichment';
 import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 import swaggerUi from 'swagger-ui-express';
@@ -187,24 +188,28 @@ app.listen(port, () => {
     try {
       logger.info('Triggering metadata backfill at startup...');
       await runMetadataBackfill();
+      // Run enrichment backfill after metadata backfill
+      logger.info('Triggering enrichment backfill at startup...');
+      await runEnrichmentBackfill();
     } catch (e) {
-      logger.error({ err: e }, 'Startup metadata backfill failed');
+      logger.error({ err: e }, 'Startup backfill failed');
     }
   })();
 
   // Schedule daily backfill at 03:00 server time
   try {
     cron.schedule('0 3 * * *', async () => {
-      logger.info('Scheduled metadata backfill triggered (daily at 03:00)');
+      logger.info('Scheduled backfill triggered (daily at 03:00)');
       try {
         await runMetadataBackfill();
+        await runEnrichmentBackfill();
       } catch (e) {
-        logger.error({ err: e }, 'Scheduled metadata backfill failed');
+        logger.error({ err: e }, 'Scheduled backfill failed');
       }
     });
-    logger.info('Scheduled daily metadata backfill at 03:00');
+    logger.info('Scheduled daily backfill at 03:00');
   } catch (e) {
-    logger.warn({ err: e }, 'Failed to schedule metadata backfill');
+    logger.warn({ err: e }, 'Failed to schedule backfill');
   }
 });
 

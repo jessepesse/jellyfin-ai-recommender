@@ -37,6 +37,7 @@ model Media {
   releaseYear String?
   
   // Enriched metadata (Phase 1)
+  genres            String?   // JSON array: ["Science Fiction", "Action", "Drama"]
   keywords          String?   // JSON array: ["cyberpunk", "dystopia", "neo-noir"]
   director          String?   // "Denis Villeneuve"
   topCast           String?   // JSON array: ["Ryan Gosling", "Ana de Armas"]
