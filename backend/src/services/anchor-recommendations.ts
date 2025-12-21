@@ -59,27 +59,62 @@ export async function getAnchorItems(
     if (!user) return [];
 
     // Query media items associated with user that have enrichment data
-    // Fetch more items if we need to filter by genre or mood
+    // Fetch WATCHED and WATCHLIST separately for balanced selection
     const hasFilters = genre || mood;
-    const fetchLimit = hasFilters ? limit * 5 : limit * 2;
+    const fetchLimit = hasFilters ? limit * 3 : limit * 2;  // Per status
 
-    const userMedia = await prisma.userMedia.findMany({
+    // Fetch WATCHED items
+    const watchedMedia = await prisma.userMedia.findMany({
         where: {
             userId: user.id,
-            status: { in: ['WATCHED', 'WATCHLIST'] },
+            status: 'WATCHED',
             media: {
                 enrichedAt: { not: null },
                 ...(mediaType ? { mediaType } : {}),
             },
         },
-        include: {
-            media: true,
-        },
-        orderBy: {
-            updatedAt: 'desc',
-        },
+        include: { media: true },
         take: fetchLimit,
     });
+
+    // Fetch WATCHLIST items
+    const watchlistMedia = await prisma.userMedia.findMany({
+        where: {
+            userId: user.id,
+            status: 'WATCHLIST',
+            media: {
+                enrichedAt: { not: null },
+                ...(mediaType ? { mediaType } : {}),
+            },
+        },
+        include: { media: true },
+        take: fetchLimit,
+    });
+
+    // Shuffle function for randomization
+    const shuffle = <T>(arr: T[]): T[] => {
+        const shuffled = [...arr];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    };
+
+    // Shuffle both arrays and combine (half from each, balanced selection)
+    const shuffledWatched = shuffle(watchedMedia);
+    const shuffledWatchlist = shuffle(watchlistMedia);
+
+    // Interleave: take alternating items from each list for diversity
+    const combined: typeof watchedMedia = [];
+    const halfLimit = Math.ceil(limit);  // Target ~5 from each
+    let wIdx = 0, lIdx = 0;
+    while (combined.length < fetchLimit * 2 && (wIdx < shuffledWatched.length || lIdx < shuffledWatchlist.length)) {
+        if (wIdx < shuffledWatched.length) combined.push(shuffledWatched[wIdx++]);
+        if (lIdx < shuffledWatchlist.length) combined.push(shuffledWatchlist[lIdx++]);
+    }
+
+    console.debug(`[Anchor] Fetched ${watchedMedia.length} WATCHED, ${watchlistMedia.length} WATCHLIST items (shuffled)`);
 
     const anchors: AnchorItem[] = [];
 
@@ -87,7 +122,7 @@ export async function getAnchorItems(
     let animationCount = 0;
     const MAX_ANIMATION = 4; // Max 4 animated items out of 10 anchors
 
-    for (const um of userMedia) {
+    for (const um of combined) {
         if (anchors.length >= limit) break;
 
         const media = um.media;
