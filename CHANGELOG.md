@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+---
+
+## [2.2.0] - 2025-12-24
+
 ### ✨ Features
 
 - **TMDB Enrichment**: Extended Media schema with genres, keywords, director, topCast, similarIds, recommendationIds
@@ -37,6 +41,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Deep pagination (5 pages/100 items) ensures fresh content after filtering
   - Integrated Jellyseerr status checking for accurate request state filtering
   - Added "Trending" navigation item to sidebar
+- **Admin-Only Settings**: Restrict Settings page to Jellyfin administrators
+  - Extract `Policy.IsAdministrator` from Jellyfin auth response
+  - Store admin status in localStorage
+  - Conditionally render Settings in sidebar
+  - Access denied message for non-admin users
 
 ### 🔧 Technical
 
@@ -52,6 +61,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### 🐛 Bug Fixes
 
 - **Modal Action Buttons**: Fixed buttons in info modal not removing items from view and not closing the modal after action.
+- **Database Initialization**: Fixed startup crash by updating default database path from Docker-specific `/app/data/dev.db` to local `./dev.db`
+- **Login UX**: Server URL field now pre-fills from localStorage or backend config
 
 ---
 
