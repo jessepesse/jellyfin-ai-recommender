@@ -12,11 +12,14 @@ const CONFIG_TTL_SECONDS = 30; // 30 seconds for config (matches ConfigService)
 const JELLYSEERR_TTL_SECONDS = 60 * 60 * 12; // 12 hours for Jellyseerr data
 
 // Cache namespaces
-export type CacheNamespace = 
+export type CacheNamespace =
   | 'recommendations'
   | 'jellyseerr'
   | 'config'
   | 'taste'
+  | 'tmdb'
+  | 'discover'
+  | 'api'
   | 'general';
 
 // Internal cache instance
@@ -39,6 +42,9 @@ function getTTLForNamespace(namespace: CacheNamespace): number {
       return CONFIG_TTL_SECONDS;
     case 'taste':
       return RECOMMENDATION_TTL_SECONDS;
+    case 'tmdb':
+    case 'discover':
+      return JELLYSEERR_TTL_SECONDS; // 12 hours for TMDB data
     default:
       return DEFAULT_TTL_SECONDS;
   }

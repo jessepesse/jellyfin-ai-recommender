@@ -436,7 +436,7 @@ Constraints:
 
       // Format candidates for prompt
       const candidateList = candidates.slice(0, 30).map((c, i) =>
-        `${i + 1}. "${c.title}" [${c.genres.join(', ')}] - Rating: ${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || 'No description').substring(0, 100)}...`
+        `${i + 1}. [ID:${c.tmdbId}] "${c.title}" [${c.genres.join(', ')}] - Rating: ${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || 'No description').substring(0, 100)}...`
       ).join('\n');
 
       // Build context
@@ -464,7 +464,7 @@ Constraints:
         ? `CRITICAL - User wants this mood: ${moodDescriptions[userContext.requestedMood]}. PRIORITIZE titles matching this mood!`
         : '';
 
-      const prompt = `You are a movie recommender. Pick the ${limit} best titles from this list for a user.
+      const prompt = `You have a list of real candidates here. Select ${limit} that will **blow this user's mind**.
 
 ${tasteContext}
 ${favoritesContext}
@@ -527,6 +527,367 @@ ONLY JSON. NO TEXT.`;
         .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
         .slice(0, limit)
         .map(c => ({ tmdbId: c.tmdbId, title: c.title, reason: 'Fallback recommendation' }));
+    }
+  }
+
+  /**
+   * Analyze user's watch history and extract taste preferences for TMDB Discover
+   * Returns semantic data (genre names, keywords) NOT TMDB IDs
+   * 
+   * @param watchHistory - User's watched items with basic metadata
+   * @param mediaType - 'movie' or 'tv'
+   * @returns Structured taste analysis for building TMDB Discover queries
+   */
+  static async analyzeUserTaste(
+    watchHistory: Array<{
+      title: string;
+      genres: string[];
+      year?: number;
+      rating?: number;
+    }>,
+    mediaType: 'movie' | 'tv'
+  ): Promise<{
+    tasteProfile: string;
+    genres: string[];
+    keywords: string[];
+    yearRange: [number, number] | null;
+    minRating: number;
+  }> {
+    if (watchHistory.length === 0) {
+      return {
+        tasteProfile: 'Not enough watch history to analyze preferences.',
+        genres: ['Drama', 'Comedy'],
+        keywords: [],
+        yearRange: null,
+        minRating: 6.5,
+      };
+    }
+
+    try {
+      const cfg = await ConfigService.getConfig();
+      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
+      const apiKey = rawKey.trim();
+      if (!apiKey) throw new Error('Gemini API key not configured');
+
+      const googleClient = new GoogleGenerativeAI(apiKey);
+      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
+      const model = googleClient.getGenerativeModel({ model: modelName });
+
+      // Format watch history for prompt
+      const historyList = watchHistory.slice(0, 50).map(item =>
+        `- "${item.title}" (${item.year || 'N/A'}) [${item.genres.join(', ')}] ${item.rating ? `★${item.rating.toFixed(1)}` : ''}`
+      ).join('\n');
+
+      const prompt = `Analyze this user's ${mediaType === 'movie' ? 'movie' : 'TV show'} watch history and identify their preferences.
+
+WATCH HISTORY:
+${historyList}
+
+Based on this history, provide a JSON analysis with:
+1. tasteProfile: One engaging sentence describing their taste (e.g., "You love dark psychological thrillers with complex characters")
+2. genres: Array of 2-4 genre names they prefer (use standard genre names like: Action, Comedy, Drama, Thriller, Horror, Romance, Sci-Fi, Fantasy, Documentary, Crime, Mystery, Animation)
+3. keywords: Array of EXACTLY 6 thematic keywords for TMDB search. Use SIMPLE words that TMDB recognizes:
+   - GOOD: "heist", "dystopia", "noir", "revenge", "conspiracy", "time travel", "serial killer", "robot"
+   - BAD: "prestige drama", "found family", "character study" (too complex, won't match)
+4. yearRange: [startYear, endYear] if they have a specific era preference, or null if no preference
+5. minRating: Recommended minimum rating threshold (6.0-8.0)
+
+Return ONLY valid JSON:
+{
+  "tasteProfile": "...",
+  "genres": ["Drama", "Thriller"],
+  "keywords": ["heist", "noir", "conspiracy", "revenge", "thriller", "crime"],
+  "yearRange": null,
+  "minRating": 7.0
+}`;
+
+      console.debug(`[Gemini Taste] Analyzing ${watchHistory.length} ${mediaType} items`);
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 8000,
+        },
+      });
+
+      const responseText = result.response.text();
+      console.debug(`[Gemini Taste] Response length: ${responseText.length} chars`);
+
+      // Try to parse JSON - handle markdown code blocks
+      let parsed: any;
+      let cleanedText = responseText.trim();
+
+      // Remove markdown code blocks if present
+      if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      }
+
+      try {
+        parsed = JSON.parse(cleanedText);
+      } catch {
+        // Try to extract JSON object from response
+        const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            parsed = JSON.parse(jsonMatch[0]);
+          } catch (innerErr) {
+            console.debug(`[Gemini Taste] JSON extraction failed, raw response: ${cleanedText.substring(0, 200)}`);
+            throw new Error('No valid JSON in response');
+          }
+        } else {
+          console.debug(`[Gemini Taste] No JSON found, raw response: ${cleanedText.substring(0, 200)}`);
+          throw new Error('No valid JSON in response');
+        }
+      }
+
+      console.debug(`[Gemini Taste] Analysis complete: ${parsed.genres?.length || 0} genres, ${parsed.keywords?.length || 0} keywords`);
+
+      return {
+        tasteProfile: parsed.tasteProfile || 'Personalized picks curated just for you! 🎬',
+        genres: Array.isArray(parsed.genres) ? parsed.genres.slice(0, 4) : ['Drama'],
+        keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 6) : [],
+        yearRange: Array.isArray(parsed.yearRange) && parsed.yearRange.length === 2 ? parsed.yearRange : null,
+        minRating: typeof parsed.minRating === 'number' ? Math.max(5, Math.min(9, parsed.minRating)) : 6.5,
+      };
+    } catch (e: any) {
+      console.error('[Gemini Taste] Analysis failed:', e?.message || e);
+      // Fallback: extract most common genres from history
+      const genreCounts: Record<string, number> = {};
+      watchHistory.forEach(item => {
+        item.genres.forEach(g => {
+          genreCounts[g] = (genreCounts[g] || 0) + 1;
+        });
+      });
+      const topGenres = Object.entries(genreCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+
+      return {
+        tasteProfile: `We've handpicked these based on your love for ${topGenres.slice(0, 2).join(' & ') || 'great content'}! 🍿`,
+        genres: topGenres.length > 0 ? topGenres : ['Drama', 'Comedy'],
+        keywords: [],
+        yearRange: null,
+        minRating: 6.5,
+      };
+    }
+  }
+
+  // ==========================================
+  // DUAL-AI SYSTEM FOR WEEKLY PICKS
+  // ==========================================
+
+  /**
+   * CURATOR AGENT: Discovery specialist that finds hidden gems
+   * Selects candidates from TMDB pool and provides 1-sentence justification for each
+   * 
+   * @param candidates - TMDB candidates with metadata
+   * @param userTaste - User's taste profile from analyzeUserTaste()
+   * @param limit - Number of candidates to select (default 100)
+   * @returns Candidates with justifications
+   */
+  static async curatorDiscover(
+    candidates: Array<{
+      tmdbId: number;
+      title: string;
+      overview?: string;
+      genres: string[];
+      voteAverage?: number;
+    }>,
+    userTaste: {
+      tasteProfile: string;
+      genres: string[];
+      keywords: string[];
+    },
+    limit: number = 100
+  ): Promise<Array<{ tmdbId: number; title: string; reason: string }>> {
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    try {
+      const cfg = await ConfigService.getConfig();
+      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
+      const apiKey = rawKey.trim();
+      if (!apiKey) throw new Error('Gemini API key not configured');
+
+      const googleClient = new GoogleGenerativeAI(apiKey);
+      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
+      const model = googleClient.getGenerativeModel({ model: modelName });
+
+      console.debug(`[Curator] Processing ${candidates.length} candidates for user with taste: ${userTaste.tasteProfile.substring(0, 50)}...`);
+
+      // Format candidates (limit to first 150 to avoid token limits)
+      const candidateList = candidates.slice(0, 150).map((c, i) =>
+        `${i + 1}. [ID:${c.tmdbId}] "${c.title}" [${c.genres.join(', ')}] ★${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || '').substring(0, 80)}...`
+      ).join('\n');
+
+      const prompt = `You are a CURATOR - a film recommendation expert.
+
+USER TASTE PROFILE:
+"${userTaste.tasteProfile}"
+Preferred genres: ${userTaste.genres.join(', ')}
+Thematic interests: ${userTaste.keywords.join(', ')}
+
+CANDIDATE POOL (${candidates.length} titles):
+${candidateList}
+
+YOUR TASK:
+Select the ${limit} BEST matches for this user. For each, provide a 1-sentence reason why it fits their taste.
+
+Focus on:
+- HIGH QUALITY titles with good ratings (★7.0+)
+- Excellent matches for their genre preferences
+- Mix of acclaimed classics AND newer releases
+- Titles they will genuinely enjoy
+
+Return ONLY a valid JSON array (no markdown, no explanation):
+[{"tmdbId": 123, "title": "Example", "reason": "Compelling drama matching your taste"}, ...]
+
+IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.6,
+          maxOutputTokens: 16000,
+        },
+      });
+
+      const responseText = result.response.text();
+      console.debug(`[Curator] Response length: ${responseText.length} chars`);
+
+      // Parse JSON
+      let parsed: Array<{ tmdbId: number; title: string; reason: string }> = [];
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No valid JSON in Curator response');
+        }
+      }
+
+      console.debug(`[Curator] Selected ${parsed.length} candidates with reasons`);
+      return parsed.slice(0, limit);
+
+    } catch (e: any) {
+      console.error('[Curator] Error:', e?.message || e);
+      // Fallback: return top candidates by rating with generic reason
+      return candidates
+        .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
+        .slice(0, limit)
+        .map(c => ({ tmdbId: c.tmdbId, title: c.title, reason: 'Top-rated in your preferred genres' }));
+    }
+  }
+
+  /**
+   * CRITIC AGENT: Quality guardian that ensures only 5/5 content passes
+   * Reviews Curator's picks and selects only the absolute best
+   * 
+   * @param curatorPicks - Candidates selected by Curator with reasons
+   * @param blocklist - TMDB IDs the user has blocked
+   * @param limit - Final number to select (default 10)
+   * @returns Top picks (WOW-factor only)
+   */
+  static async criticSelect(
+    curatorPicks: Array<{ tmdbId: number; title: string; reason: string }>,
+    blocklist: number[],
+    limit: number = 10
+  ): Promise<Array<{ tmdbId: number; title: string }>> {
+    if (curatorPicks.length === 0) {
+      return [];
+    }
+
+    // Pre-filter obvious blocklist matches
+    const filtered = curatorPicks.filter(p => !blocklist.includes(p.tmdbId));
+
+    if (filtered.length <= limit) {
+      // Not enough candidates, return all
+      return filtered.map(p => ({ tmdbId: p.tmdbId, title: p.title }));
+    }
+
+    try {
+      const cfg = await ConfigService.getConfig();
+      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
+      const apiKey = rawKey.trim();
+      if (!apiKey) throw new Error('Gemini API key not configured');
+
+      const googleClient = new GoogleGenerativeAI(apiKey);
+      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
+      const model = googleClient.getGenerativeModel({ model: modelName });
+
+      console.debug(`[Critic] Reviewing ${filtered.length} candidates, blocklist size: ${blocklist.length}`);
+
+      // Format curator picks with their reasons
+      const picksList = filtered.map((p, i) =>
+        `${i + 1}. [ID:${p.tmdbId}] "${p.title}"\n   Curator's reason: ${p.reason}`
+      ).join('\n');
+
+      const prompt = `You are a CRITIC - a quality guardian who ensures great recommendations.
+
+BLOCKLIST IDs (user rejected these, avoid similar content):
+${blocklist.slice(0, 50).join(', ') || '(none)'}
+
+CURATOR'S PICKS (with reasons):
+${picksList}
+
+YOUR TASK:
+From these ${filtered.length} options, select the TOP ${limit} that best match the user's taste.
+
+SELECTION CRITERIA:
+- Strong match to user's preferences
+- High quality, well-rated content
+- NOT similar to blocklist content
+- Curator's reason is compelling
+
+Return ONLY a valid JSON array (no markdown, no explanation):
+[{"tmdbId": 123, "title": "Example"}, ...]
+
+IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 16000,
+        },
+      });
+
+      const responseText = result.response.text();
+      console.debug(`[Critic] Response length: ${responseText.length} chars`);
+      console.debug(`[Critic] Raw response: ${responseText.substring(0, 300)}`);
+
+      // Parse JSON - handle markdown code blocks
+      let parsed: Array<{ tmdbId: number; title: string }> = [];
+      let cleanedText = responseText.trim();
+
+      // Remove markdown code blocks if present
+      if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      }
+
+      try {
+        parsed = JSON.parse(cleanedText);
+      } catch {
+        const jsonMatch = cleanedText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No valid JSON in Critic response');
+        }
+      }
+
+      console.debug(`[Critic] Approved ${parsed.length} titles from ${filtered.length} candidates`);
+      return parsed.slice(0, limit);
+
+    } catch (e: any) {
+      console.error('[Critic] Error:', e?.message || e);
+      // Fallback: return first N from filtered list
+      return filtered.slice(0, limit).map(p => ({ tmdbId: p.tmdbId, title: p.title }));
     }
   }
 }

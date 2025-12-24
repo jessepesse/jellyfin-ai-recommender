@@ -166,6 +166,32 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
     } catch (logErr) {
       console.warn('[Jellyseerr Verify] FAILED: (log failed)', logErr);
     }
+
+    // FALLBACK: Try direct TMDB search if configured
+    try {
+      const { searchByTitle } = await import('./tmdb-discover');
+      const tmdbResult = await searchByTitle(queryTitle, yearStr || undefined, typeStr as 'movie' | 'tv' | undefined);
+
+      if (tmdbResult) {
+        const enriched: Enriched = {
+          title: tmdbResult.title,
+          overview: tmdbResult.overview,
+          posterUrl: tmdbResult.posterUrl,
+          backdropUrl: tmdbResult.backdropUrl,
+          voteAverage: tmdbResult.voteAverage,
+          tmdb_id: tmdbResult.tmdb_id,
+          media_type: tmdbResult.media_type,
+          releaseDate: tmdbResult.releaseDate,
+        };
+        CacheService.set('jellyseerr', cacheKey, enriched);
+        console.debug(`[TMDB Fallback] SUCCESS: Found "${tmdbResult.title}" via direct TMDB`);
+        return enriched;
+      }
+    } catch (tmdbErr: any) {
+      // TMDB fallback failed - continue with null result
+      console.debug('[TMDB Fallback] Skipped:', tmdbErr?.message || 'not configured');
+    }
+
     CacheService.set('jellyseerr', cacheKey, null);
     return null;
   } catch (e: any) {

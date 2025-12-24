@@ -15,8 +15,10 @@ import { logger } from './utils/logger';
 import apiRouter from './routes/api';
 import authRouter from './routes/auth'; // Import new auth router
 import statsRouter from './routes/stats';
+import weeklyWatchlistRouter from './routes/weekly-watchlist';
 import { runMetadataBackfill } from './services/metadataBackfill';
 import { runEnrichmentBackfill } from './services/enrichment';
+import { initScheduler, checkStaleWatchlists } from './services/scheduler';
 import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 import swaggerUi from 'swagger-ui-express';
@@ -136,6 +138,9 @@ app.use('/api/system/verify', setupLimiter);
 app.use('/api/settings/import', importLimiter); // Special handling for imports
 app.use('/api', generalLimiter); // General limiter for all other endpoints
 
+// Weekly Watchlist route
+app.use('/api/weekly-watchlist', weeklyWatchlistRouter);
+
 // Serve static images from local storage
 // Images are downloaded and cached to prevent broken links when Jellyseerr IP changes
 const imageDir = env.IMAGE_DIR;
@@ -176,6 +181,8 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', apiRouter);
 app.use('/api/auth', authRouter); // Mount auth router
 app.use('/api/stats', statsRouter);
+import trendingRouter from './routes/trending';
+app.use('/api/trending', trendingRouter);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
 // Centralized error handling middleware (must be after routes)
@@ -191,6 +198,11 @@ app.listen(port, () => {
       // Run enrichment backfill after metadata backfill
       logger.info('Triggering enrichment backfill at startup...');
       await runEnrichmentBackfill();
+      // Initialize scheduler for weekly watchlist
+      initScheduler();
+      // Check for stale weekly watchlists
+      logger.info('Checking for stale weekly watchlists...');
+      await checkStaleWatchlists();
     } catch (e) {
       logger.error({ err: e }, 'Startup backfill failed');
     }

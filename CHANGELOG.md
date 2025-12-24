@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+### ✨ Features
+
+- **TMDB Enrichment**: Extended Media schema with genres, keywords, director, topCast, similarIds, recommendationIds
+  - Added `getFullDetails()` to fetch enriched TMDB data including genres and keywords
+  - Created `enrichment.ts` service with background backfill for existing media
+- **Anchor-Based Recommendations**: New recommendation algorithm using user's watch history as anchors
+  - Collects similar/recommended TMDB IDs from enriched anchor items
+  - Gemini ranks candidates for quality and taste matching
+- **Weekly Watchlist:** Implemented a new feature that pre-generates a personalized weekly watchlist for users every Monday at 03:00.
+  - **Taste Analysis:** Uses Gemini to analyze user history and create a semantic "Taste Profile".
+  - **Hybrid Discovery:** Combines semantic profile with TMDB Discover API for broad candidate retrieval.
+  - **AI Ranking:** Gemini ranks TMDB candidates to select the top 20 movies and TV shows matching the user's vibe.
+  - **Database:** Added `WeeklyWatchlist` model to Prisma schema.
+  - **Frontend:** New `WeeklyWatchlist` component with horizontal scrolling and "Generate My List" functionality.
+  - **Stabilization:** Includes strict deduplication (excludes Watchlist/Blocked), ID verification for image safety, and robust error handling.
+- **Direct TMDB API Support:** Added optional `TMDB API Key` configuration.
+  - Allows bypassing Jellyseerr proxy for discovery queries.
+  - Configurable via System Settings UI or environment variables.
+- **Mood-Based Filtering**: Pre-filter candidates by mood keywords before Gemini ranking
+  - MOOD_KEYWORDS mapping for 7 moods (mind-bending, dark, adrenaline, chill, feel-good, tearjerker, visual)
+  - Keywords and overview text matching at candidate level
+  - Mood context passed to Gemini for additional filtering
+- **Randomized Anchor Selection**: Diversified anchor selection for varied recommendations
+  - Separate WATCHED and WATCHLIST queries with Fisher-Yates shuffle
+  - Interleaved combining for balanced representation from both lists
+- **Trending Page**: New page displaying popular movies and TV shows from Jellyseerr
+  - Unified trending feed from `/api/v1/discover/trending` endpoint
+  - Smart filtering excludes already watched, requested, or blocked content
+  - Deep pagination (5 pages/100 items) ensures fresh content after filtering
+  - Integrated Jellyseerr status checking for accurate request state filtering
+  - Added "Trending" navigation item to sidebar
+
+### 🔧 Technical
+
+- Animation limiter (max 4/10 anchors) to prevent all-anime anchor sets
+- Simplified Gemini prompt (removed unused reason field) for faster responses
+- Increased Gemini maxOutputTokens to 8000 for complete JSON responses
+- Added finishReason and response length debug logging
+- FilterGroup layout changed to flex-wrap for better genre/mood display
+- **Dual-AI Weekly Picks**: Replaced single ranking with Curator + Critic agent system
+  - Curator: Discovery agent finds ~100 candidates with 1-sentence justifications
+  - Critic: Quality guardian selects TOP 10 with WOW-factor
+
+### 🐛 Bug Fixes
+
+- **Modal Action Buttons**: Fixed buttons in info modal not removing items from view and not closing the modal after action.
+
+---
+
 ## [2.1.0] - 2025-12-21
 
 ### ✨ Features

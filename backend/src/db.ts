@@ -10,7 +10,7 @@ import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 
 // Create the driver adapter with the database URL
 const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL || 'file:/app/data/dev.db'
+    url: process.env.DATABASE_URL || 'file:./dev.db'
 })
 
 // Create the PrismaClient with the adapter

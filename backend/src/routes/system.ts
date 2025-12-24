@@ -18,7 +18,7 @@ router.get('/proxy/image', async (req, res) => {
     try {
         const path = req.query.path as string;
         const type = (req.query.type as string) || 'poster';
-        
+
         if (!path) {
             return res.status(400).json({ error: 'Missing path parameter' });
         }
@@ -26,7 +26,7 @@ router.get('/proxy/image', async (req, res) => {
         // Get Jellyseerr config (supports dynamic runtime config)
         const config = await ConfigService.getConfig();
         const jellyseerrUrl = config.jellyseerrUrl;
-        
+
         if (!jellyseerrUrl) {
             return res.status(503).json({ error: 'Jellyseerr URL not configured' });
         }
@@ -35,7 +35,7 @@ router.get('/proxy/image', async (req, res) => {
         // 1. Absolute URLs (http://...) - proxy them directly
         // 2. Relative paths (/xxx.jpg) - construct Jellyseerr URL
         let imageUrl: string;
-        
+
         if (path.startsWith('http://') || path.startsWith('https://')) {
             imageUrl = path;
         } else {
@@ -46,7 +46,7 @@ router.get('/proxy/image', async (req, res) => {
             }
             imageUrl = `${baseUrl}${upstreamPrefix}${path}`;
         }
-        
+
         const validatedUrl = validateRequestUrl(imageUrl);
         const headers: Record<string, string> = {};
         if (config.jellyseerrApiKey) {
@@ -67,8 +67,8 @@ router.get('/proxy/image', async (req, res) => {
     } catch (error: any) {
         console.error('Image proxy error:', error?.message || error);
         if (error?.response?.status) {
-            res.status(error.response.status).json({ 
-                error: `Failed to fetch image: ${error.response.status}` 
+            res.status(error.response.status).json({
+                error: `Failed to fetch image: ${error.response.status}`
             });
         } else {
             res.status(500).json({ error: 'Failed to fetch image' });
@@ -100,6 +100,7 @@ router.get('/setup-defaults', async (req, res) => {
             jellyfinUrl: process.env.JELLYFIN_URL || dbCfg?.jellyfinUrl || null,
             jellyseerrUrl: process.env.JELLYSEERR_URL || dbCfg?.jellyseerrUrl || null,
             jellyseerrApiKey: process.env.JELLYSEERR_API_KEY || dbCfg?.jellyseerrApiKey || null,
+            tmdbApiKey: process.env.TMDB_API_KEY || dbCfg?.tmdbApiKey || null,
             geminiApiKey: process.env.GEMINI_API_KEY || dbCfg?.geminiApiKey || null,
             geminiModel: process.env.GEMINI_MODEL || dbCfg?.geminiModel || 'gemini-3-flash-preview',
         };
@@ -119,6 +120,7 @@ router.post('/verify', async (req, res) => {
         const jellyfinUrlRaw = payload.jellyfinUrl as string | undefined;
         const jellyseerrUrlRaw = payload.jellyseerrUrl as string | undefined;
         const jellyseerrApiKey = payload.jellyseerrApiKey as string | undefined;
+        const tmdbApiKey = payload.tmdbApiKey as string | undefined;
         const geminiApiKey = payload.geminiApiKey as string | undefined;
 
         // Jellyfin check
@@ -128,7 +130,6 @@ router.post('/verify', async (req, res) => {
                 if (!base) return { ok: false, message: 'No Jellyfin URL provided or invalid' };
                 if (base.endsWith('/')) base = base.slice(0, -1);
                 const url = validateRequestUrl(`${base}/System/Info/Public`);
-                // codeql[js/request-forgery] - False positive: URL validated 3x (sanitizeUrl, validateRequestUrl, validateSafeUrl)
                 const resp = await axios.get(validateSafeUrl(url), { timeout: 8000 });
                 if (resp.status === 200) {
                     const ver = resp.data?.Version || resp.data?.ServerVersion || resp.data?.version || '';
@@ -148,8 +149,11 @@ router.post('/verify', async (req, res) => {
                 if (!base) return { ok: false, message: 'No Jellyseerr URL provided or invalid' };
                 const url = validateRequestUrl(`${base}/api/v1/status`);
                 const headers: Record<string, string> = {};
-                if (jellyseerrApiKey) headers['X-Api-Key'] = String(jellyseerrApiKey);
-                // codeql[js/request-forgery] - False positive: URL validated 3x (sanitizeUrl, validateRequestUrl, validateSafeUrl)
+                if (jellyseerrApiKey && !jellyseerrApiKey.startsWith('*')) headers['X-Api-Key'] = String(jellyseerrApiKey);
+
+                // Skip check if key is masked/missing but URL is present (could be public or auth disabled?? unlikely)
+                // But for explicit verify, we try.
+
                 const resp = await axios.get(validateSafeUrl(url), { headers, timeout: 8000 });
                 if (resp.status === 200) {
                     const info = resp.data?.status || resp.data?.message || 'OK';
@@ -162,10 +166,33 @@ router.post('/verify', async (req, res) => {
             }
         })();
 
+        // TMDB Direct check
+        const tmdbCheck = (async () => {
+            if (!tmdbApiKey || tmdbApiKey.length < 5 || tmdbApiKey.startsWith('*')) return { ok: true, message: 'Skipped (Not provided or masked)' };
+            try {
+                const isBearer = tmdbApiKey.length > 60;
+                const config: any = { timeout: 8000 };
+
+                if (isBearer) {
+                    config.headers = { Authorization: `Bearer ${tmdbApiKey}` };
+                } else {
+                    config.params = { api_key: tmdbApiKey };
+                }
+
+                // Verify by hitting configuration endpoint
+                const resp = await axios.get('https://api.themoviedb.org/3/configuration', config);
+                if (resp.status === 200) return { ok: true, message: 'Authorized' };
+                return { ok: false, message: `HTTP ${resp.status}` };
+            } catch (e: any) {
+                const msg = e?.response ? `${e.response.status} ${e.response.statusText || ''}`.trim() : (e?.message || String(e));
+                return { ok: false, message: msg };
+            }
+        })();
+
         // Gemini check
         const geminiCheck = (async () => {
             try {
-                if (!geminiApiKey) return { ok: false, message: 'No Gemini API key provided' };
+                if (!geminiApiKey || geminiApiKey.startsWith('*')) return { ok: true, message: 'Skipped (Masked)' };
                 let client: any;
                 try {
                     client = new (GoogleGenerativeAI as any)({ apiKey: String(geminiApiKey) });
@@ -187,8 +214,8 @@ router.post('/verify', async (req, res) => {
             }
         })();
 
-        const [jRes, jsRes, gRes] = await Promise.all([jellyfinCheck, jellyseerrCheck, geminiCheck]);
-        res.json({ jellyfin: jRes, jellyseerr: jsRes, gemini: gRes });
+        const [jRes, jsRes, tRes, gRes] = await Promise.all([jellyfinCheck, jellyseerrCheck, tmdbCheck, geminiCheck]);
+        res.json({ jellyfin: jRes, jellyseerr: jsRes, tmdb: tRes, gemini: gRes });
     } catch (err: any) {
         console.error('Verification endpoint error', err);
         res.status(500).json({ error: 'Verification failed', detail: String(err?.message || err) });
@@ -222,6 +249,7 @@ router.post('/setup', async (req, res) => {
             jellyfinUrl: payload.jellyfinUrl,
             jellyseerrUrl: payload.jellyseerrUrl,
             jellyseerrApiKey: payload.jellyseerrApiKey,
+            tmdbApiKey: payload.tmdbApiKey,
             geminiApiKey: payload.geminiApiKey,
             geminiModel: payload.geminiModel,
         };
@@ -239,7 +267,7 @@ router.post('/setup', async (req, res) => {
 router.get('/config-editor', async (req, res) => {
     try {
         const cfg = await ConfigService.getConfig();
-        
+
         const maskApiKey = (key: string | null | undefined): string => {
             if (!key) return '';
             if (key.length <= 8) return '********';
@@ -250,6 +278,7 @@ router.get('/config-editor', async (req, res) => {
             jellyfinUrl: cfg.jellyfinUrl || '',
             jellyseerrUrl: cfg.jellyseerrUrl || '',
             jellyseerrApiKey: maskApiKey(cfg.jellyseerrApiKey),
+            tmdbApiKey: maskApiKey(cfg.tmdbApiKey),
             geminiApiKey: maskApiKey(cfg.geminiApiKey),
             geminiModel: cfg.geminiModel || 'gemini-3-flash-preview',
             isConfigured: cfg.isConfigured || false,
@@ -269,7 +298,7 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
     try {
         const payload = req.body || {};
         const currentConfig = await ConfigService.getConfig();
-        
+
         const isMasked = (value: string | null | undefined): boolean => {
             if (!value) return false;
             return /^\*+[^\*]{0,4}$/.test(value) || value === '********';
@@ -281,10 +310,22 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
             geminiModel: payload.geminiModel || 'gemini-3-flash-preview',
         };
 
+        console.log('[ConfigEditor] Saving config. Payload keys:', Object.keys(payload));
+
         if (payload.jellyseerrApiKey && !isMasked(payload.jellyseerrApiKey)) {
             updatePayload.jellyseerrApiKey = payload.jellyseerrApiKey;
         } else if (currentConfig.jellyseerrApiKey) {
             updatePayload.jellyseerrApiKey = currentConfig.jellyseerrApiKey;
+        }
+
+        if (payload.tmdbApiKey && !isMasked(payload.tmdbApiKey)) {
+            console.log('[ConfigEditor] Updating TMDB API Key (provided and unmasked)');
+            updatePayload.tmdbApiKey = payload.tmdbApiKey;
+        } else if (currentConfig.tmdbApiKey) {
+            // console.log('[ConfigEditor] Preserving existing TMDB API Key'); // Optional debug
+            updatePayload.tmdbApiKey = currentConfig.tmdbApiKey;
+        } else {
+            console.log('[ConfigEditor] No TMDB API Key provided or existing');
         }
 
         if (payload.geminiApiKey && !isMasked(payload.geminiApiKey)) {
@@ -293,15 +334,22 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
             updatePayload.geminiApiKey = currentConfig.geminiApiKey;
         }
 
-        const jellyseerrUrlChanged = updatePayload.jellyseerrUrl && 
+        console.log('[ConfigEditor] Final Data to Save:', {
+            ...updatePayload,
+            jellyseerrApiKey: updatePayload.jellyseerrApiKey ? '***' : null,
+            tmdbApiKey: updatePayload.tmdbApiKey ? '***' : null,
+            geminiApiKey: updatePayload.geminiApiKey ? '***' : null
+        });
+
+        const jellyseerrUrlChanged = updatePayload.jellyseerrUrl &&
             updatePayload.jellyseerrUrl !== currentConfig.jellyseerrUrl;
 
         await ConfigService.saveConfig(updatePayload);
-        
+
         if (jellyseerrUrlChanged) {
             console.log('[ConfigEditor] Jellyseerr URL changed. Run `npm run db:migrate-images` to re-download images.');
-            res.json({ 
-                ok: true, 
+            res.json({
+                ok: true,
                 message: 'Configuration updated. To re-download images, run: npm run db:migrate-images',
                 jellyseerrUrlChanged: true
             });

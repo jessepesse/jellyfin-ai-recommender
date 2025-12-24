@@ -37,6 +37,9 @@ export interface JellyfinItem {
 export interface JellyfinUser {
     Id: string;
     Name: string;
+    Policy?: {
+        IsAdministrator?: boolean;
+    };
 }
 
 export interface JellyfinAuthResponse {
@@ -49,6 +52,7 @@ export interface LoginResponse {
     message?: string;
     jellyfinAuth?: JellyfinAuthResponse;
     serverUrl?: string;
+    isAdmin?: boolean;
 }
 
 // ============================================================

@@ -6,6 +6,7 @@ export type SystemConfig = {
   jellyfinUrl?: string | null;
   jellyseerrUrl?: string | null;
   jellyseerrApiKey?: string | null;
+  tmdbApiKey?: string | null;
   geminiApiKey?: string | null;
   geminiModel?: string | null;
   isConfigured?: boolean;
@@ -63,6 +64,9 @@ class ConfigService {
       jellyseerrApiKey: isDbConfigured && dbConfig?.jellyseerrApiKey
         ? dbConfig.jellyseerrApiKey
         : (dbConfig?.jellyseerrApiKey || process.env.JELLYSEERR_API_KEY || null),
+      tmdbApiKey: isDbConfigured && dbConfig?.tmdbApiKey
+        ? dbConfig.tmdbApiKey
+        : (dbConfig?.tmdbApiKey || process.env.TMDB_API_KEY || null),
       geminiApiKey: isDbConfigured && dbConfig?.geminiApiKey
         ? dbConfig.geminiApiKey
         : (dbConfig?.geminiApiKey || process.env.GEMINI_API_KEY || null),
@@ -103,6 +107,7 @@ class ConfigService {
       jellyfinUrl?: string;
       jellyseerrUrl?: string;
       jellyseerrApiKey?: string;
+      tmdbApiKey?: string;
       geminiApiKey?: string;
       geminiModel?: string;
       isConfigured: boolean;
@@ -115,6 +120,7 @@ class ConfigService {
     if (validatedJellyfinUrl) data.jellyfinUrl = validatedJellyfinUrl;
     if (validatedJellyseerrUrl) data.jellyseerrUrl = validatedJellyseerrUrl;
     if (payload.jellyseerrApiKey) data.jellyseerrApiKey = payload.jellyseerrApiKey;
+    if (payload.tmdbApiKey) data.tmdbApiKey = payload.tmdbApiKey;
     if (payload.geminiApiKey) data.geminiApiKey = payload.geminiApiKey;
     if (payload.geminiModel) data.geminiModel = payload.geminiModel;
 
@@ -130,6 +136,11 @@ class ConfigService {
     // If a Gemini API key was provided, log a confirmation
     if (payload.geminiApiKey || result.geminiApiKey) {
       console.info('SystemConfig: Gemini API key saved — will be used at runtime.');
+    }
+
+    // If a TMDB API key was provided, log a confirmation
+    if (payload.tmdbApiKey || result.tmdbApiKey) {
+      console.info('SystemConfig: TMDB API key saved — will be used for direct discovery.');
     }
 
     return result;

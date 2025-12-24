@@ -304,6 +304,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                       await postJellyseerrRequest(Number(id), currentMediaType as 'movie' | 'tv');
                       setRequested(true);
                       if (typeof onRemove === 'function') onRemove(Number(id));
+                      setShowInfo(false);
                     } catch (err) {
                       console.error('Request failed', err);
                     } finally {
@@ -322,9 +323,11 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   title={variant === 'watchlist' ? "Remove from Watchlist" : "Add to Watchlist"}
                   onClick={() => {
                     const id = Number(item.tmdbId);
+                    // Always remove from view and close modal
+                    if (typeof onRemove === 'function') onRemove(id as number);
+                    setShowInfo(false);
                     // If currently on watchlist, remove it
                     if (variant === 'watchlist') {
-                      if (typeof onRemove === 'function') onRemove(id as number);
                       const payloadItemRem = {
                         tmdbId: item.tmdbId ?? null,
                         title: item.title ?? 'Unknown Title',
@@ -366,6 +369,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   onClick={() => {
                     const id = Number(item.tmdbId);
                     if (typeof onRemove === 'function') onRemove(id as number);
+                    setShowInfo(false);
                     const payloadItemWatched = {
                       tmdbId: item.tmdbId ?? null,
                       title: item.title ?? 'Unknown Title',
@@ -392,6 +396,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   onClick={() => {
                     const id = Number(item.tmdbId);
                     if (typeof onRemove === 'function') onRemove(id as number);
+                    setShowInfo(false);
                     const payloadItemBlock = {
                       tmdbId: item.tmdbId ?? null,
                       title: item.title ?? 'Unknown Title',

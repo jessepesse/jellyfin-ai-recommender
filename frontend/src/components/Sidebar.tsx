@@ -10,6 +10,8 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { id: 'weekly-picks', label: '✨ Weekly Picks' },
+  { id: 'trending', label: '📈 Trending' },
   { id: 'recommendations', label: 'Recommendations' },
   { id: 'watchlist', label: 'Watchlist' },
   { id: 'mark-watched', label: 'Mark as Watched' },
@@ -25,6 +27,17 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
   const { user, logout } = useAuth();
   const [showStats, setShowStats] = useState(false);
+
+  // Check if user is admin
+  const isAdmin = localStorage.getItem('jellyfin_isAdmin') === 'true';
+
+  // Filter nav items based on admin status
+  const visibleNavItems = navItems.filter(item => {
+    if (item.id === 'settings') {
+      return isAdmin;
+    }
+    return true;
+  });
 
   // Use a safer cast or type guard in real app
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
               </button>
             </div>
             <ul className="space-y-2">
-              {navItems.map(item => (
+              {visibleNavItems.map(item => (
                 <li key={item.id}>
                   <button
                     onClick={() => onNavigate(item.id)}

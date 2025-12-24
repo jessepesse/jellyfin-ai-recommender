@@ -22,11 +22,15 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
         const cfg = await ConfigService.getConfig();
         const workingUrl = cfg.jellyfinUrl;
 
-        // Return the auth response + the working server URL for frontend storage
-        res.json({ 
-            success: true, 
+        // Extract admin status from Jellyfin Policy
+        const isAdmin = jellyfinAuth.User.Policy?.IsAdministrator ?? false;
+
+        // Return the auth response + the working server URL + admin status for frontend storage
+        res.json({
+            success: true,
             jellyfinAuth,
-            serverUrl: workingUrl 
+            serverUrl: workingUrl,
+            isAdmin
         } as LoginResponse);
 
     } catch (error: unknown) {
@@ -34,14 +38,14 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
             console.error('Validation error for login:', error.issues);
             return res.status(400).json({ success: false, message: 'Validation failed', errors: error.issues });
         }
-        
+
         logError(error, 'auth/login');
         const statusCode = getErrorStatusCode(error);
-        
+
         if (statusCode === 401) {
             return res.status(401).json({ success: false, message: 'Invalid Jellyfin username or password.' } as LoginResponse);
         }
-        
+
         // Generic error message for other issues
         res.status(500).json({ success: false, message: 'An unexpected error occurred during authentication.' } as LoginResponse);
     }

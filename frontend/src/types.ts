@@ -16,4 +16,25 @@ export interface Settings {
     apiKey?: string;
 }
 
-export type AppView = 'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
+export type AppView = 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
+
+export interface WeeklyWatchlistItem {
+    tmdbId: number;
+    title: string;
+    posterUrl: string | null;
+    overview: string;
+    releaseDate?: string;
+    voteAverage?: number;
+    genreIds?: number[];
+}
+
+export interface WeeklyWatchlist {
+    id: number;
+    userId: number;
+    movies: WeeklyWatchlistItem[];
+    tvShows: WeeklyWatchlistItem[];
+    tasteProfile: string;
+    generatedAt: string;
+    weekStart: string;
+    weekEnd: string;
+}

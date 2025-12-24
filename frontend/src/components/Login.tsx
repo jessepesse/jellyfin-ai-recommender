@@ -1,6 +1,7 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from './Footer';
+import axios from 'axios';
 
 const Login: React.FC = () => {
   const { login } = useAuth();
@@ -8,7 +9,34 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [serverUrl, setServerUrl] = useState(''); // Added serverUrl state
+  const [serverUrl, setServerUrl] = useState('');
+
+  // Pre-fill server URL from localStorage or backend config
+  useEffect(() => {
+    const fetchServerUrl = async () => {
+      // First try localStorage
+      const storedUrl = localStorage.getItem('jellyfin_server');
+      if (storedUrl) {
+        setServerUrl(storedUrl);
+        return;
+      }
+
+      // If not in localStorage, fetch from backend config
+      try {
+        const baseUrl = import.meta.env.VITE_BACKEND_URL
+          ? import.meta.env.VITE_BACKEND_URL + '/api'
+          : '/api';
+        const response = await axios.get(`${baseUrl}/system/setup-defaults`);
+        if (response.data.jellyfinUrl) {
+          setServerUrl(response.data.jellyfinUrl);
+        }
+      } catch (err) {
+        console.debug('Could not fetch server URL from backend:', err);
+      }
+    };
+
+    fetchServerUrl();
+  }, []);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();

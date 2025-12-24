@@ -10,6 +10,9 @@ import SegmentedControl from './SegmentedControl';
 import FilterGroup from './FilterGroup';
 import HeroButton from './HeroButton';
 
+import WeeklyWatchlist from './WeeklyWatchlist';
+import TrendingPage from './TrendingPage';
+
 // Official TMDB genre names for proper matching with enriched data
 const GENRES = [
   'Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
@@ -28,7 +31,7 @@ const MOODS = [
 ];
 
 interface Props {
-  currentView?: 'recommendations' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
+  currentView?: 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
 }
 
 const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
@@ -90,45 +93,52 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
           </div>
         </header>
 
+        {currentView === 'weekly-picks' && <WeeklyWatchlist />}
+
+        {currentView === 'trending' && <TrendingPage />}
+
         {currentView === 'recommendations' && (
-          <section className="bg-slate-800/30 backdrop-blur-md border border-white/5 p-6 rounded-2xl mb-6 overflow-visible">
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm text-slate-400 mb-3 block">Content Type</label>
-                <SegmentedControl
-                  options={[
-                    { id: 'movie', label: 'Movies' },
-                    { id: 'tv', label: 'TV Series' }
-                  ]}
-                  value={selectedType}
-                  onChange={(value) => setSelectedType(value as 'movie' | 'tv')}
-                  ariaLabel="Select content type"
-                />
-              </div>
+          <>
+            <section className="bg-slate-800/30 backdrop-blur-md border border-white/5 p-6 rounded-2xl mb-6 overflow-visible">
 
-              <div>
-                <label className="text-sm text-slate-400 mb-3 block">Genres</label>
-                <FilterGroup
-                  chips={GENRES.map(g => ({ id: g, label: g, active: selectedGenres.includes(g) }))}
-                  onToggle={toggleGenre}
-                />
-              </div>
+              <div className="space-y-6">
+                <div>
+                  <label className="text-sm text-slate-400 mb-3 block">Content Type</label>
+                  <SegmentedControl
+                    options={[
+                      { id: 'movie', label: 'Movies' },
+                      { id: 'tv', label: 'TV Series' }
+                    ]}
+                    value={selectedType}
+                    onChange={(value) => setSelectedType(value as 'movie' | 'tv')}
+                    ariaLabel="Select content type"
+                  />
+                </div>
 
-              <div>
-                <label className="text-sm text-slate-400 mb-3 block">Mood</label>
-                <FilterGroup
-                  chips={MOODS.map(m => ({ id: m.id, label: m.label, active: selectedMood === m.id }))}
-                  onToggle={toggleMood}
-                />
-              </div>
+                <div>
+                  <label className="text-sm text-slate-400 mb-3 block">Genres</label>
+                  <FilterGroup
+                    chips={GENRES.map(g => ({ id: g, label: g, active: selectedGenres.includes(g) }))}
+                    onToggle={toggleGenre}
+                  />
+                </div>
 
-              <div className="flex justify-center pt-2 pb-10">
-                <HeroButton onClick={handleGetRecommendations} disabled={isLoading}>
-                  {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
-                </HeroButton>
+                <div>
+                  <label className="text-sm text-slate-400 mb-3 block">Mood</label>
+                  <FilterGroup
+                    chips={MOODS.map(m => ({ id: m.id, label: m.label, active: selectedMood === m.id }))}
+                    onToggle={toggleMood}
+                  />
+                </div>
+
+                <div className="flex justify-center pt-2 pb-10">
+                  <HeroButton onClick={handleGetRecommendations} disabled={isLoading}>
+                    {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
+                  </HeroButton>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </>
         )}
 
         <section>
@@ -148,7 +158,18 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
 
           {currentView === 'watchlist' && <WatchlistView />}
           {(currentView === 'search' || currentView === 'mark-watched') && <ManualSearchView />}
-          {currentView === 'settings' && <SettingsView />}
+          {currentView === 'settings' && (
+            localStorage.getItem('jellyfin_isAdmin') === 'true' ? (
+              <SettingsView />
+            ) : (
+              <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="text-center p-8 bg-red-900/20 rounded-2xl border border-red-500/30 max-w-md">
+                  <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+                  <p className="text-slate-400">Settings are only accessible to Jellyfin administrators.</p>
+                </div>
+              </div>
+            )
+          )}
         </section>
       </div>
 

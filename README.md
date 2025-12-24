@@ -10,7 +10,9 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 🤖 **AI-Powered Discovery** — Uses **Google Gemini 2.5** to analyze your taste and find hidden gems you haven't seen yet.
 - ✅ **"Trust No AI" Verification** — Every suggestion is strictly verified against Jellyseerr/TMDB to ensure valid metadata and functional links.
 - 🧠 **Dynamic Taste Profile** — The system learns your preferences from your watch history and generates a personalized textual summary of your movie and TV tastes.
-- 📊 **User Statistics Dashboard** — Visualize your watching habits with beautiful charts, key metrics, and your detailed AI taste profile.
+- � **Weekly Watchlist** — Pre-generated personalized recommendations every Monday morning using dual-AI system (Curator + Critic agents).
+- 📈 **Trending Page** — Discover what's popular right now with smart filtering that excludes content you've already watched or requested.
+- �📊 **User Statistics Dashboard** — Visualize your watching habits with beautiful charts, key metrics, and your detailed AI taste profile.
 - 🚫 **Smart Filtering** — Automatically hides content you already own, have watched, or explicitly blocked.
 - 📋 **Watchlist Management** — Organize your "To Watch" list with filtering (Movies vs. TV) and sorting.
 - 🔗 **Jellyseerr Integration** — Request recommended media directly with one click (Optimistic UI).

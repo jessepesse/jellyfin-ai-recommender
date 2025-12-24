@@ -49,6 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('jellyfin_token');
     localStorage.removeItem('jellyfin_user');
     localStorage.removeItem('jellyfin_server');
+    localStorage.removeItem('jellyfin_isAdmin');
     sessionStorage.removeItem('jellyfin_password');
   };
 
@@ -75,6 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Priority: backend-verified URL > user-provided > env var
         // Backend returns the working URL after testing candidates
         const newServer = response.data.serverUrl || serverUrl || import.meta.env.VITE_JELLYFIN_URL || null;
+        const isAdmin = response.data.isAdmin ?? false;
 
         setUser(newUser);
         setToken(newToken);
@@ -84,6 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Store in local storage for persistence
         localStorage.setItem('jellyfin_token', newToken);
         localStorage.setItem('jellyfin_user', JSON.stringify(newUser));
+        localStorage.setItem('jellyfin_isAdmin', String(isAdmin));
         // Always store server URL (backend ensures we have a working one)
         if (newServer) {
           localStorage.setItem('jellyfin_server', newServer);

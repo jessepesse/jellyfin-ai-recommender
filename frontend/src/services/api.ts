@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { JellyfinItem, JellyfinLibrary } from '../types';
+import type { JellyfinItem, JellyfinLibrary, WeeklyWatchlist } from '../types';
 
 // HARDCODE: Always use relative path /api
 // This ensures requests go to the current origin + /api
@@ -182,27 +182,62 @@ export const getSystemStatus = async (): Promise<{ configured: boolean }> => {
     return response.data;
 };
 
-export const postSystemSetup = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
+
+export const postSystemSetup = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
     const response = await apiClient.post('/system/setup', payload);
     return response.data;
 };
 
-export const postSystemVerify = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; geminiApiKey?: string }) => {
+export const postSystemVerify = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string }) => {
     const response = await apiClient.post('/system/verify', payload);
     return response.data;
 };
 
-export const getSystemSetupDefaults = async (): Promise<{ jellyfinUrl?: string | null; jellyseerrUrl?: string | null; jellyseerrApiKey?: string | null; geminiApiKey?: string | null; geminiModel?: string | null }> => {
+export const getSystemSetupDefaults = async (): Promise<{ jellyfinUrl?: string | null; jellyseerrUrl?: string | null; jellyseerrApiKey?: string | null; tmdbApiKey?: string | null; geminiApiKey?: string | null; geminiModel?: string | null }> => {
     const response = await apiClient.get('/system/setup-defaults');
     return response.data;
 };
 
-export const getSystemConfigEditor = async (): Promise<{ ok: boolean; config: { jellyfinUrl: string; jellyseerrUrl: string; jellyseerrApiKey: string; geminiApiKey: string; geminiModel: string; isConfigured: boolean } }> => {
+export const getSystemConfigEditor = async (): Promise<{ ok: boolean; config: { jellyfinUrl: string; jellyseerrUrl: string; jellyseerrApiKey: string; tmdbApiKey: string; geminiApiKey: string; geminiModel: string; isConfigured: boolean } }> => {
     const response = await apiClient.get('/system/config-editor');
     return response.data;
 };
 
-export const putSystemConfigEditor = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
+export const putSystemConfigEditor = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
     const response = await apiClient.put('/system/config-editor', payload);
+    return response.data;
+};
+
+
+export const getWeeklyWatchlist = async (): Promise<WeeklyWatchlist | null> => {
+    const response = await apiClient.get('/weekly-watchlist', authHeaders());
+    return response.data.data;
+};
+
+export const refreshWeeklyWatchlist = async (): Promise<WeeklyWatchlist> => {
+    const response = await apiClient.post('/weekly-watchlist/refresh', {}, authHeaders());
+    return response.data.data;
+};
+
+export interface TrendingItem {
+    id: number;
+    title?: string;
+    name?: string;
+    overview: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    mediaType: 'movie' | 'tv';
+    releaseDate?: string;
+    firstAirDate?: string;
+    voteAverage: number;
+}
+
+export interface TrendingResponse {
+    movies: TrendingItem[];
+    tvShows: TrendingItem[];
+}
+
+export const getTrending = async (): Promise<TrendingResponse> => {
+    const response = await apiClient.get('/trending', authHeaders());
     return response.data;
 };

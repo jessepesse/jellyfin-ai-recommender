@@ -23,12 +23,14 @@ interface Props {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57'];
 
+// Genre translations matching Dashboard.tsx GENRES constant
 const GENRE_TRANSLATIONS: Record<string, string> = {
+    // Finnish -> English (matching TMDB official names used in Dashboard)
     'Seikkailu': 'Adventure',
     'Animaatio': 'Animation',
     'Perhe': 'Family',
     'Fantasia': 'Fantasy',
-    'Science fiction': 'Sci-Fi',
+    'Science fiction': 'Science Fiction',
     'Toiminta': 'Action',
     'Komedia': 'Comedy',
     'Draama': 'Drama',
@@ -42,11 +44,15 @@ const GENRE_TRANSLATIONS: Record<string, string> = {
     'Musiikki': 'Music',
     'Romantiikka': 'Romance',
     'Lännenelokuva': 'Western',
-    'Mystuuri': 'Mystery',
+    'Mysteeri': 'Mystery',
     'Urheilu': 'Sports',
     'Elämäkerta': 'Biography',
     'Koko perhe': 'Family',
-    'Lapset': 'Kids'
+    'Lapset': 'Kids',
+    // Common English variations -> Standardized TMDB names
+    'Sci-Fi': 'Science Fiction',
+    'Scifi': 'Science Fiction',
+    'SciFi': 'Science Fiction',
 };
 
 const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {

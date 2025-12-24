@@ -19,7 +19,8 @@ model User {
   tvProfile    String?
   
   // Relations
-  media     UserMedia[]
+  media            UserMedia[]
+  weeklyWatchlists WeeklyWatchlist[]
 }
 
 model Media {
@@ -73,6 +74,7 @@ model SystemConfig {
   jellyfinUrl      String?
   jellyseerrUrl    String?
   jellyseerrApiKey String?
+  tmdbApiKey       String?
   geminiApiKey     String?
   geminiModel      String  @default("gemini-3-flash-preview")
   isConfigured     Boolean @default(false)
@@ -82,4 +84,23 @@ enum MediaStatus {
   WATCHED
   WATCHLIST
   BLOCKED
+}
+
+// Pre-generated weekly recommendations (Weekly Watchlist feature)
+model WeeklyWatchlist {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  
+  movies       String   // JSON: [{tmdbId, title, posterUrl, overview}]
+  tvShows      String   // JSON: same structure
+  
+  tasteProfile String   // "You love: Dark dramas, 90s thrillers..."
+  
+  generatedAt  DateTime @default(now())
+  weekStart    DateTime
+  weekEnd      DateTime
+  
+  @@unique([userId, weekStart])
+  @@index([userId])
 }

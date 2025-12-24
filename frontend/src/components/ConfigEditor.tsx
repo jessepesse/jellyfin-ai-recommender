@@ -8,6 +8,7 @@ const ConfigEditor: React.FC = () => {
     jellyfinUrl: '',
     jellyseerrUrl: '',
     jellyseerrApiKey: '',
+    tmdbApiKey: '',
     geminiApiKey: '',
     geminiModel: 'gemini-3-flash-preview',
   });
@@ -36,6 +37,7 @@ const ConfigEditor: React.FC = () => {
           jellyfinUrl: response.config.jellyfinUrl || '',
           jellyseerrUrl: response.config.jellyseerrUrl || '',
           jellyseerrApiKey: response.config.jellyseerrApiKey || '',
+          tmdbApiKey: response.config.tmdbApiKey || '',
           geminiApiKey: response.config.geminiApiKey || '',
           geminiModel: response.config.geminiModel || 'gemini-3-flash-preview',
         });
@@ -58,6 +60,7 @@ const ConfigEditor: React.FC = () => {
         jellyfinUrl: config.jellyfinUrl || undefined,
         jellyseerrUrl: config.jellyseerrUrl || undefined,
         jellyseerrApiKey: config.jellyseerrApiKey.startsWith('*') ? undefined : config.jellyseerrApiKey || undefined,
+        tmdbApiKey: config.tmdbApiKey.startsWith('*') ? undefined : config.tmdbApiKey || undefined,
         geminiApiKey: config.geminiApiKey.startsWith('*') ? undefined : config.geminiApiKey || undefined,
       });
 
@@ -86,6 +89,7 @@ const ConfigEditor: React.FC = () => {
         jellyfinUrl: config.jellyfinUrl || undefined,
         jellyseerrUrl: config.jellyseerrUrl || undefined,
         jellyseerrApiKey: config.jellyseerrApiKey || undefined,
+        tmdbApiKey: config.tmdbApiKey || undefined,
         geminiApiKey: config.geminiApiKey || undefined,
         geminiModel: config.geminiModel || undefined,
       };
@@ -178,6 +182,7 @@ const ConfigEditor: React.FC = () => {
           />
         </div>
 
+
         {/* Jellyseerr API Key */}
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -192,6 +197,28 @@ const ConfigEditor: React.FC = () => {
           />
           <p className="text-xs text-slate-500 mt-1">
             Masked values (****) will preserve the existing key. Enter a new key to update.
+          </p>
+        </div>
+
+        {/* TMDB API Key (Optional - Direct Access) */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="block text-sm font-medium text-slate-300">
+              TMDB API Key
+            </label>
+            <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full border border-violet-500/30">
+              Recommended for Discovery
+            </span>
+          </div>
+          <input
+            type="text"
+            value={config.tmdbApiKey || ''}
+            onChange={(e) => setConfig({ ...config, tmdbApiKey: e.target.value })}
+            placeholder="Enter TMDB API Read Access Token or Key"
+            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            If provided, discovery queries will go directly to TMDB instead of proxying through Jellyseerr.
           </p>
         </div>
 
