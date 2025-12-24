@@ -12,6 +12,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Cleaner card design with unobstructed poster/backdrop images
   - Better readability with dedicated text area
   - Shows rating (⭐), year, and media type (🎬 Movie / 📺 TV) in metadata row
+  - Removed duplicate rating badge from top-left corner
+- **Trending Page:** Added filter tabs to easily switch between All, Movies, and TV Shows
+  - Quick filtering with purple-blue gradient active state
+  - Matches Weekly Watchlist UX pattern
 
 ### 🐛 Bug Fixes
 
