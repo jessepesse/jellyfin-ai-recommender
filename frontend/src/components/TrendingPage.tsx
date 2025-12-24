@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { TrendingUp, Film, Tv, RefreshCw, AlertCircle } from 'lucide-react';
 import MediaCard from './MediaCard';
 import SkeletonCard from './SkeletonCard';
+import FilterGroup from './FilterGroup';
 import type { JellyfinItem } from '../types';
 import { getTrending } from '../services/api';
 
@@ -32,6 +33,7 @@ const TrendingPage: React.FC = () => {
     const [data, setData] = useState<TrendingResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [filter, setFilter] = useState<'all' | 'movies' | 'tv'>('all');
 
     useEffect(() => {
         loadTrending();
@@ -156,8 +158,18 @@ const TrendingPage: React.FC = () => {
 
             </div>
 
+            {/* Filter Tabs */}
+            <FilterGroup
+                chips={[
+                    { id: 'all', label: 'All', active: filter === 'all' },
+                    { id: 'movies', label: 'Movies', active: filter === 'movies' },
+                    { id: 'tv', label: 'TV Shows', active: filter === 'tv' }
+                ]}
+                onToggle={(id) => setFilter(id as 'all' | 'movies' | 'tv')}
+            />
+
             {/* Movies Section */}
-            {hasMovies && (
+            {hasMovies && (filter === 'all' || filter === 'movies') && (
                 <section>
                     <div className="flex items-center gap-2 mb-4">
                         <Film className="w-5 h-5 text-purple-400" />
@@ -177,7 +189,7 @@ const TrendingPage: React.FC = () => {
             )}
 
             {/* TV Shows Section */}
-            {hasTvShows && (
+            {hasTvShows && (filter === 'all' || filter === 'tv') && (
                 <section>
                     <div className="flex items-center gap-2 mb-4">
                         <Tv className="w-5 h-5 text-blue-400" />
