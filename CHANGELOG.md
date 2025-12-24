@@ -8,6 +8,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [2.2.1] - 2025-12-24
+
+### 🔒 Security
+
+- **Critical:** Updated React from 19.2.1 to 19.2.3 to fix RCE/DoS vulnerabilities in React Server Components
+
+### 📦 Dependencies
+
+- Updated vitest from 4.0.15 to 4.0.16
+- Updated @vitest/coverage-v8 from 4.0.15 to 4.0.16
+- Updated Vite from 7.2.4 to 7.3.0
+- Updated lucide-react from 0.561.0 to 0.562.0
+- Updated Tailwind CSS from 4.1.17 to 4.1.18
+- Updated @testing-library/react from 16.3.0 to 16.3.1
+- Updated @eslint/js from 9.39.1 to 9.39.2
+
+---
+
 ## [2.2.0] - 2025-12-24
 
 ### ✨ Features
