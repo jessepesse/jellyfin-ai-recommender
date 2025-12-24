@@ -248,6 +248,85 @@ Ensure your reverse proxy (Nginx, Cloudflare, etc.) forwards the correct headers
 - `X-Forwarded-For`
 - `X-Forwarded-Proto`
 
+### 4. Frontend Configuration (Separate API Domain)
+
+**Recommended Setup:** Use separate domains for frontend and backend.
+
+**Example:**
+- Frontend: `https://recommender.yourdomain.com`
+- Backend API: `https://api.yourdomain.com`
+
+#### Why Separate Domains?
+- ✅ **Cleaner architecture** - Frontend and backend are independent services
+- ✅ **Easier scaling** - Deploy services on different servers if needed
+- ✅ **No proxy complexity** - Direct API calls, no Vite/Nginx proxy configuration
+- ✅ **Better debugging** - Clear separation of concerns
+
+#### Configuration Methods:
+
+**Option A: Docker Compose (Recommended)**
+
+Edit `docker-compose.prod.yml`:
+
+```yaml
+services:
+  frontend:
+    environment:
+      - VITE_BACKEND_URL=https://api.yourdomain.com
+```
+
+**Option B: Docker Run**
+
+```bash
+docker run -e VITE_BACKEND_URL=https://api.yourdomain.com \
+  ghcr.io/jessepesse/jellyfin-ai-recommender-frontend:latest
+```
+
+**Option C: Build-time (Dockerfile)**
+
+```bash
+docker build \
+  --build-arg VITE_BACKEND_URL=https://api.yourdomain.com \
+  -t my-frontend ./frontend
+```
+
+**Option D: Local Development**
+
+Create `frontend/.env`:
+
+```bash
+VITE_BACKEND_URL=http://localhost:3001
+```
+
+#### Default Behavior:
+If `VITE_BACKEND_URL` is not set, the frontend defaults to `http://localhost:3001`.
+
+#### Cloudflare Tunnel Example:
+
+1. **Create tunnels for both services:**
+   ```bash
+   # Backend tunnel
+   cloudflared tunnel route dns jellyfin-ai-backend api.yourdomain.com
+   
+   # Frontend tunnel  
+   cloudflared tunnel route dns jellyfin-ai-frontend recommender.yourdomain.com
+   ```
+
+2. **Configure frontend to use API domain:**
+   ```yaml
+   # docker-compose.prod.yml
+   services:
+     frontend:
+       environment:
+         - VITE_BACKEND_URL=https://api.yourdomain.com
+   ```
+
+3. **Rebuild and restart:**
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d --build
+   ```
+
+
 See `frontend/nginx.conf` for a reference configuration.
 
 📝 Usage Guide
