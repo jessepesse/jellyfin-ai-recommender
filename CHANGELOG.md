@@ -6,7 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### ✨ UI Improvements
+
+- **Media Cards:** Improved title visibility by displaying movie/show name, year, rating, and type below card image instead of as overlay
+  - Cleaner card design with unobstructed poster/backdrop images
+  - Better readability with dedicated text area
+  - Shows rating (⭐), year, and media type (🎬 Movie / 📺 TV) in metadata row
+
+### 🐛 Bug Fixes
+
+- **Mobile Layout:** Fixed Trending page to display one card per row on mobile devices instead of two
+  - Changed grid layout from `grid-cols-2` to `grid-cols-1` for mobile breakpoint
+  - Improved readability and touch targets on small screens
+
 ---
+
 
 ## [2.2.1] - 2025-12-24
 
