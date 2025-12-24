@@ -83,14 +83,6 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
             </div>
           )}
 
-          {/* RATING BADGE */}
-          {typeof item.voteAverage === 'number' && item.voteAverage > 0 && (
-            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-md">
-              <Star className="w-3 h-3 text-yellow-400" />
-              <span className="text-xs font-bold text-white">{item.voteAverage.toFixed(1)}</span>
-            </div>
-          )}
-
           {/* INFO BADGE */}
           <div className="absolute top-2 right-2 z-10 transition-transform duration-200 hover:scale-110">
             <button
@@ -232,15 +224,34 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               </button>
             </div>
           </div>
+        </div>
 
-          <div className="p-3">
-            <p className="truncate font-semibold" title={titleText}>{titleText}</p>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-sm text-gray-400">{item.releaseYear}</p>
-              {item.CommunityRating ? (
-                <p className="text-sm text-gray-300">{Math.round(item.CommunityRating)}</p>
-              ) : null}
-            </div>
+        {/* Title and metadata below card */}
+        <div className="p-3 bg-slate-900/50">
+          <h3 className="font-semibold text-white text-sm md:text-base line-clamp-2 leading-tight" title={titleText}>
+            {titleText}
+          </h3>
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400">
+            {item.releaseYear && (
+              <span>{item.releaseYear}</span>
+            )}
+            {item.releaseYear && item.voteAverage && item.voteAverage > 0 && (
+              <span>•</span>
+            )}
+            {item.voteAverage && item.voteAverage > 0 && (
+              <span className="flex items-center gap-1">
+                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                {item.voteAverage.toFixed(1)}
+              </span>
+            )}
+            {(item.releaseYear || (item.voteAverage && item.voteAverage > 0)) && currentMediaType && (
+              <span>•</span>
+            )}
+            {currentMediaType && (
+              <span className="text-slate-500">
+                {currentMediaType === 'movie' ? '🎬 Movie' : '📺 TV'}
+              </span>
+            )}
           </div>
         </div>
       </div>
