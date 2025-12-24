@@ -95,7 +95,7 @@ const TrendingPage: React.FC = () => {
         return (
             <div className="space-y-8 p-4 md:p-6">
                 <div className="h-16 animate-pulse bg-slate-800/50 rounded-xl" />
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
                     {Array.from({ length: 12 }).map((_, idx) => (
                         <SkeletonCard key={`skeleton-${idx}`} />
                     ))}
@@ -164,7 +164,7 @@ const TrendingPage: React.FC = () => {
                         <h2 className="text-xl font-semibold text-white">Movies</h2>
                         <span className="text-sm text-slate-500">({data.movies.length})</span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
                         {data.movies.map(item => (
                             <MediaCard
                                 key={item.id}
@@ -184,7 +184,7 @@ const TrendingPage: React.FC = () => {
                         <h2 className="text-xl font-semibold text-white">TV Shows</h2>
                         <span className="text-sm text-slate-500">({data.tvShows.length})</span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
                         {data.tvShows.map(item => (
                             <MediaCard
                                 key={item.id}
