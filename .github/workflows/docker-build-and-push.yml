@@ -33,7 +33,7 @@ jobs:
       - name: Extract version from package.json
         id: version
         run: |
-          VERSION=$(jq -r '.version' package.json)
+          VERSION=$(jq -r '.version' backend/package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version extracted: $VERSION"
 
