@@ -16,6 +16,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Trending Page:** Added filter tabs to easily switch between All, Movies, and TV Shows
   - Quick filtering with purple-blue gradient active state
   - Matches Weekly Watchlist UX pattern
+  - Shows separate Movies and TV Shows sections when "All" is selected
+- **Watchlist View:** Added Movies and TV Shows section headers when "All" filter is active
+  - Consistent with Trending page layout
+  - Color-coded sections (purple for Movies, blue for TV Shows)
+  - Shows item counts for each section
+
 
 ### 🐛 Bug Fixes
 

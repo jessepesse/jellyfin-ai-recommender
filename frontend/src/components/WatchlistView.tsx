@@ -109,7 +109,47 @@ const WatchlistView: React.FC = () => {
 
       {error && <div className="text-red-400 mb-4">{error}</div>}
 
-      <ItemList items={processedItems} onSelectItem={() => { }} isLoading={loading} onRemove={(id) => handleRemove(id)} variant="watchlist" />
+      <div className="space-y-8">
+        {/* Movies Section */}
+        {(filter === 'all' || filter === 'movie') && processedItems.filter(item => (item.mediaType || 'movie') === 'movie').length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-purple-500 rounded-full"></div>
+              <h3 className="text-xl font-semibold text-white">Movies</h3>
+              <span className="text-sm text-slate-500">
+                ({items.filter(it => (it.mediaType || 'movie') === 'movie').length})
+              </span>
+            </div>
+            <ItemList
+              items={processedItems.filter(item => (item.mediaType || 'movie') === 'movie')}
+              onSelectItem={() => { }}
+              isLoading={loading}
+              onRemove={(id) => handleRemove(id)}
+              variant="watchlist"
+            />
+          </section>
+        )}
+
+        {/* TV Shows Section */}
+        {(filter === 'all' || filter === 'tv') && processedItems.filter(item => (item.mediaType || 'movie') === 'tv').length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
+              <h3 className="text-xl font-semibold text-white">TV Shows</h3>
+              <span className="text-sm text-slate-500">
+                ({items.filter(it => (it.mediaType || 'movie') === 'tv').length})
+              </span>
+            </div>
+            <ItemList
+              items={processedItems.filter(item => (item.mediaType || 'movie') === 'tv')}
+              onSelectItem={() => { }}
+              isLoading={loading}
+              onRemove={(id) => handleRemove(id)}
+              variant="watchlist"
+            />
+          </section>
+        )}
+      </div>
     </div>
   );
 };
