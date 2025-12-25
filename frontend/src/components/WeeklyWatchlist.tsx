@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { Calendar, RefreshCw, Sparkles, TrendingUp, Tv } from 'lucide-react';
-import { getWeeklyWatchlist, refreshWeeklyWatchlist } from '../services/api';
+import { Calendar, Sparkles, TrendingUp, Tv } from 'lucide-react';
+import { getWeeklyWatchlist } from '../services/api';
 import type { WeeklyWatchlist as IWeeklyWatchlist, WeeklyWatchlistItem } from '../types';
 import type { JellyfinItem } from '../types';
 import MediaCard from './MediaCard';
@@ -11,7 +11,7 @@ import { format, parseISO } from 'date-fns';
 const WeeklyWatchlist: React.FC = () => {
     const [watchlist, setWatchlist] = useState<IWeeklyWatchlist | null>(null);
     const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -32,19 +32,7 @@ const WeeklyWatchlist: React.FC = () => {
         }
     };
 
-    const handleRefresh = async () => {
-        try {
-            setRefreshing(true);
-            const data = await refreshWeeklyWatchlist();
-            setWatchlist(data);
-            setError(null);
-        } catch (err) {
-            console.error('Failed to refresh watchlist', err);
-            setError('Failed to generate new watchlist');
-        } finally {
-            setRefreshing(false);
-        }
-    };
+
 
     // Helper to map WeeklyWatchlistItem to JellyfinItem for MediaCard
     const mapToJellyfinItem = (item: WeeklyWatchlistItem, type: 'movie' | 'tv'): JellyfinItem => {
@@ -137,16 +125,6 @@ const WeeklyWatchlist: React.FC = () => {
                                 Weekly Picks
                             </h2>
                         </div>
-
-                        <button
-                            onClick={handleRefresh}
-                            disabled={refreshing}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors border border-white/5 ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title="Regenerate watchlist"
-                        >
-                            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                            <span className="text-sm">Regenerate</span>
-                        </button>
                     </div>
 
                     {/* Taste Profile Quote */}
