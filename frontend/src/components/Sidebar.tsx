@@ -47,8 +47,9 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
 
   return (
     <>
-      <aside className="w-80 bg-[#080810] min-h-screen flex flex-col border-r border-white/5 p-6 overflow-visible">
-        <div className="flex-1 overflow-auto pl-6 pr-2 pb-24">
+      <aside className="w-80 bg-[#080810] h-[100dvh] flex flex-col border-r border-white/5" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto p-6">
           <nav>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
@@ -75,7 +76,8 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
           </nav>
         </div>
 
-        <div className="sticky bottom-4 border-t border-white/5 pt-4 bg-[#080810]">
+        {/* Fixed footer - always visible */}
+        <div className="flex-shrink-0 border-t border-white/5 p-6 pb-8 bg-[#080810]">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setShowStats(true)}
