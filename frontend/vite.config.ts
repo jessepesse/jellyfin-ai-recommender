@@ -24,6 +24,11 @@ export default defineConfig({
         target: API_TARGET,
         changeOrigin: true,
       },
+      // Proxy /images requests to backend for cached media images
+      '/images': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
     },
   },
   test: {
