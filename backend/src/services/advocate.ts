@@ -7,8 +7,7 @@
  */
 
 import { prisma } from '../db';
-import { GeminiService } from './gemini';
-import type { Media, UserMedia } from '../generated/prisma';
+import type { Media, UserMedia } from '@prisma/client';
 
 interface RedemptionCandidate {
     media: Media;
@@ -159,18 +158,41 @@ Return ONLY valid JSON (no markdown, no code blocks):
 }
 `;
 
-        const response = await GeminiService.generateRecommendations(prompt, 'text');
+        // Use Gemini API directly for text generation
+        try {
+            const { GoogleGenerativeAI } = await import('@google/generative-ai');
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) {
+                throw new Error('GEMINI_API_KEY not configured');
+            }
 
-        // Clean response - remove markdown code blocks if present
-        let cleanedResponse = response.trim();
-        if (cleanedResponse.startsWith('```json')) {
-            cleanedResponse = cleanedResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-        } else if (cleanedResponse.startsWith('```')) {
-            cleanedResponse = cleanedResponse.replace(/```\n?/g, '');
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+            const model = genAI.getGenerativeModel({ model: modelName });
+
+            const result = await model.generateContent(prompt);
+            const response = result.response.text();
+
+            // Clean response - remove markdown code blocks if present
+            let cleanedResponse = response.trim();
+            if (cleanedResponse.startsWith('```json')) {
+                cleanedResponse = cleanedResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+            } else if (cleanedResponse.startsWith('```')) {
+                cleanedResponse = cleanedResponse.replace(/```\n?/g, '');
+            }
+
+            const analysis = JSON.parse(cleanedResponse);
+            return analysis;
+        } catch (error: any) {
+            console.error('[Advocate] Gemini API error:', error?.message);
+            // Return a default "don't recommend" response on error
+            return {
+                shouldRecommend: false,
+                confidence: 0,
+                appealText: 'Unable to analyze at this time.',
+                reasoning: `Error: ${error?.message || 'Unknown error'}`
+            };
         }
-
-        const analysis = JSON.parse(cleanedResponse);
-        return analysis;
     }
 
     /**
