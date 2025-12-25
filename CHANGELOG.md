@@ -38,6 +38,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Axios interceptor now automatically clears all auth data when token refresh fails
   - Page reloads to show login screen instead of showing error while staying logged in
   - Prevents users from being stuck in invalid authentication state
+- **Weekly Picks:** Removed regenerate button that was accidentally left visible from development
+  - Weekly picks auto-regenerate every Monday at 03:00
+  - Prevents users from triggering expensive AI operations manually
+  - Button was intended for development/testing only
 
 ---
 
