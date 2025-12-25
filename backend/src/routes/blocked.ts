@@ -44,14 +44,24 @@ router.get('/', async (req: Request, res: Response) => {
             }
         });
 
-        // Separate by media type
+        // Separate by media type and transform to frontend format
         const movies = blockedMedia
             .filter(um => um.media.mediaType === 'movie')
-            .map(um => um.media);
+            .map(um => ({
+                ...um.media,
+                // Ensure we use local cached images, not source URLs
+                posterUrl: um.media.posterUrl || um.media.posterSourceUrl,
+                backdropUrl: um.media.backdropUrl || um.media.backdropSourceUrl
+            }));
 
         const tvShows = blockedMedia
             .filter(um => um.media.mediaType === 'tv')
-            .map(um => um.media);
+            .map(um => ({
+                ...um.media,
+                // Ensure we use local cached images, not source URLs
+                posterUrl: um.media.posterUrl || um.media.posterSourceUrl,
+                backdropUrl: um.media.backdropUrl || um.media.backdropSourceUrl
+            }));
 
         res.json({
             movies,
