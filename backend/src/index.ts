@@ -16,6 +16,7 @@ import apiRouter from './routes/api';
 import authRouter from './routes/auth'; // Import new auth router
 import statsRouter from './routes/stats';
 import weeklyWatchlistRouter from './routes/weekly-watchlist';
+import blockedRouter from './routes/blocked';
 import { runMetadataBackfill } from './services/metadataBackfill';
 import { runEnrichmentBackfill } from './services/enrichment';
 import { initScheduler, checkStaleWatchlists } from './services/scheduler';
@@ -140,6 +141,9 @@ app.use('/api', generalLimiter); // General limiter for all other endpoints
 
 // Weekly Watchlist route
 app.use('/api/weekly-watchlist', weeklyWatchlistRouter);
+
+// Blocked content and redemption routes
+app.use('/api/blocked', blockedRouter);
 
 // Serve static images from local storage
 // Images are downloaded and cached to prevent broken links when Jellyseerr IP changes

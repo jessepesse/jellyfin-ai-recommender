@@ -61,6 +61,12 @@ model UserMedia {
   mediaId   Int
   status    MediaStatus
   updatedAt DateTime @updatedAt
+  
+  // Redemption Arc fields
+  blockedAt          DateTime?
+  permanentBlock     Boolean   @default(false)
+  softBlockUntil     DateTime?
+  redemptionAttempts Int       @default(0)
 
   user      User     @relation(fields: [userId], references: [id])
   media     Media    @relation(fields: [mediaId], references: [id])
