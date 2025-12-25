@@ -16,7 +16,7 @@ export interface Settings {
     apiKey?: string;
 }
 
-export type AppView = 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
+export type AppView = 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings' | 'blocked';
 
 export interface WeeklyWatchlistItem {
     tmdbId: number;
