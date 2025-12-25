@@ -34,6 +34,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Added iOS safe-area padding to prevent UI elements from being hidden by browser chrome
   - Footer is now always visible at bottom of viewport
   - Content area scrolls independently
+- **Authentication:** Fixed app not forcing logout when Jellyfin token expires
+  - Axios interceptor now automatically clears all auth data when token refresh fails
+  - Page reloads to show login screen instead of showing error while staying logged in
+  - Prevents users from being stuck in invalid authentication state
 
 ---
 

@@ -74,13 +74,34 @@ apiClient.interceptors.response.use(
                     }
                 }
 
-                // If refresh failed, clear auth and reject
+                // If refresh failed, force logout
                 isRefreshing = false;
+
+                // Clear all auth data
                 localStorage.removeItem('jellyfin_token');
+                localStorage.removeItem('jellyfin_user');
+                localStorage.removeItem('jellyfin_server');
+                localStorage.removeItem('jellyfin_isAdmin');
+                sessionStorage.removeItem('jellyfin_password');
+
+                // Redirect to login by reloading the page
+                // This will trigger AuthContext to show login screen
+                window.location.reload();
+
                 return Promise.reject(error);
             } catch (refreshError) {
                 isRefreshing = false;
+
+                // Clear all auth data
                 localStorage.removeItem('jellyfin_token');
+                localStorage.removeItem('jellyfin_user');
+                localStorage.removeItem('jellyfin_server');
+                localStorage.removeItem('jellyfin_isAdmin');
+                sessionStorage.removeItem('jellyfin_password');
+
+                // Redirect to login by reloading the page
+                window.location.reload();
+
                 return Promise.reject(refreshError);
             }
         }
