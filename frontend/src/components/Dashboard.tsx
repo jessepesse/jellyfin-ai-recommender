@@ -12,6 +12,7 @@ import HeroButton from './HeroButton';
 
 import WeeklyWatchlist from './WeeklyWatchlist';
 import TrendingPage from './TrendingPage';
+import BlockedView from './BlockedView';
 
 // Official TMDB genre names for proper matching with enriched data
 const GENRES = [
@@ -31,7 +32,7 @@ const MOODS = [
 ];
 
 interface Props {
-  currentView?: 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings';
+  currentView?: 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings' | 'blocked';
 }
 
 const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
@@ -170,6 +171,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
               </div>
             )
           )}
+          {currentView === 'blocked' && <BlockedView />}
         </section>
       </div>
 

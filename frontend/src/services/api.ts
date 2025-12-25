@@ -262,3 +262,49 @@ export const getTrending = async (): Promise<TrendingResponse> => {
     const response = await apiClient.get('/trending', authHeaders());
     return response.data;
 };
+
+// ============================================================================
+// Blocked Content & Redemption API
+// ============================================================================
+
+export interface BlockedResponse {
+    movies: JellyfinItem[];
+    tvShows: JellyfinItem[];
+    total: number;
+}
+
+export interface RedemptionCandidate {
+    media: JellyfinItem;
+    blockedAt: string;
+    appealText: string;
+    confidence: number;
+    reasons: string[];
+}
+
+export interface RedemptionCandidatesResponse {
+    candidates: RedemptionCandidate[];
+    count: number;
+}
+
+export const getBlockedItems = async (): Promise<BlockedResponse> => {
+    const response = await apiClient.get('/blocked', authHeaders());
+    return response.data;
+};
+
+export const getRedemptionCandidates = async (): Promise<RedemptionCandidatesResponse> => {
+    const response = await apiClient.get('/blocked/redemption-candidates', authHeaders());
+    return response.data;
+};
+
+export const unblockItem = async (mediaId: number, action: 'watchlist' | 'jellyseerr' | 'watched'): Promise<void> => {
+    await apiClient.post(`/blocked/${mediaId}/unblock`, { action }, authHeaders());
+};
+
+export const keepBlocked = async (mediaId: number, type: 'soft' | 'permanent'): Promise<void> => {
+    await apiClient.post(`/blocked/${mediaId}/keep-blocked`, { type }, authHeaders());
+};
+
+export const testRedemption = async (): Promise<RedemptionCandidatesResponse> => {
+    const response = await apiClient.post('/blocked/test-redemption', {}, authHeaders());
+    return response.data;
+};

@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { id: 'trending', label: '📈 Trending' },
   { id: 'recommendations', label: 'Recommendations' },
   { id: 'watchlist', label: 'Watchlist' },
+  { id: 'blocked', label: '🚫 Blocked' },
   { id: 'mark-watched', label: 'Mark as Watched' },
   { id: 'settings', label: 'Settings' },
 ];
