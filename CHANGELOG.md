@@ -28,6 +28,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Mobile Layout:** Fixed Trending page to display one card per row on mobile devices instead of two
   - Changed grid layout from `grid-cols-2` to `grid-cols-1` for mobile breakpoint
   - Improved readability and touch targets on small screens
+- **Sidebar:** Fixed logout button not being visible on iPhone
+  - Changed sidebar layout from `min-h-screen` with sticky footer to `h-screen` with flexbox
+  - Used `100dvh` (dynamic viewport height) instead of `100vh` to account for Safari address bar
+  - Added iOS safe-area padding to prevent UI elements from being hidden by browser chrome
+  - Footer is now always visible at bottom of viewport
+  - Content area scrolls independently
 
 ---
 
