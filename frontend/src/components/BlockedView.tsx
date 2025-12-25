@@ -6,13 +6,13 @@
 import React, { useEffect, useState } from 'react';
 import { Ban, RefreshCw } from 'lucide-react';
 import { getBlockedItems, getRedemptionCandidates, testRedemption } from '../services/api';
-import type { Media } from '../types';
+import type { JellyfinItem } from '../types';
 import MediaCard from './MediaCard';
 import RedemptionCard from './RedemptionCard';
 import SkeletonCard from './SkeletonCard';
 
 interface RedemptionCandidate {
-    media: Media;
+    media: JellyfinItem;
     blockedAt: string;
     appealText: string;
     confidence: number;
@@ -20,8 +20,8 @@ interface RedemptionCandidate {
 }
 
 const BlockedView: React.FC = () => {
-    const [blockedMovies, setBlockedMovies] = useState<Media[]>([]);
-    const [blockedTVShows, setBlockedTVShows] = useState<Media[]>([]);
+    const [blockedMovies, setBlockedMovies] = useState<JellyfinItem[]>([]);
+    const [blockedTVShows, setBlockedTVShows] = useState<JellyfinItem[]>([]);
     const [redemptionCandidates, setRedemptionCandidates] = useState<RedemptionCandidate[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingRedemption, setLoadingRedemption] = useState(false);
