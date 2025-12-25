@@ -157,9 +157,8 @@ const BlockedView: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {blockedMovies.map((movie) => (
                                 <MediaCard
-                                    key={movie.id}
+                                    key={movie.tmdbId}
                                     item={movie}
-                                    onSelectItem={() => { }}
                                     variant="default"
                                 />
                             ))}
@@ -187,9 +186,8 @@ const BlockedView: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {blockedTVShows.map((show) => (
                                 <MediaCard
-                                    key={show.id}
+                                    key={show.tmdbId}
                                     item={show}
-                                    onSelectItem={() => { }}
                                     variant="default"
                                 />
                             ))}
