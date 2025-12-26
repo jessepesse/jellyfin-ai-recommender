@@ -308,3 +308,41 @@ export const testRedemption = async (): Promise<RedemptionCandidatesResponse> =>
     const response = await apiClient.post('/blocked/test-redemption', {}, authHeaders());
     return response.data;
 };
+
+// Admin APIs
+export interface UserStatistics {
+    username: string;
+    createdAt: string;
+    lastActivity: string;
+    isActive: boolean;
+    stats: {
+        watched: number;
+        watchlist: number;
+        blocked: number;
+        total: number;
+    };
+    aiFeatures: {
+        weeklyPicks: {
+            generatedAt: string;
+            daysOld: number;
+        } | null;
+        redemptionCandidates: {
+            generatedAt: string;
+            daysOld: number;
+        } | null;
+    };
+}
+
+export interface UserStatisticsResponse {
+    users: UserStatistics[];
+    summary: {
+        total: number;
+        active: number;
+        inactive: number;
+    };
+}
+
+export const getUserStatistics = async (): Promise<UserStatisticsResponse> => {
+    const response = await apiClient.get('/admin/users', authHeaders());
+    return response.data;
+};
