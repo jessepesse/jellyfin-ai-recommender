@@ -10,11 +10,11 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { id: 'weekly-picks', label: '✨ Weekly Picks' },
-  { id: 'trending', label: '📈 Trending' },
+  { id: 'weekly-picks', label: 'Weekly Picks' },
+  { id: 'trending', label: 'Trending' },
   { id: 'recommendations', label: 'Recommendations' },
   { id: 'watchlist', label: 'Watchlist' },
-  { id: 'blocked', label: '🚫 Blocked' },
+  { id: 'blocked', label: 'Blocked' },
   { id: 'mark-watched', label: 'Mark as Watched' },
   { id: 'settings', label: 'Settings' },
 ];
