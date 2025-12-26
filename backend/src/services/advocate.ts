@@ -7,10 +7,11 @@
  */
 
 import { prisma } from '../db';
-import type { Media, UserMedia } from '@prisma/client';
+import ConfigService from './config';
+import type { Prisma } from '@prisma/client';
 
 interface RedemptionCandidate {
-    media: Media;
+    media: Prisma.MediaGetPayload<{}>;
     blockedAt: Date;
     appealText: string;
     confidence: number; // 0-100
@@ -115,7 +116,7 @@ export class AdvocateService {
      * Analyze if a blocked item should be recommended again
      */
     private static async analyzeRedemptionPotential(
-        media: Media,
+        media: Prisma.MediaGetPayload<{}>,
         tasteProfile: TasteProfile
     ): Promise<RedemptionAnalysis> {
         const genres = media.genres ? JSON.parse(media.genres) : [];
@@ -160,14 +161,17 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
         // Use Gemini API directly for text generation
         try {
-            const { GoogleGenerativeAI } = await import('@google/generative-ai');
-            const apiKey = process.env.GEMINI_API_KEY;
+            // Get API key from database settings (like other services)
+            const config = await ConfigService.getConfig();
+            const apiKey = config.geminiApiKey;
+
             if (!apiKey) {
-                throw new Error('GEMINI_API_KEY not configured');
+                throw new Error('GEMINI_API_KEY not configured in settings');
             }
 
+            const { GoogleGenerativeAI } = await import('@google/generative-ai');
             const genAI = new GoogleGenerativeAI(apiKey);
-            const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+            const modelName = config.geminiModel || 'gemini-2.0-flash-exp';
             const model = genAI.getGenerativeModel({ model: modelName });
 
             const result = await model.generateContent(prompt);

@@ -21,7 +21,7 @@ const RedemptionCard: React.FC<RedemptionCardProps> = ({ candidate, onComplete }
     const handleUnblock = async (action: 'watchlist' | 'jellyseerr' | 'watched') => {
         try {
             setProcessing(true);
-            await unblockItem(candidate.media.id, action);
+            await unblockItem(candidate.media.tmdbId, action);
             onComplete();
         } catch (error) {
             console.error('Failed to unblock', error);
@@ -33,7 +33,7 @@ const RedemptionCard: React.FC<RedemptionCardProps> = ({ candidate, onComplete }
     const handleKeepBlocked = async (type: 'soft' | 'permanent') => {
         try {
             setProcessing(true);
-            await keepBlocked(candidate.media.id, type);
+            await keepBlocked(candidate.media.tmdbId, type);
             onComplete();
         } catch (error) {
             console.error('Failed to keep blocked', error);
