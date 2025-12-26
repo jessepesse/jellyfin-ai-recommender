@@ -20,6 +20,7 @@ import blockedRouter from './routes/blocked';
 import { runMetadataBackfill } from './services/metadataBackfill';
 import { runEnrichmentBackfill } from './services/enrichment';
 import { initScheduler, checkStaleWatchlists } from './services/scheduler';
+import { initializeRecommendations } from './services/startup';
 import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 import swaggerUi from 'swagger-ui-express';
@@ -207,6 +208,9 @@ app.listen(port, () => {
       // Check for stale weekly watchlists
       logger.info('Checking for stale weekly watchlists...');
       await checkStaleWatchlists();
+      // Initialize recommendations for active users
+      logger.info('Initializing recommendations for active users...');
+      await initializeRecommendations();
     } catch (e) {
       logger.error({ err: e }, 'Startup backfill failed');
     }
