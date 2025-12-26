@@ -5,6 +5,9 @@ import HeroButton from './HeroButton';
 import ConfigEditor from './ConfigEditor';
 import { UploadCloud, FileJson, X, Download, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import UserStatisticsCard from './UserStatisticsCard';
+import type { UserStatisticsResponse } from '../services/api';
+import { getUserStatistics } from '../services/api';
 
 interface ImportProgress {
   username: string;
@@ -37,8 +40,29 @@ const SettingsView: React.FC = () => {
   const [dragActive, setDragActive] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [eventSource, setEventSource] = useState<EventSource | null>(null);
+  const [userStats, setUserStats] = useState<UserStatisticsResponse | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load user statistics if admin
+  useEffect(() => {
+    if (user?.isAdmin) {
+      loadUserStatistics();
+    }
+  }, [user?.isAdmin]);
+
+  const loadUserStatistics = async () => {
+    try {
+      setStatsLoading(true);
+      const stats = await getUserStatistics();
+      setUserStats(stats);
+    } catch (err) {
+      console.error('Failed to load user statistics', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const handleFileSelect = (file: File) => {
     if (!file) return;
@@ -401,6 +425,50 @@ const SettingsView: React.FC = () => {
           </div>
         )}
       </GlassCard>
+
+      {/* User Statistics (Admin Only) */}
+      {user?.isAdmin && (
+        <GlassCard className="mt-6">
+          <h3 className="text-lg font-semibold mb-4 text-slate-300">User Statistics</h3>
+
+          {statsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+            </div>
+          ) : userStats ? (
+            <>
+              {/* Summary */}
+              <div className="mb-6 p-4 bg-slate-900/30 rounded-lg">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-white">{userStats.summary.total}</div>
+                    <div className="text-sm text-slate-400">Total Users</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-green-400">{userStats.summary.active}</div>
+                    <div className="text-sm text-slate-400">Active (7d)</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-red-400">{userStats.summary.inactive}</div>
+                    <div className="text-sm text-slate-400">Inactive</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {userStats.users.map((userStat) => (
+                  <UserStatisticsCard key={userStat.username} user={userStat} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12 text-slate-400">
+              Failed to load user statistics
+            </div>
+          )}
+        </GlassCard>
+      )}
     </div>
   );
 };
