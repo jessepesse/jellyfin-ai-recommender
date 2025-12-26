@@ -144,7 +144,7 @@ const BlockedView: React.FC = () => {
                     </h2>
 
                     {loading ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {[...Array(10)].map((_, i) => (
                                 <SkeletonCard key={i} />
                             ))}
@@ -154,7 +154,7 @@ const BlockedView: React.FC = () => {
                             No blocked movies
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {blockedMovies.map((movie) => (
                                 <MediaCard
                                     key={movie.tmdbId}
@@ -173,7 +173,7 @@ const BlockedView: React.FC = () => {
                     </h2>
 
                     {loading ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {[...Array(10)].map((_, i) => (
                                 <SkeletonCard key={i} />
                             ))}
@@ -183,7 +183,7 @@ const BlockedView: React.FC = () => {
                             No blocked TV shows
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {blockedTVShows.map((show) => (
                                 <MediaCard
                                     key={show.tmdbId}
