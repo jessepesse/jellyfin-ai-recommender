@@ -114,9 +114,11 @@ function authHeaders() {
     const token = localStorage.getItem('jellyfin_token');
     const user = localStorage.getItem('jellyfin_user');
     const server = localStorage.getItem('jellyfin_server');
+    const isAdmin = localStorage.getItem('jellyfin_isAdmin');
     const headers: Record<string, string> = {};
     if (token) headers['x-access-token'] = token;
     if (server) headers['x-jellyfin-url'] = server;
+    if (isAdmin) headers['x-is-admin'] = isAdmin;
     if (user) {
         try {
             const parsed = JSON.parse(user);
