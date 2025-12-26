@@ -28,28 +28,31 @@ interface RedemptionAnalysis {
 export class AdvocateService {
     /**
      * Get current week's redemption candidates from database
-     * Returns cached candidates if they exist for this week
+     * Auto-regenerates if older than 7 days
      */
     static async getRedemptionCandidates(userId: number): Promise<RedemptionCandidate[]> {
         const now = new Date();
-        const weekStart = this.getWeekStart(now);
-        const weekEnd = this.getWeekEnd(weekStart);
 
-        // Try to get existing candidates for this week
+        // Try to get most recent candidates
         const existing = await prisma.redemptionCandidates.findFirst({
-            where: {
-                userId,
-                weekStart,
-                weekEnd
-            }
+            where: { userId },
+            orderBy: { generatedAt: 'desc' }
         });
 
         if (existing) {
-            console.log(`[Advocate] Found existing redemption candidates for user ${userId}`);
-            return JSON.parse(existing.candidates);
+            // Check if candidates are older than 7 days
+            const daysSinceGeneration = (now.getTime() - existing.generatedAt.getTime()) / (1000 * 60 * 60 * 24);
+
+            if (daysSinceGeneration < 7) {
+                console.log(`[Advocate] Found existing redemption candidates for user ${userId} (${daysSinceGeneration.toFixed(1)} days old)`);
+                return JSON.parse(existing.candidates);
+            }
+
+            console.log(`[Advocate] Candidates are ${daysSinceGeneration.toFixed(1)} days old, regenerating...`);
+        } else {
+            console.log(`[Advocate] No existing candidates, generating new ones for user ${userId}`);
         }
 
-        console.log(`[Advocate] No existing candidates, generating new ones for user ${userId}`);
         return this.generateAndSaveRedemptionCandidates(userId);
     }
 

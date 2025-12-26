@@ -54,7 +54,8 @@ function getWeekEnd(): Date {
 export class WeeklyWatchlistService {
 
     /**
-     * Get user's current weekly watchlist (if exists and not expired)
+     * Get user's current weekly watchlist
+     * Auto-regenerates if older than 7 days
      */
     static async getForUser(userId: number): Promise<{
         id: number;
@@ -65,16 +66,60 @@ export class WeeklyWatchlistService {
         weekStart: Date;
         weekEnd: Date;
     } | null> {
-        const weekStart = getWeekStart();
+        const now = new Date();
 
-        const watchlist = await prisma.weeklyWatchlist.findUnique({
-            where: {
-                userId_weekStart: { userId, weekStart }
-            }
+        // Try to get most recent watchlist
+        const watchlist = await prisma.weeklyWatchlist.findFirst({
+            where: { userId },
+            orderBy: { generatedAt: 'desc' }
         });
 
-        if (!watchlist) return null;
+        if (!watchlist) {
+            console.log(`[Weekly Watchlist] No existing watchlist for user ${userId}, generating new one`);
+            await this.generateForUser(userId);
+            // Fetch the newly generated watchlist
+            const newWatchlist = await prisma.weeklyWatchlist.findFirst({
+                where: { userId },
+                orderBy: { generatedAt: 'desc' }
+            });
+            if (!newWatchlist) return null;
 
+            return {
+                id: newWatchlist.id,
+                movies: JSON.parse(newWatchlist.movies),
+                tvShows: JSON.parse(newWatchlist.tvShows),
+                tasteProfile: newWatchlist.tasteProfile,
+                generatedAt: newWatchlist.generatedAt,
+                weekStart: newWatchlist.weekStart,
+                weekEnd: newWatchlist.weekEnd,
+            };
+        }
+
+        // Check if watchlist is older than 7 days
+        const daysSinceGeneration = (now.getTime() - watchlist.generatedAt.getTime()) / (1000 * 60 * 60 * 24);
+
+        if (daysSinceGeneration >= 7) {
+            console.log(`[Weekly Watchlist] Watchlist for user ${userId} is ${daysSinceGeneration.toFixed(1)} days old, regenerating...`);
+            await this.generateForUser(userId);
+            // Fetch the newly generated watchlist
+            const newWatchlist = await prisma.weeklyWatchlist.findFirst({
+                where: { userId },
+                orderBy: { generatedAt: 'desc' }
+            });
+            if (!newWatchlist) return null;
+
+            return {
+                id: newWatchlist.id,
+                movies: JSON.parse(newWatchlist.movies),
+                tvShows: JSON.parse(newWatchlist.tvShows),
+                tasteProfile: newWatchlist.tasteProfile,
+                generatedAt: newWatchlist.generatedAt,
+                weekStart: newWatchlist.weekStart,
+                weekEnd: newWatchlist.weekEnd,
+            };
+        }
+
+        console.log(`[Weekly Watchlist] Found existing watchlist for user ${userId} (${daysSinceGeneration.toFixed(1)} days old)`);
         return {
             id: watchlist.id,
             movies: JSON.parse(watchlist.movies),
