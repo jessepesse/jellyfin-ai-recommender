@@ -189,7 +189,7 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
             }
         });
 
-        console.log(`[Blocked API] Unblocked media ${mediaId} for ${username}, action: ${action}`);
+        console.log(`[Blocked API] Unblocked media ${tmdbId} for ${username}, action: ${action}`);
 
         // TODO: If action === 'jellyseerr', make Jellyseerr request
         // This would require Jellyseerr integration which we can add later
@@ -286,7 +286,7 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
             data: updateData
         });
 
-        console.log(`[Blocked API] Kept media ${mediaId} blocked (${type}) for ${username}`);
+        console.log(`[Blocked API] Kept media ${tmdbId} blocked (${type}) for ${username}`);
 
         res.json({
             success: true,
