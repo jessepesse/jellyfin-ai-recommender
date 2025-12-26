@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.2] - 2025-12-26
+
+### 🐛 Bug Fixes
+
+- **Package Lock Sync**: Fixed npm ci failures in GitHub Actions
+  - Synced package-lock.json files with package.json
+  - Resolved missing dependencies (magicast, yaml)
+
 ## [2.3.1] - 2025-12-26
 
 ### 🐛 Critical Bug Fixes
