@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import importService from '../services/import';
-import { exportUserData } from '../services/export';
+import { exportUserData, exportAllUsersData } from '../services/export';
 
 const router = Router();
 
@@ -114,12 +114,15 @@ router.post('/import', async (req, res) => {
 });
 
 /**
- * GET /settings/export - Export current database to JSON
+ * GET /settings/export - Export database to JSON
+ * Admins: Export all users' data
+ * Non-admins: Export only their own data
  */
 router.get('/export', async (req, res) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
+        const isAdmin = req.headers['x-is-admin'] === 'true';
         const token = req.headers['x-access-token'] as string | undefined;
 
         if (!userId || !token) {
@@ -127,10 +130,22 @@ router.get('/export', async (req, res) => {
         }
 
         const username = userName || userId;
-        console.log(`[Export] Exporting data for user: ${username}`);
-        const exportData = await exportUserData(username);
 
-        const filename = `jellyfin-backup-${new Date().toISOString().split('T')[0]}.json`;
+        let exportData;
+        let filename;
+
+        if (isAdmin) {
+            // Admin: Export all users
+            console.log(`[Export] Admin ${username} exporting all users' data`);
+            exportData = await exportAllUsersData();
+            filename = `jellyfin-backup-all-users-${new Date().toISOString().split('T')[0]}.json`;
+        } else {
+            // Regular user: Export only their own data
+            console.log(`[Export] Exporting data for user: ${username}`);
+            exportData = await exportUserData(username);
+            filename = `jellyfin-backup-${username}-${new Date().toISOString().split('T')[0]}.json`;
+        }
+
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
