@@ -45,9 +45,14 @@ const TrendingPage: React.FC = () => {
             setError(null);
             const response = await getTrending();
             setData(response);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to load trending', err);
-            setError(err?.response?.data?.error || 'Failed to load trending content');
+            const errorMessage = err && typeof err === 'object' && 'response' in err &&
+                err.response && typeof err.response === 'object' && 'data' in err.response &&
+                err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data
+                ? String(err.response.data.error)
+                : 'Failed to load trending content';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
