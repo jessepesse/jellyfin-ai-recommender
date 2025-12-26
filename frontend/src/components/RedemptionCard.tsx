@@ -43,14 +43,24 @@ const RedemptionCard: React.FC<RedemptionCardProps> = ({ candidate, onComplete }
     };
 
     return (
-        <div className="bg-gradient-to-br from-slate-800/50 to-purple-900/20 rounded-xl p-4 md:p-6 border border-white/10">
-            <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-                {/* Poster */}
-                <div className="flex-shrink-0 mx-auto md:mx-0">
+        <div className="bg-gradient-to-br from-slate-800/50 to-purple-900/20 rounded-xl overflow-hidden border border-white/10">
+            {/* Mobile: Backdrop at top */}
+            <div className="md:hidden w-full h-48 relative">
+                <img
+                    src={candidate.media.backdropUrl || candidate.media.posterUrl || '/placeholder.png'}
+                    alt={candidate.media.title}
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6">
+                {/* Desktop: Poster on left */}
+                <div className="hidden md:block flex-shrink-0">
                     <img
                         src={candidate.media.posterUrl || '/placeholder.png'}
                         alt={candidate.media.title}
-                        className="w-24 h-36 md:w-32 md:h-48 object-cover rounded-lg"
+                        className="w-32 h-48 object-cover rounded-lg"
                     />
                 </div>
 
