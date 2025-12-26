@@ -1,4 +1,4 @@
-# 🎬 Jellyfin AI Recommender (v2.3.4)
+# 🎬 Jellyfin AI Recommender (v2.3.5)
 
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**

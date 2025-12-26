@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.5] - 2025-12-27
+
+### 🐛 Critical Bug Fixes
+
+- **API Base URL**: Fixed hardcoded API base URL in frontend
+  - Now uses `VITE_API_URL` environment variable for production
+  - Falls back to `/api` for local development
+  - Fixes Trending and Blocked pages not working with Cloudflare setup
+  - API calls now correctly route to `https://api.kptsquad.xyz`
+
 ## [2.3.4] - 2025-12-26
 
 ### 🐛 Bug Fixes
