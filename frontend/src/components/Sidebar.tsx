@@ -54,7 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
           <nav>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
-                <img src="/images/logo.png" alt="Jellyfin AI" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(34,211,238,0.3)]" />
+                <img src="/assets/logo.png" alt="Jellyfin AI" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(34,211,238,0.3)]" />
                 <div className="text-lg font-semibold text-white">Jellyfin AI</div>
               </div>
               {/* Mobile/Tablet close button (hidden on large desktops) */}
