@@ -105,3 +105,21 @@ export async function exportUserData(username: string): Promise<ExportData> {
 
   return exportData;
 }
+
+/**
+ * Export all users' data (admin only)
+ * Returns a map of username -> user data
+ */
+export async function exportAllUsersData(): Promise<Record<string, ExportData>> {
+  const users = await prisma.user.findMany({
+    select: { username: true }
+  });
+
+  const allData: Record<string, ExportData> = {};
+
+  for (const user of users) {
+    allData[user.username] = await exportUserData(user.username);
+  }
+
+  return allData;
+}

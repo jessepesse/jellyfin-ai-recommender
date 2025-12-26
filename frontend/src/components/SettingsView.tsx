@@ -375,8 +375,10 @@ const SettingsView: React.FC = () => {
       <GlassCard className="mt-6">
         <h3 className="text-lg font-semibold mb-4 text-slate-300">Export Database</h3>
         <p className="text-sm text-slate-400 mb-6">
-          Download a JSON backup of your current watched history, watchlist, and blocked items.
+          Download a JSON backup of watched history, watchlist, and blocked items.
           The exported file can be re-imported using the Import tool above.
+          <br />
+          <span className="text-cyan-400 font-medium">Admin users export data for all users.</span>
         </p>
 
         <HeroButton
