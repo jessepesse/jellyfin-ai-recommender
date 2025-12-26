@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.1] - 2025-12-26
+
+### 🐛 Critical Bug Fixes
+
+- **Production Migration Fix**: Fixed P3005 error when upgrading existing databases
+  - Implemented automatic baseline migration using `prisma migrate resolve`
+  - Detects databases without `_prisma_migrations` table
+  - Marks all existing migrations as applied without re-running them
+  - Preserves migration history for future updates
+  - Replaces unsafe `db push` approach with proper baseline strategy
+  - Ensures production databases upgrade correctly without data loss
+
 ## [2.3.0] - 2025-12-26
 
 ### ✨ New Features

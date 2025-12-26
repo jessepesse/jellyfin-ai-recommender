@@ -27,38 +27,54 @@ else
     echo "⚠️  No existing database found at $DB_PATH (fresh install)"
 fi
 
-# Step 2: Run Database Migrations (Production-Safe)
-# Check if database exists and has tables
-echo "🔄 Checking database state..."
+# Step 2: Database Migration Strategy (Production-Safe)
+# Handles both fresh installs and existing databases without migration history
+echo "🔄 Checking database migration state..."
+
 if [ -f "$DB_PATH" ]; then
     # Database exists - check if it has the migrations table
     MIGRATION_TABLE_EXISTS=$(sqlite3 "$DB_PATH" "SELECT name FROM sqlite_master WHERE type='table' AND name='_prisma_migrations';" 2>/dev/null || echo "")
     
     if [ -z "$MIGRATION_TABLE_EXISTS" ]; then
         echo "⚠️  Existing database without migration history detected"
-        echo "   Using 'prisma db push' to sync schema (safe for existing data)"
-        if npx prisma db push --accept-data-loss; then
-            echo "✅ Database schema synchronized successfully"
+        echo "   Performing baseline migration (marking all migrations as applied)"
+        
+        # Get list of all migration directories
+        MIGRATION_DIRS=$(ls -1 backend/prisma/migrations/ 2>/dev/null | grep -E '^[0-9]+_' || echo "")
+        
+        if [ -n "$MIGRATION_DIRS" ]; then
+            # Mark each migration as applied without actually running it
+            # This is the proper way to baseline an existing production database
+            echo "$MIGRATION_DIRS" | while read -r migration; do
+                echo "   Marking migration as applied: $migration"
+                npx prisma migrate resolve --applied "$migration" || {
+                    echo "❌ Failed to baseline migration: $migration"
+                    exit 1
+                }
+            done
+            echo "✅ Database baseline completed successfully"
         else
-            echo "❌ Database sync failed!"
-            exit 1
+            echo "⚠️  No migrations found to baseline"
         fi
     else
-        echo "   Migration history found, using 'prisma migrate deploy'"
-        if npx prisma migrate deploy; then
-            echo "✅ Database migrations applied successfully"
-        else
-            echo "❌ Migration failed!"
-            echo "   This usually means:"
-            echo "   - Migration files are missing or corrupted"
-            echo "   - Database schema is out of sync"
-            echo "   - Database is locked by another process"
-            exit 1
-        fi
+        echo "   Migration history found"
+    fi
+    
+    # Now run normal migration deploy (will skip already-applied migrations)
+    echo "   Running: npx prisma migrate deploy"
+    if npx prisma migrate deploy; then
+        echo "✅ Database migrations applied successfully"
+    else
+        echo "❌ Migration failed!"
+        echo "   This usually means:"
+        echo "   - Migration files are missing or corrupted"
+        echo "   - Database schema is out of sync"
+        echo "   - Database is locked by another process"
+        exit 1
     fi
 else
     echo "⚠️  No existing database found (fresh install)"
-    echo "   Using 'prisma migrate deploy' to create database"
+    echo "   Running: npx prisma migrate deploy"
     if npx prisma migrate deploy; then
         echo "✅ Database created and migrations applied successfully"
     else
