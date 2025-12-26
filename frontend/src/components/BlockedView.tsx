@@ -4,8 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Ban, RefreshCw } from 'lucide-react';
-import { getBlockedItems, getRedemptionCandidates, testRedemption } from '../services/api';
+import { Ban } from 'lucide-react';
+import { getBlockedItems, getRedemptionCandidates } from '../services/api';
 import type { JellyfinItem } from '../types';
 import MediaCard from './MediaCard';
 import RedemptionCard from './RedemptionCard';
@@ -24,7 +24,6 @@ const BlockedView: React.FC = () => {
     const [blockedTVShows, setBlockedTVShows] = useState<JellyfinItem[]>([]);
     const [redemptionCandidates, setRedemptionCandidates] = useState<RedemptionCandidate[]>([]);
     const [loading, setLoading] = useState(true);
-    const [loadingRedemption, setLoadingRedemption] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -56,17 +55,7 @@ const BlockedView: React.FC = () => {
         }
     };
 
-    const handleTestRedemption = async () => {
-        try {
-            setLoadingRedemption(true);
-            const data = await testRedemption();
-            setRedemptionCandidates(data.candidates || []);
-        } catch (err) {
-            console.error('Failed to test redemption', err);
-        } finally {
-            setLoadingRedemption(false);
-        }
-    };
+
 
     const handleRedemptionComplete = () => {
         // Refresh both lists after redemption action
@@ -100,16 +89,6 @@ const BlockedView: React.FC = () => {
                                 Manage your blocked movies and TV shows
                             </p>
                         </div>
-
-                        {/* Test Button (DEV ONLY) */}
-                        <button
-                            onClick={handleTestRedemption}
-                            disabled={loadingRedemption}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50"
-                        >
-                            <RefreshCw className={`w-4 h-4 ${loadingRedemption ? 'animate-spin' : ''}`} />
-                            Test Redemption
-                        </button>
                     </div>
                 </div>
 
