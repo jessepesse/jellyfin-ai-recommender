@@ -147,14 +147,23 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const mediaId = parseInt(req.params.id);
+        const tmdbId = parseInt(req.params.id);
         const { action } = req.body; // 'watchlist' | 'jellyseerr' | 'watched'
+
+        // Find the media by tmdbId first
+        const media = await prisma.media.findFirst({
+            where: { tmdbId }
+        });
+
+        if (!media) {
+            return res.status(404).json({ error: 'Media not found' });
+        }
 
         // Find the blocked item
         const userMedia = await prisma.userMedia.findFirst({
             where: {
                 userId: user.id,
-                mediaId,
+                mediaId: media.id,
                 status: 'BLOCKED'
             }
         });
@@ -234,13 +243,22 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const mediaId = parseInt(req.params.id);
+        const tmdbId = parseInt(req.params.id);
         const { type } = req.body; // 'soft' | 'permanent'
+
+        // Find the media by tmdbId first
+        const media = await prisma.media.findFirst({
+            where: { tmdbId }
+        });
+
+        if (!media) {
+            return res.status(404).json({ error: 'Media not found' });
+        }
 
         const userMedia = await prisma.userMedia.findFirst({
             where: {
                 userId: user.id,
-                mediaId,
+                mediaId: media.id,
                 status: 'BLOCKED'
             }
         });
