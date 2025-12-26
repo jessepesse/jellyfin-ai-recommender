@@ -107,7 +107,7 @@ const BlockedView: React.FC = () => {
                         <div className="grid grid-cols-1 gap-6">
                             {redemptionCandidates.map((candidate) => (
                                 <RedemptionCard
-                                    key={candidate.media.id}
+                                    key={candidate.media.tmdbId}
                                     candidate={candidate}
                                     onComplete={handleRedemptionComplete}
                                 />

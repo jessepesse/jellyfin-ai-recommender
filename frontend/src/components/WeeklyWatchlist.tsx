@@ -87,17 +87,9 @@ const WeeklyWatchlist: React.FC = () => {
                 <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700/50 max-w-md">
                     <Sparkles className="w-12 h-12 text-purple-400 mx-auto mb-4" />
                     <h3 className="text-2xl font-bold text-white mb-2">Weekly Picks</h3>
-                    <p className="text-slate-400 mb-6">
+                    <p className="text-slate-400 ">
                         Get personalized recommendations for the week based on your unique taste.
                     </p>
-                    <button
-                        onClick={handleRefresh}
-                        disabled={refreshing}
-                        className="flex items-center gap-2 mx-auto bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-xl transition-all shadow-lg shadow-purple-500/20"
-                    >
-                        {refreshing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                        <span className="font-semibold">{refreshing ? 'Generating...' : 'Generate My Picks'}</span>
-                    </button>
                 </div>
             </div>
         );
