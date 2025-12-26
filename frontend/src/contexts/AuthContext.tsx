@@ -6,6 +6,7 @@ import axios from 'axios';
 interface User {
   id: string;
   name: string;
+  isAdmin?: boolean;
 }
 
 // Define the shape of the authentication state and actions
@@ -26,8 +27,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Initialize state from local storage to avoid useEffect re-renders
   const [user, setUser] = useState<User | null>(() => {
     const stored = localStorage.getItem('jellyfin_user');
+    const storedIsAdmin = localStorage.getItem('jellyfin_isAdmin');
     try {
-      return stored ? JSON.parse(stored) : null;
+      const parsedUser = stored ? JSON.parse(stored) : null;
+      if (parsedUser && storedIsAdmin) {
+        parsedUser.isAdmin = storedIsAdmin === 'true';
+      }
+      return parsedUser;
     } catch {
       return null;
     }
@@ -68,15 +74,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (response.data.success && response.data.jellyfinAuth) {
         const jellyfinAuth = response.data.jellyfinAuth;
+        const isAdmin = response.data.isAdmin ?? false;
         const newUser: User = {
           id: jellyfinAuth.User.Id,
           name: jellyfinAuth.User.Name,
+          isAdmin,
         };
         const newToken = jellyfinAuth.AccessToken;
         // Priority: backend-verified URL > user-provided > env var
         // Backend returns the working URL after testing candidates
         const newServer = response.data.serverUrl || serverUrl || import.meta.env.VITE_JELLYFIN_URL || null;
-        const isAdmin = response.data.isAdmin ?? false;
 
         setUser(newUser);
         setToken(newToken);
