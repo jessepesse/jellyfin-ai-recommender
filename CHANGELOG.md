@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.4] - 2025-12-26
+
+### 🐛 Bug Fixes
+
+- **ESLint**: Fixed `@typescript-eslint/no-explicit-any` error in TrendingPage
+  - Replaced `any` type with proper type guard
+  - Safer error handling
+
 ## [2.3.3] - 2025-12-26
 
 ### 🐛 Critical Bug Fixes
