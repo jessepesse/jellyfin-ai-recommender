@@ -6,7 +6,44 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### ✨ New Features
+
+- **User Statistics Dashboard (Admin):** Added comprehensive user statistics view in Settings for admin users
+  - Shows total, active (7d), and inactive user counts
+  - User cards display username, activity status, last activity time
+  - Statistics: watched, watchlist, blocked, and total counts
+  - AI features status: Weekly Picks and Redemption Candidates generation timestamps
+  - Account creation date
+  - Responsive grid layout (1/2/3 columns)
+  - Auto-loads when admin opens Settings page
+- **Auto-Regeneration:** Weekly Picks and Redemption Candidates now auto-regenerate after 7 days
+  - Checks `generatedAt` timestamp on every API call
+  - Automatically generates fresh recommendations if older than 7 days
+  - Logs age of recommendations (e.g., "2.3 days old")
+  - Scheduled job (Sunday night) continues as backup mechanism
+- **Startup Initialization:** Hybrid approach for generating recommendations at server startup
+  - Finds users with activity in last 7 days
+  - Generates Weekly Picks and Redemption Candidates for active users only
+  - Skips inactive users to keep startup fast
+  - Inactive users get lazy loading when they return
+- **Admin Export:** Database export now exports all users' data for admin users
+  - Admin users: Export all users in format `{ username1: {...}, username2: {...} }`
+  - Regular users: Export only their own data
+  - Filename indicates scope: `jellyfin-backup-all-users-YYYY-MM-DD.json` vs `jellyfin-backup-username-YYYY-MM-DD.json`
+  - Updated UI text to inform admins about this feature
+
 ### ✨ UI Improvements
+
+- **RedemptionCard Mobile:** Changed to use backdrop image on mobile for better screen utilization
+  - Backdrop (wide) image on mobile, poster (tall) image on desktop
+  - Gradient overlay on mobile for text readability
+  - Fallback to poster if backdrop unavailable
+- **BlockedView Mobile:** Changed to display one item per row on mobile
+  - Improved readability and consistency with RedemptionCard mobile layout
+  - Desktop retains multi-column layout (3/4/5 columns)
+- **Settings Text:** Removed "legacy" references from database import section
+  - "Legacy & New database.json Import" → "Database Import"
+  - "database.json (legacy or new)" → "database.json backup"
 
 - **Media Cards:** Improved title visibility by displaying movie/show name, year, rating, and type below card image instead of as overlay
   - Cleaner card design with unobstructed poster/backdrop images
@@ -24,6 +61,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 
 ### 🐛 Bug Fixes
+
+- **Logo and Favicon:** Fixed 404 errors by moving assets from `/images/` to `/assets/`
+  - Vite proxy was forwarding `/images` requests to backend
+  - Separated static assets into `/assets/` path served directly by Vite
+  - Updated `Sidebar.tsx` and `index.html` to use new paths
+  - Corrected favicon type from `image/x-icon` to `image/png`
+- **Viewport Meta Tag:** Restored correct viewport meta tag in `index.html`
+  - Fixed accidental change from `initial-scale=1.0` to `initial=1.0`
+- **Admin Authentication:** Fixed `isAdmin` not being included in user object
+  - Added `isAdmin` field to `User` interface
+  - Set `isAdmin` in user object during login
+  - Load `isAdmin` from localStorage when initializing auth state
+  - Added `x-is-admin` header to all API requests via `authHeaders()`
+  - Fixes 403 Forbidden error when loading user statistics
+- **Test Redemption Button:** Removed redundant "Test Redemption" button from BlockedView
+  - Functionality now automated with persistence feature
+  - Candidates load automatically on page refresh and after actions
 
 - **Mobile Layout:** Fixed Trending page to display one card per row on mobile devices instead of two
   - Changed grid layout from `grid-cols-2` to `grid-cols-1` for mobile breakpoint
