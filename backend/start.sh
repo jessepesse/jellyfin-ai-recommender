@@ -28,18 +28,43 @@ else
 fi
 
 # Step 2: Run Database Migrations (Production-Safe)
-# Uses migration files from prisma/migrations/
-echo "🔄 Running database migrations..."
-echo "   Running: npx prisma migrate deploy"
-if npx prisma migrate deploy; then
-    echo "✅ Database migrations applied successfully"
+# Check if database exists and has tables
+echo "🔄 Checking database state..."
+if [ -f "$DB_PATH" ]; then
+    # Database exists - check if it has the migrations table
+    MIGRATION_TABLE_EXISTS=$(sqlite3 "$DB_PATH" "SELECT name FROM sqlite_master WHERE type='table' AND name='_prisma_migrations';" 2>/dev/null || echo "")
+    
+    if [ -z "$MIGRATION_TABLE_EXISTS" ]; then
+        echo "⚠️  Existing database without migration history detected"
+        echo "   Using 'prisma db push' to sync schema (safe for existing data)"
+        if npx prisma db push --accept-data-loss; then
+            echo "✅ Database schema synchronized successfully"
+        else
+            echo "❌ Database sync failed!"
+            exit 1
+        fi
+    else
+        echo "   Migration history found, using 'prisma migrate deploy'"
+        if npx prisma migrate deploy; then
+            echo "✅ Database migrations applied successfully"
+        else
+            echo "❌ Migration failed!"
+            echo "   This usually means:"
+            echo "   - Migration files are missing or corrupted"
+            echo "   - Database schema is out of sync"
+            echo "   - Database is locked by another process"
+            exit 1
+        fi
+    fi
 else
-    echo "❌ Migration failed!"
-    echo "   This usually means:"
-    echo "   - Migration files are missing or corrupted"
-    echo "   - Database schema is out of sync"
-    echo "   - Database is locked by another process"
-    exit 1
+    echo "⚠️  No existing database found (fresh install)"
+    echo "   Using 'prisma migrate deploy' to create database"
+    if npx prisma migrate deploy; then
+        echo "✅ Database created and migrations applied successfully"
+    else
+        echo "❌ Migration failed!"
+        exit 1
+    fi
 fi
 
 # Step 3: Generate Prisma Client
