@@ -27,14 +27,18 @@ else
     echo "⚠️  No existing database found at $DB_PATH (fresh install)"
 fi
 
-# Step 2: Schema Sync with Prisma DB Push
-# Prisma 7 uses prisma.config.ts for schema location
-echo "🔄 Syncing database schema..."
-echo "   Running: npx prisma db push --accept-data-loss"
-if npx prisma db push --accept-data-loss; then
-    echo "✅ Database schema synced successfully"
+# Step 2: Run Database Migrations (Production-Safe)
+# Uses migration files from prisma/migrations/
+echo "🔄 Running database migrations..."
+echo "   Running: npx prisma migrate deploy"
+if npx prisma migrate deploy; then
+    echo "✅ Database migrations applied successfully"
 else
-    echo "❌ Schema sync failed!"
+    echo "❌ Migration failed!"
+    echo "   This usually means:"
+    echo "   - Migration files are missing or corrupted"
+    echo "   - Database schema is out of sync"
+    echo "   - Database is locked by another process"
     exit 1
 fi
 
