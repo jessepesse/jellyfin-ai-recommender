@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.0] - 2025-12-26
+
 ### ✨ New Features
 
 - **User Statistics Dashboard (Admin):** Added comprehensive user statistics view in Settings for admin users
@@ -69,16 +71,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Corrected favicon type from `image/x-icon` to `image/png`
 - **Viewport Meta Tag:** Restored correct viewport meta tag in `index.html`
   - Fixed accidental change from `initial-scale=1.0` to `initial=1.0`
-- **Admin Authentication:** Fixed `isAdmin` not being included in user object
-  - Added `isAdmin` field to `User` interface
-  - Set `isAdmin` in user object during login
-  - Load `isAdmin` from localStorage when initializing auth state
-  - Added `x-is-admin` header to all API requests via `authHeaders()`
-  - Fixes 403 Forbidden error when loading user statistics
-- **Test Redemption Button:** Removed redundant "Test Redemption" button from BlockedView
-  - Functionality now automated with persistence feature
-  - Candidates load automatically on page refresh and after actions
-
 - **Mobile Layout:** Fixed Trending page to display one card per row on mobile devices instead of two
   - Changed grid layout from `grid-cols-2` to `grid-cols-1` for mobile breakpoint
   - Improved readability and touch targets on small screens
