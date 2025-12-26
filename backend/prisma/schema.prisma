@@ -19,8 +19,9 @@ model User {
   tvProfile    String?
   
   // Relations
-  media            UserMedia[]
-  weeklyWatchlists WeeklyWatchlist[]
+  userMedia            UserMedia[]
+  weeklyWatchlist WeeklyWatchlist[]
+  redemptionCandidates RedemptionCandidates[]
 }
 
 model Media {
@@ -102,6 +103,21 @@ model WeeklyWatchlist {
   tvShows      String   // JSON: same structure
   
   tasteProfile String   // "You love: Dark dramas, 90s thrillers..."
+  
+  generatedAt  DateTime @default(now())
+  weekStart    DateTime
+  weekEnd      DateTime
+  
+  @@unique([userId, weekStart])
+  @@index([userId])
+}
+
+model RedemptionCandidates {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  
+  candidates   String   // JSON: [{media, blockedAt, appealText, confidence, reasons}]
   
   generatedAt  DateTime @default(now())
   weekStart    DateTime

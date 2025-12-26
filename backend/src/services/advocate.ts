@@ -27,11 +27,38 @@ interface RedemptionAnalysis {
 
 export class AdvocateService {
     /**
-     * Find redemption candidates for a user
-     * Analyzes blocked content and returns items worth reconsidering
+     * Get current week's redemption candidates from database
+     * Returns cached candidates if they exist for this week
      */
-    static async findRedemptionCandidates(userId: number): Promise<RedemptionCandidate[]> {
-        console.log(`[Advocate] Finding redemption candidates for user ${userId}`);
+    static async getRedemptionCandidates(userId: number): Promise<RedemptionCandidate[]> {
+        const now = new Date();
+        const weekStart = this.getWeekStart(now);
+        const weekEnd = this.getWeekEnd(weekStart);
+
+        // Try to get existing candidates for this week
+        const existing = await prisma.redemptionCandidates.findFirst({
+            where: {
+                userId,
+                weekStart,
+                weekEnd
+            }
+        });
+
+        if (existing) {
+            console.log(`[Advocate] Found existing redemption candidates for user ${userId}`);
+            return JSON.parse(existing.candidates);
+        }
+
+        console.log(`[Advocate] No existing candidates, generating new ones for user ${userId}`);
+        return this.generateAndSaveRedemptionCandidates(userId);
+    }
+
+    /**
+     * Generate new redemption candidates and save to database
+     * This is called either manually or automatically once per week
+     */
+    static async generateAndSaveRedemptionCandidates(userId: number): Promise<RedemptionCandidate[]> {
+        console.log(`[Advocate] Generating redemption candidates for user ${userId}`);
 
         // Get all blocked media (not permanently blocked, not soft-blocked)
         const now = new Date();
@@ -109,7 +136,50 @@ export class AdvocateService {
             });
         }
 
+        // Save to database
+        const weekStart = this.getWeekStart(now);
+        const weekEnd = this.getWeekEnd(weekStart);
+
+        // Delete old candidates for this user
+        await prisma.redemptionCandidates.deleteMany({
+            where: { userId }
+        });
+
+        // Save new candidates
+        await prisma.redemptionCandidates.create({
+            data: {
+                userId,
+                candidates: JSON.stringify(candidates),
+                weekStart,
+                weekEnd
+            }
+        });
+
+        console.log(`[Advocate] Saved ${candidates.length} candidates to database`);
+
         return candidates;
+    }
+
+    /**
+     * Helper: Get start of week (Monday 00:00)
+     */
+    private static getWeekStart(date: Date): Date {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+        d.setDate(diff);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+
+    /**
+     * Helper: Get end of week (Sunday 23:59)
+     */
+    private static getWeekEnd(weekStart: Date): Date {
+        const d = new Date(weekStart);
+        d.setDate(d.getDate() + 6);
+        d.setHours(23, 59, 59, 999);
+        return d;
     }
 
     /**

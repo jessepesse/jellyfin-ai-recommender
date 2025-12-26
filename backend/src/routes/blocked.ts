@@ -97,7 +97,7 @@ router.get('/redemption-candidates', async (req: Request, res: Response) => {
         }
 
         console.log(`[Blocked API] Getting redemption candidates for ${username}`);
-        const candidates = await AdvocateService.findRedemptionCandidates(user.id);
+        const candidates = await AdvocateService.getRedemptionCandidates(user.id);
 
         res.json({
             candidates,
@@ -324,7 +324,7 @@ router.post('/test-redemption', async (req: Request, res: Response) => {
         }
 
         console.log(`[Blocked API] TEST: Triggering redemption analysis for ${username}`);
-        const candidates = await AdvocateService.findRedemptionCandidates(user.id);
+        const candidates = await AdvocateService.generateAndSaveRedemptionCandidates(user.id);
 
         res.json({
             success: true,
