@@ -158,15 +158,15 @@ export async function getSyncStats(username: string): Promise<{ dbWatched: numbe
   try {
     const user = await prisma.user.findUnique({
       where: { username },
-      include: { media: { include: { media: true } } },
+      include: { userMedia: { include: { media: true } } },
     });
 
     if (!user) {
       return { dbWatched: 0, dbTotal: 0 };
     }
 
-    const dbWatched = user.media.filter(um => um.status === 'WATCHED').length;
-    const dbTotal = user.media.length;
+    const dbWatched = user.userMedia.filter((um: any) => um.status === 'WATCHED').length;
+    const dbTotal = user.userMedia.length;
 
     return { dbWatched, dbTotal };
   } catch (error) {

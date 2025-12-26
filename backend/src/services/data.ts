@@ -193,7 +193,7 @@ export async function getUserData(username: string) {
 
   const user = await prisma.user.findUnique({
     where: { username },
-    include: { media: { include: { media: true } } },
+    include: { userMedia: { include: { media: true } } },
   });
 
   if (!user) return { watchedIds: [], watchlistIds: [], blockedIds: [] };
@@ -202,7 +202,7 @@ export async function getUserData(username: string) {
   const watchlistIds: number[] = [];
   const blockedIds: number[] = [];
 
-  for (const um of user.media) {
+  for (const um of user.userMedia) {
     const tmdb = um.media?.tmdbId;
     if (!tmdb) continue;
     if (um.status === 'WATCHED') watchedIds.push(tmdb);

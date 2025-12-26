@@ -8,7 +8,7 @@
 
 import { prisma } from '../db';
 import ConfigService from './config';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client';
 
 interface RedemptionCandidate {
     media: Prisma.MediaGetPayload<{}>;
