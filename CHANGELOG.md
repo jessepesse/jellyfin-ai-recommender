@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.3] - 2025-12-26
+
+### 🐛 Critical Bug Fixes
+
+- **Production Migration Fix**: Simplified database migration to use `db push`
+  - Replaced complex baseline migration logic with simple `prisma db push`
+  - Fixes bootloop issues on ZimaOS and other production environments
+  - Syncs schema directly without requiring strict migration history
+  - More reliable for existing databases with unknown migration state
+
 ## [2.3.2] - 2025-12-26
 
 ### 🐛 Bug Fixes
