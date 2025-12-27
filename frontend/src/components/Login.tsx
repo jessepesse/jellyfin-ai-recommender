@@ -45,10 +45,10 @@ const Login: React.FC = () => {
     try {
       const success = await login(username, password, serverUrl);
       if (!success) {
-        setError('Login failed. Please check your credentials and server URL.');
+        setError('Login failed. Please check your credentials.');
       }
     } catch {
-      setError('Login failed. Please check your credentials and server URL.');
+      setError('Login failed. Please check your credentials.');
     }
     setIsSubmitting(false);
   };
@@ -65,19 +65,6 @@ const Login: React.FC = () => {
           </div>
           <form onSubmit={handleLogin}>
             {error && <p className="mb-4 text-center text-red-400 text-sm">{error}</p>}
-            <div className="mb-5">
-              <label htmlFor="serverUrl" className="block mb-2 text-sm font-medium text-slate-300">
-                Server URL
-              </label>
-              <input
-                type="text"
-                id="serverUrl"
-                value={serverUrl}
-                onChange={(e) => setServerUrl(e.target.value)}
-                className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
-                placeholder="http://localhost:8096"
-              />
-            </div>
             <div className="mb-5">
               <label htmlFor="username" className="block mb-2 text-sm font-medium text-slate-300">
                 Username
