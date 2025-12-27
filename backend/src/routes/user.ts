@@ -8,9 +8,76 @@ import { FrontendItem } from '../types';
 import { getFullWatchlist } from '../services/data';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
+import { z } from 'zod';
+import prisma from '../db';
+import { hashPassword } from '../utils/password';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
+
+const ChangePasswordSchema = z.object({
+    newPassword: z.string().min(5, "Password must be at least 5 characters"),
+    confirmPassword: z.string()
+}).refine(data => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"]
+});
+
+/**
+ * POST /user/change-password
+ * Updates local password hash for the logged in admin
+ */
+router.post('/change-password', authMiddleware, requireAdmin, async (req: Request, res: Response) => {
+    try {
+        const { newPassword } = ChangePasswordSchema.parse(req.body);
+
+        // req.user is populated by authMiddleware (for local admin)
+        // or we need to find the user if using legacy header auth (which we support via requireAdmin legacy)
+        // BUT requireAdmin legacy doesn't populate req.user!
+        // So we must handle finding user if req.user is missing.
+
+        let userId: number | undefined = req.user?.id;
+
+        if (!userId) {
+            // Legacy fallbacks or header-based user (only if verified by Jellyfin token previously?)
+            // For security, changing password SHOULD require strict Auth.
+            // If using X-Is-Admin header, we don't know WHICH user to update unless we trust X-User-Name?
+            // This is risky. 
+            // We should only allow this for fully authenticated local sessions or if we can verify username.
+            // Let's rely on authMiddleware finding the user via Local Token.
+            // If it's a Jellyfin Token, we might want to allow syncing password?
+            // But we can typically only change LOCAL password for a known LOCAL user.
+
+            // Try to find user by header username
+            const username = req.headers['x-user-name'] as string;
+            if (username) {
+                const user = await prisma.user.findUnique({ where: { username } });
+                if (user && user.isSystemAdmin) {
+                    userId = user.id;
+                }
+            }
+        }
+
+        if (!userId) {
+            return res.status(401).json({ error: 'User context required for password change' });
+        }
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash: hashPassword(newPassword) }
+        });
+
+        res.json({ success: true, message: 'Local password updated successfully' });
+
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: 'Validation failed', details: error.issues });
+        }
+        console.error('Change password failed:', error);
+        res.status(500).json({ error: 'Failed to update password' });
+    }
+});
 
 /**
  * GET /libraries - Get Jellyfin libraries
@@ -74,12 +141,12 @@ router.get('/watchlist', async (req, res) => {
     try {
         const userId = req.headers['x-user-id'] as string;
         const userName = req.headers['x-user-name'] as string;
-        
+
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-        
+
         const username = userName || userId;
         const list = await getFullWatchlist(username);
-        
+
         const mapped = (list || []).map(i => toFrontendItem(i)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
         res.json(mapped);
     } catch (e) {

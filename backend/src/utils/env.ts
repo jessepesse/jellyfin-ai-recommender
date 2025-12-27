@@ -30,6 +30,7 @@ const envSchema = z.object({
   // Storage paths
   IMAGE_DIR: z.string().default('/app/images'),
   DATABASE_URL: z.string().default('file:/app/data/dev.db'),
+  INITIAL_ADMIN_PASSWORD: z.string().default('admin123'),
 });
 
 // Type inference from schema

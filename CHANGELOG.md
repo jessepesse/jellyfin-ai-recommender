@@ -13,6 +13,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Ensured consistent responsiveness and mobile layout (same as Trending/Watchlist)
   - Fixed 'Unblock' action adding items correctly back to the pool instead of defaulting to Watchlist (backend logic fix)
   - Implemented optimistic UI updates to instantly remove unblocked items without loading delay
+- **Admin Authentication:** Added "Hybrid Auth" system with local admin password and offline login capability.
+  - Added "Admin Account" section to Settings for managing local password.
+  - Added automatic "Bootstrap Admin" creation on startup if no admin exists.
+- **Fix:** Resolved incorrect logo path on Login screen (was using proxied /images path).
+
 
 ## [2.3.6] - 2025-12-27
 

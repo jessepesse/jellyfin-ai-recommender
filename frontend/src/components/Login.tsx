@@ -58,7 +58,7 @@ const Login: React.FC = () => {
       <div className="flex-1 flex items-center justify-center">
         <div className="p-8 bg-slate-900/80 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-sm border border-white/5">
           <div className="mb-4">
-            <img src="/images/logo.png" alt="Jellyfin AI" className="w-24 h-24 mx-auto mb-4 object-contain drop-shadow-md transition-transform duration-300 hover:scale-105" />
+            <img src="/assets/logo.png" alt="Jellyfin AI" className="w-24 h-24 mx-auto mb-4 object-contain drop-shadow-md transition-transform duration-300 hover:scale-105" />
             <h2 className="text-3xl font-bold mb-2 text-center text-gray-100">
               Sign In
             </h2>

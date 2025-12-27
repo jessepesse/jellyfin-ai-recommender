@@ -8,6 +8,39 @@ import { WeeklyWatchlistService } from './weekly-watchlist';
 import { AdvocateService } from './advocate';
 import { logger } from '../utils/logger';
 
+import crypto from 'crypto';
+import { getEnv } from '../utils/env';
+import { hashPassword } from '../utils/password';
+
+/**
+ * Ensures a system admin exists in the database.
+ * If not, creates one using INITIAL_ADMIN_PASSWORD.
+ */
+export async function bootstrapAdmin(): Promise<void> {
+    try {
+        const adminExists = await prisma.user.findFirst({
+            where: { isSystemAdmin: true }
+        });
+
+        if (!adminExists) {
+            const password = getEnv().INITIAL_ADMIN_PASSWORD;
+            // Create default admin
+            await prisma.user.create({
+                data: {
+                    username: 'admin',
+                    isSystemAdmin: true,
+                    passwordHash: hashPassword(password),
+                    // No profile data needed for system admin
+                }
+            });
+            logger.warn(`⚠️  System Admin user created (Bootstrap). Username: admin, Password: ${password}`);
+            logger.warn('⚠️  Please change this password immediately in Settings!');
+        }
+    } catch (error) {
+        logger.error({ err: error }, '[Startup] Failed to bootstrap admin user');
+    }
+}
+
 /**
  * Initialize recommendations for active users at startup
  * Active = users with activity in the last 7 days

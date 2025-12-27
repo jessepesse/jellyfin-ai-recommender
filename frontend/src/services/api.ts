@@ -347,3 +347,8 @@ export const getUserStatistics = async (): Promise<UserStatisticsResponse> => {
     const response = await apiClient.get('/admin/users', authHeaders());
     return response.data;
 };
+
+export const postChangePassword = async (payload: { newPassword: string; confirmPassword: string }) => {
+    const response = await apiClient.post('/user/change-password', payload, authHeaders());
+    return response.data;
+};

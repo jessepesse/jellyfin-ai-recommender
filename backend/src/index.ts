@@ -21,7 +21,7 @@ import adminRouter from './routes/admin';
 import { runMetadataBackfill } from './services/metadataBackfill';
 import { runEnrichmentBackfill } from './services/enrichment';
 import { initScheduler, checkStaleWatchlists } from './services/scheduler';
-import { initializeRecommendations } from './services/startup';
+import { initializeRecommendations, bootstrapAdmin } from './services/startup';
 import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 import swaggerUi from 'swagger-ui-express';
@@ -215,6 +215,9 @@ app.listen(port, () => {
       // Initialize recommendations for active users
       logger.info('Initializing recommendations for active users...');
       await initializeRecommendations();
+      // Bootstrap admin user
+      logger.info('Checking/Bootstrapping admin user...');
+      await bootstrapAdmin();
     } catch (e) {
       logger.error({ err: e }, 'Startup backfill failed');
     }

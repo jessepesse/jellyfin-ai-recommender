@@ -4,19 +4,20 @@
 
 import { Router } from 'express';
 import prisma from '../db';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+// Apply auth middleware to all admin routes
+router.use(authMiddleware);
+router.use(requireAdmin);
 
 /**
  * GET /admin/users - Get all users with statistics
  */
 router.get('/users', async (req, res) => {
     try {
-        const isAdmin = req.headers['x-is-admin'] === 'true';
-
-        if (!isAdmin) {
-            return res.status(403).json({ error: 'Forbidden - Admin only' });
-        }
+        // Auth handled by middleware
 
         const users = await prisma.user.findMany({
             select: {

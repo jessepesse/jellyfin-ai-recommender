@@ -3,11 +3,11 @@ import { postSettingsImport, getSettingsExport } from '../services/api';
 import GlassCard from './GlassCard';
 import HeroButton from './HeroButton';
 import ConfigEditor from './ConfigEditor';
-import { UploadCloud, FileJson, X, Download, Loader2 } from 'lucide-react';
+import { UploadCloud, FileJson, X, Download, Loader2, Shield, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UserStatisticsCard from './UserStatisticsCard';
 import type { UserStatisticsResponse } from '../services/api';
-import { getUserStatistics } from '../services/api';
+import { getUserStatistics, postChangePassword } from '../services/api';
 
 interface ImportProgress {
   username: string;
@@ -42,6 +42,13 @@ const SettingsView: React.FC = () => {
   const [eventSource, setEventSource] = useState<EventSource | null>(null);
   const [userStats, setUserStats] = useState<UserStatisticsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  // Password Change State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -247,6 +254,33 @@ const SettingsView: React.FC = () => {
     }
   };
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 5) {
+      setPasswordError("Password must be at least 5 characters");
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      await postChangePassword({ newPassword, confirmPassword });
+      setPasswordSuccess("Password updated successfully");
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPasswordError(err.response?.data?.error || "Failed to update password");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   return (
     <div>
       <h2 className="text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-8">
@@ -425,6 +459,59 @@ const SettingsView: React.FC = () => {
           </div>
         )}
       </GlassCard>
+
+      {/* Admin Account Management */}
+      {user?.isAdmin && (
+        <GlassCard className="mt-6">
+          <h3 className="text-lg font-semibold mb-4 text-slate-300 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-cyan-400" />
+            Admin Account
+          </h3>
+          <p className="text-sm text-slate-400 mb-6">
+            Update the local password for this admin account. This allows you to log in even if the Jellyfin server is unreachable.
+          </p>
+
+          <form onSubmit={handlePasswordChange} className="max-w-md space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">New Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-white outline-none"
+                  placeholder="Enter new password"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-white outline-none"
+                  placeholder="Confirm new password"
+                />
+              </div>
+            </div>
+
+            {passwordError && (
+              <div className="text-red-400 text-sm">{passwordError}</div>
+            )}
+            {passwordSuccess && (
+              <div className="text-green-400 text-sm">{passwordSuccess}</div>
+            )}
+
+            <HeroButton type="submit" disabled={passwordLoading || !newPassword}>
+              {passwordLoading ? 'Updating...' : 'Update Password'}
+            </HeroButton>
+          </form>
+        </GlassCard>
+      )}
 
       {/* User Statistics (Admin Only) */}
       {user?.isAdmin && (
