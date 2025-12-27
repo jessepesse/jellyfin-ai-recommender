@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.6] - 2025-12-27
+
+### 🐛 Bug Fixes
+
+- **Image URLs**: Fixed blocked page images not displaying
+  - Added helper function to convert relative image paths to absolute URLs
+  - Backend now returns full URLs like `https://api.kptsquad.xyz/images/...`
+  - Fixes images after migrating from Jellyseerr domain to local IP
+
 ## [2.3.5] - 2025-12-27
 
 ### 🐛 Critical Bug Fixes

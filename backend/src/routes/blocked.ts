@@ -10,6 +10,24 @@ import { AdvocateService } from '../services/advocate';
 const router = Router();
 
 /**
+ * Helper function to convert relative image paths to absolute URLs
+ * If path starts with /, prepend the current request's base URL
+ */
+function toAbsoluteImageUrl(req: Request, path: string | null): string | null {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path; // Already absolute
+    }
+    if (path.startsWith('/')) {
+        // Relative path - convert to absolute using request host
+        const protocol = req.protocol;
+        const host = req.get('host');
+        return `${protocol}://${host}${path}`;
+    }
+    return path;
+}
+
+/**
  * @swagger
  * /api/blocked:
  *   get:
@@ -49,18 +67,18 @@ router.get('/', async (req: Request, res: Response) => {
             .filter(um => um.media.mediaType === 'movie')
             .map(um => ({
                 ...um.media,
-                // Ensure we use local cached images, not source URLs
-                posterUrl: um.media.posterUrl || um.media.posterSourceUrl,
-                backdropUrl: um.media.backdropUrl || um.media.backdropSourceUrl
+                // Convert relative image paths to absolute URLs
+                posterUrl: toAbsoluteImageUrl(req, um.media.posterUrl || um.media.posterSourceUrl),
+                backdropUrl: toAbsoluteImageUrl(req, um.media.backdropUrl || um.media.backdropSourceUrl)
             }));
 
         const tvShows = blockedMedia
             .filter(um => um.media.mediaType === 'tv')
             .map(um => ({
                 ...um.media,
-                // Ensure we use local cached images, not source URLs
-                posterUrl: um.media.posterUrl || um.media.posterSourceUrl,
-                backdropUrl: um.media.backdropUrl || um.media.backdropSourceUrl
+                // Convert relative image paths to absolute URLs
+                posterUrl: toAbsoluteImageUrl(req, um.media.posterUrl || um.media.posterSourceUrl),
+                backdropUrl: toAbsoluteImageUrl(req, um.media.backdropUrl || um.media.backdropSourceUrl)
             }));
 
         res.json({
@@ -99,9 +117,19 @@ router.get('/redemption-candidates', async (req: Request, res: Response) => {
         console.log(`[Blocked API] Getting redemption candidates for ${username}`);
         const candidates = await AdvocateService.getRedemptionCandidates(user.id);
 
+        // Convert relative image paths to absolute URLs
+        const candidatesWithAbsoluteUrls = candidates.map(candidate => ({
+            ...candidate,
+            media: {
+                ...candidate.media,
+                posterUrl: toAbsoluteImageUrl(req, candidate.media.posterUrl),
+                backdropUrl: toAbsoluteImageUrl(req, candidate.media.backdropUrl)
+            }
+        }));
+
         res.json({
-            candidates,
-            count: candidates.length
+            candidates: candidatesWithAbsoluteUrls,
+            count: candidatesWithAbsoluteUrls.length
         });
     } catch (error: any) {
         console.error('[Blocked API] Redemption error:', error?.message || error);
