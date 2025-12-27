@@ -23,6 +23,7 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 🔄 **Legacy Import** — Non-destructive import tool to migrate data from the old v1 `database.json`.
 - 🔧 **Production-Ready Rate Limiting** — Smart rate limiting supports large imports (1000+ items) with separate limits per operation type.
 - 🌐 **Reverse Proxy Support** — Full support for Nginx, ZimaOS, and other reverse proxy environments with proper header forwarding.
+- 🔐 **Hybrid Authentication** — Offline login support with cached credentials and emergency local admin access (`bootstrapAdmin`).
 
 ---
 
@@ -332,6 +333,8 @@ See `frontend/nginx.conf` for a reference configuration.
 📝 Usage Guide
 
     Login: Use your Jellyfin credentials. The app authenticates against your server.
+            *Offline Mode:* Uses cached credentials if Jellyfin is unreachable.
+            *Admin Mode:* Use local `admin` account for emergency access.
 
     Get Recommendations:
 
