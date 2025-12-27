@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import type { JellyfinItem } from '../types';
 import Modal from './Modal';
-import { DownloadCloud, Bookmark, Eye, Ban, Check, Loader2, Star, Info, ExternalLink } from 'lucide-react';
-import { postActionWatched, postActionWatchlist, postActionBlock, postJellyseerrRequest, postRemoveFromWatchlist } from '../services/api';
+import { DownloadCloud, Bookmark, Eye, Ban, Check, Loader2, Star, Info, ExternalLink, X } from 'lucide-react';
+import { postActionWatched, postActionWatchlist, postActionBlock, postJellyseerrRequest, postRemoveFromWatchlist, unblockItem } from '../services/api';
 
 interface Props {
   item: JellyfinItem;
   onClick?: (item: JellyfinItem) => void;
   onRemove?: (tmdbId?: number) => void;
-  variant?: 'default' | 'watchlist' | 'search';
+  variant?: 'default' | 'watchlist' | 'search' | 'blocked';
 }
 
 interface AugmentedItem extends JellyfinItem {
@@ -110,7 +110,12 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 setRequesting(true);
                 const id = Number(item.tmdbId);
                 try {
-                  await postJellyseerrRequest(Number(id), currentMediaType as 'movie' | 'tv');
+                  if (variant === 'blocked') {
+                    if (typeof onRemove === 'function') onRemove(id);
+                    await unblockItem(id, 'jellyseerr');
+                  } else {
+                    await postJellyseerrRequest(id, currentMediaType as 'movie' | 'tv');
+                  }
                   setRequested(true);
                   if (typeof onRemove === 'function') onRemove(Number(id));
                 } catch (err) {
@@ -141,7 +146,9 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                     voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                     backdropUrl: item.backdropUrl ?? '',
                   };
-                  postActionWatchlist(payloadItem)
+                  if (variant === 'blocked' && typeof onRemove === 'function') onRemove(id);
+                  const actionPromise = variant === 'blocked' ? unblockItem(id, 'watchlist') : postActionWatchlist(payloadItem);
+                  actionPromise
                     .then(() => {
                       try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
                     })
@@ -196,32 +203,49 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                   backdropUrl: item.backdropUrl ?? '',
                 };
-                postActionWatched(payloadItemWatched).catch(() => {/* TODO: handle rollback if needed */ });
+                if (variant === 'blocked') {
+                  if (typeof onRemove === 'function') onRemove(id);
+                  unblockItem(id, 'watched').catch(() => { });
+                } else {
+                  postActionWatched(payloadItemWatched).catch(() => {/* TODO: handle rollback if needed */ });
+                }
               }} className="p-3 md:p-2 rounded-md text-white hover:text-green-300 active:scale-95 transition-transform focus:outline-none">
                 <Eye className="w-6 h-6 md:w-5 md:h-5" />
               </button>
 
               {/* Block */}
-              <button aria-label="Block (Do not recommend)" title="Block (Do not recommend)" onClick={(e) => {
-                e.stopPropagation();
-                const id = Number(item.tmdbId);
-                if (typeof onRemove === 'function') onRemove(id as number);
-                const payloadItemBlock = {
-                  tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
-                  title: item.title ?? rawItem.name ?? 'Unknown Title',
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
-                  posterUrl: item.posterUrl ?? null,
-                  releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
-                  // Rich metadata
-                  overview: item.overview ?? '',
-                  voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                  backdropUrl: item.backdropUrl ?? '',
-                };
-                postActionBlock(payloadItemBlock).catch(() => {/* TODO: handle rollback if needed */ });
-              }} className="p-3 md:p-2 rounded-md text-white hover:text-red-500 active:scale-95 transition-transform focus:outline-none">
-                <Ban className="w-6 h-6 md:w-5 md:h-5" />
-              </button>
+              {/* Block / Unblock */}
+              {variant === 'blocked' ? (
+                <button aria-label="Unblock" title="Unblock" onClick={(e) => {
+                  e.stopPropagation();
+                  const id = Number(item.tmdbId);
+                  if (typeof onRemove === 'function') onRemove(id as number);
+                  unblockItem(id, 'remove').catch(console.error);
+                }} className="p-3 md:p-2 rounded-md text-white hover:text-red-500 active:scale-95 transition-transform focus:outline-none">
+                  <X className="w-6 h-6 md:w-5 md:h-5" />
+                </button>
+              ) : (
+                <button aria-label="Block (Do not recommend)" title="Block (Do not recommend)" onClick={(e) => {
+                  e.stopPropagation();
+                  const id = Number(item.tmdbId);
+                  if (typeof onRemove === 'function') onRemove(id as number);
+                  const payloadItemBlock = {
+                    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
+                    title: item.title ?? rawItem.name ?? 'Unknown Title',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
+                    posterUrl: item.posterUrl ?? null,
+                    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
+                    // Rich metadata
+                    overview: item.overview ?? '',
+                    voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
+                    backdropUrl: item.backdropUrl ?? '',
+                  };
+                  postActionBlock(payloadItemBlock).catch(() => {/* TODO: handle rollback if needed */ });
+                }} className="p-3 md:p-2 rounded-md text-white hover:text-red-500 active:scale-95 transition-transform focus:outline-none">
+                  <Ban className="w-6 h-6 md:w-5 md:h-5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -312,7 +336,13 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                     setRequesting(true);
                     const id = Number(item.tmdbId);
                     try {
-                      await postJellyseerrRequest(Number(id), currentMediaType as 'movie' | 'tv');
+                      if (variant === 'blocked') {
+                        if (typeof onRemove === 'function') onRemove(id);
+                        setShowInfo(false);
+                        await unblockItem(id, 'jellyseerr');
+                      } else {
+                        await postJellyseerrRequest(id, currentMediaType as 'movie' | 'tv');
+                      }
                       setRequested(true);
                       if (typeof onRemove === 'function') onRemove(Number(id));
                       setShowInfo(false);
@@ -351,6 +381,12 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                         backdropUrl: item.backdropUrl ?? '',
                       };
                       postRemoveFromWatchlist(payloadItemRem).catch(console.error);
+                    } else if (variant === 'blocked') {
+                      if (typeof onRemove === 'function') onRemove(id);
+                      setShowInfo(false);
+                      unblockItem(id, 'watchlist')
+                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { } })
+                        .catch(console.error);
                     } else {
                       // Add to watchlist
                       const payloadItem = {
@@ -364,7 +400,9 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                         voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                         backdropUrl: item.backdropUrl ?? '',
                       };
-                      postActionWatchlist(payloadItem).catch(console.error);
+                      postActionWatchlist(payloadItem)
+                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { } })
+                        .catch(console.error);
                     }
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 hover:text-yellow-300 transition-colors border border-yellow-500/20"
@@ -392,7 +430,13 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                       voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                       backdropUrl: item.backdropUrl ?? '',
                     };
-                    postActionWatched(payloadItemWatched).catch(console.error);
+                    if (variant === 'blocked') {
+                      if (typeof onRemove === 'function') onRemove(id);
+                      setShowInfo(false);
+                      unblockItem(id, 'watched').catch(console.error);
+                    } else {
+                      postActionWatched(payloadItemWatched).catch(console.error);
+                    }
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 transition-colors border border-green-500/20"
                 >
@@ -401,31 +445,49 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 </button>
 
                 {/* Block */}
-                <button
-                  aria-label="Block"
-                  title="Block / Hide"
-                  onClick={() => {
-                    const id = Number(item.tmdbId);
-                    if (typeof onRemove === 'function') onRemove(id as number);
-                    setShowInfo(false);
-                    const payloadItemBlock = {
-                      tmdbId: item.tmdbId ?? null,
-                      title: item.title ?? 'Unknown Title',
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      mediaType: (currentMediaType as any),
-                      posterUrl: item.posterUrl ?? null,
-                      releaseYear: item.releaseYear,
-                      overview: item.overview ?? '',
-                      voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                      backdropUrl: item.backdropUrl ?? '',
-                    };
-                    postActionBlock(payloadItemBlock).catch(console.error);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
-                >
-                  <Ban className="w-5 h-5" />
-                  <span className="font-medium">Block</span>
-                </button>
+                {/* Block / Unblock */}
+                {variant === 'blocked' ? (
+                  <button
+                    aria-label="Unblock"
+                    title="Unblock"
+                    onClick={() => {
+                      const id = Number(item.tmdbId);
+                      if (typeof onRemove === 'function') onRemove(id as number);
+                      setShowInfo(false);
+                      unblockItem(id, 'remove').catch(console.error);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
+                  >
+                    <X className="w-5 h-5" />
+                    <span className="font-medium">Unblock</span>
+                  </button>
+                ) : (
+                  <button
+                    aria-label="Block"
+                    title="Block / Hide"
+                    onClick={() => {
+                      const id = Number(item.tmdbId);
+                      if (typeof onRemove === 'function') onRemove(id as number);
+                      setShowInfo(false);
+                      const payloadItemBlock = {
+                        tmdbId: item.tmdbId ?? null,
+                        title: item.title ?? 'Unknown Title',
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        mediaType: (currentMediaType as any),
+                        posterUrl: item.posterUrl ?? null,
+                        releaseYear: item.releaseYear,
+                        overview: item.overview ?? '',
+                        voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
+                        backdropUrl: item.backdropUrl ?? '',
+                      };
+                      postActionBlock(payloadItemBlock).catch(console.error);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
+                  >
+                    <Ban className="w-5 h-5" />
+                    <span className="font-medium">Block</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

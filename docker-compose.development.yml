@@ -21,8 +21,8 @@ services:
       - NODE_ENV=development
     volumes:
       # Source code for hot reload
-      - ./backend/src:/app/backend/src:ro
-      - ./backend/prisma:/app/backend/prisma:ro
+      - ./backend/src:/app/backend/src
+      - ./backend/prisma:/app/backend/prisma
       # Data persistence
       - ./data:/app/backend/data
       - ./images:/app/backend/images

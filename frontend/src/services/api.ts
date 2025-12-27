@@ -297,7 +297,7 @@ export const getRedemptionCandidates = async (): Promise<RedemptionCandidatesRes
     return response.data;
 };
 
-export const unblockItem = async (mediaId: number, action: 'watchlist' | 'jellyseerr' | 'watched'): Promise<void> => {
+export const unblockItem = async (mediaId: number, action: 'watchlist' | 'jellyseerr' | 'watched' | 'remove'): Promise<void> => {
     await apiClient.post(`/blocked/${mediaId}/unblock`, { action }, authHeaders());
 };
 

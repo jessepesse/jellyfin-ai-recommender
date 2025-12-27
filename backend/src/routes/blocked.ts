@@ -11,7 +11,8 @@ const router = Router();
 
 /**
  * Helper function to convert relative image paths to absolute URLs
- * If path starts with /, prepend the current request's base URL
+ * In development: keeps relative paths so Vite proxy can handle them
+ * In production: converts to absolute URLs for Cloudflare setup
  */
 function toAbsoluteImageUrl(req: Request, path: string | null): string | null {
     if (!path) return null;
@@ -19,7 +20,11 @@ function toAbsoluteImageUrl(req: Request, path: string | null): string | null {
         return path; // Already absolute
     }
     if (path.startsWith('/')) {
-        // Relative path - convert to absolute using request host
+        // In development, keep relative paths for Vite proxy
+        if (process.env.NODE_ENV === 'development') {
+            return path; // Keep relative
+        }
+        // In production, convert to absolute using request host
         const protocol = req.protocol;
         const host = req.get('host');
         return `${protocol}://${host}${path}`;
@@ -200,31 +205,54 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Blocked item not found' });
         }
 
-        // Determine new status based on action
-        let newStatus: 'WATCHLIST' | 'WATCHED' = 'WATCHLIST';
-        if (action === 'watched') {
-            newStatus = 'WATCHED';
+        // Determine action impact
+        let newStatus: 'WATCHLIST' | 'WATCHED' | null = null;
+
+        if (action === 'watched' || action === 'watchlist') {
+            newStatus = action === 'watched' ? 'WATCHED' : 'WATCHLIST';
+            await prisma.userMedia.update({
+                where: { id: userMedia.id },
+                data: {
+                    status: newStatus,
+                    blockedAt: null,
+                    permanentBlock: false,
+                    softBlockUntil: null
+                }
+            });
+            console.log(`[Blocked API] Updated media ${tmdbId} status to ${newStatus}`);
+        } else {
+            // For 'remove' (just unblock) or 'jellyseerr' (request), we remove the UserMedia relation
+            await prisma.userMedia.delete({
+                where: { id: userMedia.id }
+            });
+            console.log(`[Blocked API] Removed UserMedia relation for ${tmdbId} (Action: ${action})`);
         }
 
-        // Update status (unblock)
-        await prisma.userMedia.update({
-            where: { id: userMedia.id },
-            data: {
-                status: newStatus,
-                blockedAt: null,
-                permanentBlock: false,
-                softBlockUntil: null
-            }
+        console.log(`[Blocked API] Unblocked media ${tmdbId} for ${username}, action: ${action}`);
+
+        // Update redemption candidates cache by removing this item
+        const existingCache = await prisma.redemptionCandidates.findFirst({
+            where: { userId: user.id },
+            orderBy: { generatedAt: 'desc' }
         });
 
-        console.log(`[Blocked API] Unblocked media ${tmdbId} for ${username}, action: ${action}`);
+        if (existingCache) {
+            const candidates = JSON.parse(existingCache.candidates);
+            const updatedCandidates = candidates.filter((c: any) => c.media.tmdbId !== tmdbId);
+
+            await prisma.redemptionCandidates.update({
+                where: { id: existingCache.id },
+                data: { candidates: JSON.stringify(updatedCandidates) }
+            });
+            console.log(`[Blocked API] Removed media ${tmdbId} from redemption candidates cache`);
+        }
 
         // TODO: If action === 'jellyseerr', make Jellyseerr request
         // This would require Jellyseerr integration which we can add later
 
         res.json({
             success: true,
-            message: `Content unblocked and ${action === 'watched' ? 'marked as watched' : 'added to watchlist'}`,
+            message: `Content unblocked${newStatus ? ` and set to ${newStatus}` : ''}`,
             newStatus
         });
     } catch (error: any) {
@@ -315,6 +343,23 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
         });
 
         console.log(`[Blocked API] Kept media ${tmdbId} blocked (${type}) for ${username}`);
+
+        // Update redemption candidates cache by removing this item
+        const existingCache = await prisma.redemptionCandidates.findFirst({
+            where: { userId: user.id },
+            orderBy: { generatedAt: 'desc' }
+        });
+
+        if (existingCache) {
+            const candidates = JSON.parse(existingCache.candidates);
+            const updatedCandidates = candidates.filter((c: any) => c.media.tmdbId !== tmdbId);
+
+            await prisma.redemptionCandidates.update({
+                where: { id: existingCache.id },
+                data: { candidates: JSON.stringify(updatedCandidates) }
+            });
+            console.log(`[Blocked API] Removed media ${tmdbId} from redemption candidates cache`);
+        }
 
         res.json({
             success: true,

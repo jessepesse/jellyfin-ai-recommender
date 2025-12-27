@@ -31,9 +31,9 @@ const BlockedView: React.FC = () => {
         loadRedemptionCandidates();
     }, []);
 
-    const loadBlockedContent = async () => {
+    const loadBlockedContent = async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const data = await getBlockedItems();
             setBlockedMovies(data.movies || []);
             setBlockedTVShows(data.tvShows || []);
@@ -42,7 +42,7 @@ const BlockedView: React.FC = () => {
             console.error('Failed to load blocked content', err);
             setError('Failed to load blocked content');
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -57,10 +57,28 @@ const BlockedView: React.FC = () => {
 
 
 
-    const handleRedemptionComplete = () => {
-        // Refresh both lists after redemption action
-        loadBlockedContent();
+    const handleRedemptionComplete = (mediaId: number) => {
+        console.log('[BlockedView] Redemption complete for media:', mediaId);
+
+        // Optimistically remove the card from UI immediately
+        setRedemptionCandidates(prev => prev.filter(c => String(c.media.tmdbId) !== String(mediaId)));
+
+        // Refresh both lists after redemption action (in background)
+        loadBlockedContent(true);
         loadRedemptionCandidates();
+    };
+
+    const handleMediaUnblocked = (tmdbId?: number) => {
+        if (!tmdbId) return;
+        console.log('[BlockedView] Media unblocked:', tmdbId);
+
+        // Optimistically remove from both lists
+        // Use String comparison to be safe against type mismatches
+        setBlockedMovies(prev => prev.filter(m => String(m.tmdbId) !== String(tmdbId)));
+        setBlockedTVShows(prev => prev.filter(s => String(s.tmdbId) !== String(tmdbId)));
+
+        // Refresh in background
+        loadBlockedContent(true);
     };
 
     if (error) {
@@ -138,7 +156,8 @@ const BlockedView: React.FC = () => {
                                 <MediaCard
                                     key={movie.tmdbId}
                                     item={movie}
-                                    variant="default"
+                                    onRemove={handleMediaUnblocked}
+                                    variant="blocked"
                                 />
                             ))}
                         </div>
@@ -167,7 +186,8 @@ const BlockedView: React.FC = () => {
                                 <MediaCard
                                     key={show.tmdbId}
                                     item={show}
-                                    variant="default"
+                                    onRemove={handleMediaUnblocked}
+                                    variant="blocked"
                                 />
                             ))}
                         </div>

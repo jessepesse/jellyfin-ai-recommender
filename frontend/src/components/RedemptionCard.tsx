@@ -10,7 +10,7 @@ import type { RedemptionCandidate } from '../services/api';
 
 interface RedemptionCardProps {
     candidate: RedemptionCandidate;
-    onComplete: () => void;
+    onComplete: (mediaId: number) => void;
 }
 
 const RedemptionCard: React.FC<RedemptionCardProps> = ({ candidate, onComplete }) => {
@@ -22,7 +22,7 @@ const RedemptionCard: React.FC<RedemptionCardProps> = ({ candidate, onComplete }
         try {
             setProcessing(true);
             await unblockItem(candidate.media.tmdbId, action);
-            onComplete();
+            onComplete(candidate.media.tmdbId);
         } catch (error) {
             console.error('Failed to unblock', error);
         } finally {
@@ -34,7 +34,7 @@ const RedemptionCard: React.FC<RedemptionCardProps> = ({ candidate, onComplete }
         try {
             setProcessing(true);
             await keepBlocked(candidate.media.tmdbId, type);
-            onComplete();
+            onComplete(candidate.media.tmdbId);
         } catch (error) {
             console.error('Failed to keep blocked', error);
         } finally {

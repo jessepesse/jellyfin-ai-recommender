@@ -6,13 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **Blocked Media View**: Fixed blocked page layout and functionality
+  - Refactored `BlockedView` to use the shared `MediaCard` component with a new `blocked` variant
+  - Ensured consistent responsiveness and mobile layout (same as Trending/Watchlist)
+  - Fixed 'Unblock' action adding items correctly back to the pool instead of defaulting to Watchlist (backend logic fix)
+  - Implemented optimistic UI updates to instantly remove unblocked items without loading delay
+
 ## [2.3.6] - 2025-12-27
 
 ### 🐛 Bug Fixes
 
 - **Image URLs**: Fixed blocked page images not displaying
   - Added helper function to convert relative image paths to absolute URLs
-  - Backend now returns full URLs like `https://api.kptsquad.xyz/images/...`
+  - Backend now returns full URLs like `https://api.example.com/images/...`
   - Fixes images after migrating from Jellyseerr domain to local IP
 
 ## [2.3.5] - 2025-12-27
@@ -23,7 +31,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Now uses `VITE_API_URL` environment variable for production
   - Falls back to `/api` for local development
   - Fixes Trending and Blocked pages not working with Cloudflare setup
-  - API calls now correctly route to `https://api.kptsquad.xyz`
+  - API calls now correctly route to `https://api.example.com`
 
 ## [2.3.4] - 2025-12-26
 
