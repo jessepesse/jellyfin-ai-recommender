@@ -49,9 +49,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
                 const userId = parseInt(userIdStr);
                 const timestamp = parseInt(timestampStr);
 
-                // Verify timestamp (e.g., max 30 days session? or indefinite for admin?)
-                // Let's say 24 hours for safety, or just trust it for now since we have no refresh mechanism
-                // User asked for "Always Login", so let's keep it indefinite but check user existence
+                // Token expires after 30 days
+                const TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+                if (Date.now() - timestamp > TOKEN_MAX_AGE_MS) {
+                    return res.status(401).json({ error: 'Unauthorized - Token expired, please login again' });
+                }
 
                 const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -116,19 +118,12 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
 /**
  * Middleware to require System Admin privileges
+ * Requires valid Local Token authentication (no legacy header fallback)
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     if (req.user && req.user.isSystemAdmin) {
         return next();
     }
 
-    // Legacy fallback: Check header (TEMPORARY until frontend sends token everywhere)
-    // The frontend sends X-Is-Admin: true. 
-    // We should strictly require the token if we want real security, but for now we support transition.
-    if (req.headers['x-is-admin'] === 'true') {
-        // Ideally we should warn here.
-        return next();
-    }
-
-    return res.status(403).json({ error: 'Forbidden - detailed admin privileges required' });
+    return res.status(403).json({ error: 'Forbidden - System admin privileges required' });
 }

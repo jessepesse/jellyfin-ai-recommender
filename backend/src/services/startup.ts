@@ -7,8 +7,6 @@ import prisma from '../db';
 import { WeeklyWatchlistService } from './weekly-watchlist';
 import { AdvocateService } from './advocate';
 import { logger } from '../utils/logger';
-
-import crypto from 'crypto';
 import { getEnv } from '../utils/env';
 import { hashPassword } from '../utils/password';
 
@@ -33,8 +31,11 @@ export async function bootstrapAdmin(): Promise<void> {
                     // No profile data needed for system admin
                 }
             });
-            logger.warn(`⚠️  System Admin user created (Bootstrap). Username: admin, Password: ${password}`);
-            logger.warn('⚠️  Please change this password immediately in Settings!');
+            logger.warn('='.repeat(60));
+            logger.warn(`⚠️  SECURITY: System Admin created - Username: admin, Password: ${password}`);
+            logger.warn('⚠️  IMPORTANT: Change this password IMMEDIATELY in Settings > Admin Account!');
+            logger.warn('⚠️  This password is only shown once in logs.');
+            logger.warn('='.repeat(60));
         }
     } catch (error) {
         logger.error({ err: error }, '[Startup] Failed to bootstrap admin user');

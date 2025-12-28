@@ -32,43 +32,20 @@ router.post('/change-password', authMiddleware, requireAdmin, async (req: Reques
     try {
         const { newPassword } = ChangePasswordSchema.parse(req.body);
 
-        // req.user is populated by authMiddleware (for local admin)
-        // or we need to find the user if using legacy header auth (which we support via requireAdmin legacy)
-        // BUT requireAdmin legacy doesn't populate req.user!
-        // So we must handle finding user if req.user is missing.
-
-        let userId: number | undefined = req.user?.id;
-
-        if (!userId) {
-            // Legacy fallbacks or header-based user (only if verified by Jellyfin token previously?)
-            // For security, changing password SHOULD require strict Auth.
-            // If using X-Is-Admin header, we don't know WHICH user to update unless we trust X-User-Name?
-            // This is risky. 
-            // We should only allow this for fully authenticated local sessions or if we can verify username.
-            // Let's rely on authMiddleware finding the user via Local Token.
-            // If it's a Jellyfin Token, we might want to allow syncing password?
-            // But we can typically only change LOCAL password for a known LOCAL user.
-
-            // Try to find user by header username
-            const username = req.headers['x-user-name'] as string;
-            if (username) {
-                const user = await prisma.user.findUnique({ where: { username } });
-                if (user && user.isSystemAdmin) {
-                    userId = user.id;
-                }
-            }
+        // req.user MUST be populated by authMiddleware (Local Token only)
+        // No legacy fallbacks - strict authentication required
+        if (!req.user?.id) {
+            return res.status(401).json({ error: 'Valid local admin token required for password change' });
         }
 
-        if (!userId) {
-            return res.status(401).json({ error: 'User context required for password change' });
-        }
+        const userId = req.user.id;
 
         await prisma.user.update({
             where: { id: userId },
             data: { passwordHash: hashPassword(newPassword) }
         });
 
-        res.json({ success: true, message: 'Local password updated successfully' });
+        res.json({ success: true, message: 'Local password updated successfully. Please login again with your new password.' });
 
     } catch (error) {
         if (error instanceof z.ZodError) {
