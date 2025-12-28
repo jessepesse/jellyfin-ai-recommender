@@ -31,7 +31,26 @@ description: Pre-release checklist for GitHub releases
 
 Follow these steps before creating a GitHub release to ensure a smooth deployment.
 
+## 0. Local Verification (Smoke Test) 🆕
+Don't rely on CI to catch syntax errors.
+
+- [ ] **Backend Build:**
+  ```bash
+  cd backend
+  npx prisma generate  # Ensure Prisma client is valid
+  npm run build        # Checks for TS errors
+  ```
+
+- [ ] **Frontend Build:**
+  ```bash
+  cd frontend
+  npm run build        # Checks for TS errors and dead code
+  ```
+
+- [ ] **Docker Dry-Run** (Optional): `docker compose build`
+
 ## 1. Security Audit
+- [ ] Check `.env.example`: Did you add new environment variables? Update the example file!
 - [ ] Run security check: Verify no sensitive data (API keys, passwords, database files) will be pushed
 - [ ] Check `.gitignore` coverage for `.env`, `*.db`, `data/`, `images/`
 - [ ] Scan code for hardcoded secrets: `grep -r "api_key\|password\|secret" --include="*.ts" --include="*.tsx"`
@@ -67,7 +86,7 @@ If `package-lock.json` files changed:
 ## 4. Commit and Tag
 ```bash
 # Commit version bump
-git add backend/package.json frontend/package.json README.md CHANGELOG.md
+git add backend/package.json frontend/package.json README.md CHANGELOG.md .env.example
 git commit -m "chore: bump version to X.Y.Z"
 
 # Commit lock files if needed
@@ -89,6 +108,7 @@ git push origin vX.Y.Z
 
 ## 6. Post-Release
 - [ ] Test Docker image pull: `docker pull ghcr.io/jessepesse/jellyfin-ai-recommender-frontend:latest`
+- [ ] Manual Pull Test (backend): `docker pull ghcr.io/jessepesse/jellyfin-ai-recommender-backend:latest`
 - [ ] Verify release notes on GitHub
 - [ ] Update deployment documentation if needed
 
