@@ -6,17 +6,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-### 🐛 Bug Fixes
+## [2.3.7] - 2025-12-28
 
-- **Blocked Media View**: Fixed blocked page layout and functionality
-  - Refactored `BlockedView` to use the shared `MediaCard` component with a new `blocked` variant
-  - Ensured consistent responsiveness and mobile layout (same as Trending/Watchlist)
-  - Fixed 'Unblock' action adding items correctly back to the pool instead of defaulting to Watchlist (backend logic fix)
-  - Implemented optimistic UI updates to instantly remove unblocked items without loading delay
-- **Admin Authentication:** Added "Hybrid Auth" system with local admin password and offline login capability.
+### ✨ New Features
+
+- **Admin Authentication System:** Hybrid Auth with local admin password and offline login capability.
   - Added "Admin Account" section to Settings for managing local password.
   - Added automatic "Bootstrap Admin" creation on startup if no admin exists.
-- **Fix:** Resolved incorrect logo path on Login screen (was using proxied /images path).
+  - 30-day token expiry for security.
+  - Removed legacy header-based authentication fallbacks.
+
+- **Blocked View Enhancements:**
+  - Added Jellyseerr request integration - "Request in Jellyseerr" now actually sends request.
+  - Added FilterGroup (All/Movies/TV) for filtering blocked content.
+  - Added `blocked:changed` event listener for cross-component refresh.
+
+### 🐛 Bug Fixes
+
+- **Login Logo**: Fixed incorrect logo path on Login screen (was using proxied /images path).
+- **Blocked Media View**: Fixed blocked page layout and functionality.
+  - Refactored `BlockedView` to use the shared `MediaCard` component with a new `blocked` variant.
+  - Ensured consistent responsiveness and mobile layout (same as Trending/Watchlist).
+  - Fixed 'Unblock' action adding items correctly back to the pool instead of defaulting to Watchlist.
+  - Implemented optimistic UI updates to instantly remove unblocked items without loading delay.
 
 
 ## [2.3.6] - 2025-12-27
