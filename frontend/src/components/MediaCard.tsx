@@ -385,7 +385,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                       if (typeof onRemove === 'function') onRemove(id);
                       setShowInfo(false);
                       unblockItem(id, 'watchlist')
-                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { } })
+                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ } })
                         .catch(console.error);
                     } else {
                       // Add to watchlist
@@ -401,7 +401,7 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                         backdropUrl: item.backdropUrl ?? '',
                       };
                       postActionWatchlist(payloadItem)
-                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { } })
+                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ } })
                         .catch(console.error);
                     }
                   }}

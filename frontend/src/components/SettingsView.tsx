@@ -274,8 +274,11 @@ const SettingsView: React.FC = () => {
       setPasswordSuccess("Password updated successfully");
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err: any) {
-      setPasswordError(err.response?.data?.error || "Failed to update password");
+    } catch (err: unknown) {
+      const errorMessage = (err instanceof Error && 'response' in err)
+        ? ((err as { response?: { data?: { error?: string } } }).response?.data?.error || "Failed to update password")
+        : "Failed to update password";
+      setPasswordError(errorMessage);
     } finally {
       setPasswordLoading(false);
     }
