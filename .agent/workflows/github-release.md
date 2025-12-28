@@ -4,6 +4,31 @@ description: Pre-release checklist for GitHub releases
 
 # GitHub Release Checklist
 
+> [!CAUTION]
+> **KNOWN ISSUE: npm ci fails with "Missing: package@version from lock file"**
+> 
+> This happens when:
+> 1. **Shared workspaces** - If `frontend` and `backend` are in a monorepo with a shared `node_modules` parent, `npm install` may not update all transitive dependencies correctly
+> 2. **npm version mismatch** - Local npm version differs from GitHub Actions npm version
+> 3. **Hoisting issues** - Some packages like `magicast`, `yaml` are hoisted differently
+>
+> **REQUIRED FIX before tagging:**
+> ```bash
+> # Delete node_modules and reinstall COMPLETELY
+> cd frontend && rm -rf node_modules && npm install
+> cd ../backend && rm -rf node_modules && npm install
+> 
+> # Verify lock files changed
+> git status
+> 
+> # Commit lock files
+> git add frontend/package-lock.json backend/package-lock.json
+> git commit -m "chore: regenerate package-lock.json files"
+> git push
+> ```
+> 
+> **Only then create the tag!**
+
 Follow these steps before creating a GitHub release to ensure a smooth deployment.
 
 ## 1. Security Audit
