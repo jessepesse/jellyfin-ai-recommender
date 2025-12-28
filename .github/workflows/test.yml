@@ -55,7 +55,7 @@ jobs:
         working-directory: ./backend
       
       - name: TypeScript check (frontend)
-        run: npx tsc -b --noEmit
+        run: npx tsc --noEmit -p tsconfig.app.json
         working-directory: ./frontend
       
       - name: Backend unit tests
