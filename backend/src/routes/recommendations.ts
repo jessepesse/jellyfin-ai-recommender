@@ -69,29 +69,55 @@ router.get('/recommendations', async (req, res) => {
 
     try {
         // Fetch items from library or all libraries
+        // NOTE: These Jellyfin API calls are optional - recommendations can work without them
+        // using locally cached anchor items from the database
         let items: JellyfinItem[] = [];
-        if (libraryId) {
-            items = await jellyfinService.getItems(userId, accessToken, libraryId as string, undefined, jellyfinServer);
-        } else {
-            let libs: any[] = [];
-            try {
-                libs = (await jellyfinService.getLibraries(accessToken, jellyfinServer)) || [];
-            } catch (e) {
-                console.warn('Failed to fetch libraries', e);
-                libs = [];
+        let history: any[] = [];
+        let ownedSet: Set<string> = new Set();
+        let jellyfinAvailable = true;
+
+        // Try to fetch from Jellyfin, but don't fail if unavailable
+        try {
+            if (libraryId) {
+                items = await jellyfinService.getItems(userId, accessToken, libraryId as string, undefined, jellyfinServer);
+            } else {
+                let libs: any[] = [];
+                try {
+                    libs = (await jellyfinService.getLibraries(accessToken, jellyfinServer)) || [];
+                } catch (e) {
+                    console.warn('Failed to fetch libraries (Jellyfin may be unreachable)', e);
+                    libs = [];
+                }
+                const pools = libs.length ? await Promise.all(libs.map(l => jellyfinService.getItems(userId, accessToken, l.Id, undefined, jellyfinServer))) : [];
+                items = (pools || []).flat();
             }
-            const pools = libs.length ? await Promise.all(libs.map(l => jellyfinService.getItems(userId, accessToken, l.Id, undefined, jellyfinServer))) : [];
-            items = (pools || []).flat();
+        } catch (e) {
+            console.warn('[Recommendations] Jellyfin items fetch failed, using local data only:', e instanceof Error ? e.message : e);
+            jellyfinAvailable = false;
         }
 
         const userData = await getUserData(userName || userId);
-        let history = await jellyfinService.getUserHistory(userId, accessToken, undefined, jellyfinServer);
-        if (!Array.isArray(history)) history = [];
+
+        // Try to fetch history from Jellyfin, but continue if it fails
+        try {
+            history = await jellyfinService.getUserHistory(userId, accessToken, undefined, jellyfinServer);
+            if (!Array.isArray(history)) history = [];
+        } catch (e) {
+            console.warn('[Recommendations] Jellyfin history fetch failed, using local anchor data:', e instanceof Error ? e.message : e);
+            history = [];
+            jellyfinAvailable = false;
+        }
 
         const { extractTmdbIds } = await import('../services/jellyfin-normalizer');
         const historyTmdbIds = extractTmdbIds(history);
 
-        const ownedSet = await jellyfinService.getOwnedIds(userId, accessToken, jellyfinServer);
+        // Try to get owned IDs, but continue if it fails
+        try {
+            ownedSet = await jellyfinService.getOwnedIds(userId, accessToken, jellyfinServer);
+        } catch (e) {
+            console.warn('[Recommendations] Jellyfin owned IDs fetch failed:', e instanceof Error ? e.message : e);
+            ownedSet = new Set();
+        }
 
         // Build exclusion lists
         const watchedTitles = (history || []).map((h: any) => {

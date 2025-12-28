@@ -53,6 +53,18 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
                     AccessToken: localToken,
                     ServerId: 'local-server'
                 };
+
+                // Hybrid mode: Try to get a real Jellyfin token for API calls
+                // This ensures we can call Jellyfin APIs when the server is reachable
+                try {
+                    const realJellyfinAuth = await authService.authenticateUser(username, password, serverUrl);
+                    logger.info(`[Auth] Hybrid mode: Got real Jellyfin token for ${username}`);
+                    // Replace local token with real Jellyfin token for API compatibility
+                    jellyfinAuth = realJellyfinAuth;
+                } catch (jellyfinError) {
+                    // Jellyfin unreachable or credentials don't match there - continue with local-only mode
+                    logger.warn(`[Auth] Jellyfin unreachable or password mismatch, using local-only mode for ${username}`);
+                }
             } else {
                 logger.warn(`[Auth] Local password did not match for ${username}, falling back to Jellyfin API`);
             }
