@@ -409,13 +409,24 @@ Backups are saved to `./data/backup_latest.json` and timestamped files.
 ## 🔒 Security
 
 This project implements comprehensive security measures including:
+
+**Network & Request Protection:**
 - 5-layer SSRF (Server-Side Request Forgery) protection
 - Input validation with Zod schemas
-- Rate limiting on all endpoints
+- Rate limiting on all endpoints (5 different limiters)
 - Security headers via Helmet
 - Strict CORS policy with private network allowlist
 - Local image caching (eliminates external URL dependencies)
-- No sensitive data logging
+
+**Authentication & Authorization:**
+- PBKDF2 password hashing for local admin
+- HMAC-signed tokens with 30-day expiry
+- Middleware-enforced route protection (`authMiddleware`, `requireAdmin`)
+- No legacy header-based authentication fallbacks
+
+**Privacy:**
+- No sensitive data logging (passwords never logged)
+- Token invalidation on password change
 
 **For security policy and known CodeQL alerts, see [SECURITY.md](SECURITY.md)**
 
