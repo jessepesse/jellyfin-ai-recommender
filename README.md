@@ -88,6 +88,24 @@ docker compose up -d
 3. Log in with your Jellyfin credentials
 4. Start getting AI-powered recommendations! 🎉
 
+### 4. Admin User (Emergency Access)
+
+On first startup, the system creates a local **admin** user for emergency access:
+
+| Setting | Default Value |
+|---------|---------------|
+| Username | `admin` |
+| Password | Set via `INITIAL_ADMIN_PASSWORD` env variable (default: `admin123`) |
+
+> [!IMPORTANT]
+> **Change the admin password immediately after first login!**
+> Go to **Settings → Admin Account** and set a strong password.
+
+The admin user provides:
+- **Offline Access**: Login even when Jellyfin server is unavailable
+- **Emergency Recovery**: Access the system if Jellyfin authentication fails
+- **Token Expiry**: Sessions expire after 30 days for security
+
 ### Updating
 
 ```bash
