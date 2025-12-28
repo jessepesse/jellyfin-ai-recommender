@@ -207,6 +207,7 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
 
         // Determine action impact
         let newStatus: 'WATCHLIST' | 'WATCHED' | null = null;
+        let jellyseerrResult: any = null;
 
         if (action === 'watched' || action === 'watchlist') {
             newStatus = action === 'watched' ? 'WATCHED' : 'WATCHLIST';
@@ -220,8 +221,25 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
                 }
             });
             console.log(`[Blocked API] Updated media ${tmdbId} status to ${newStatus}`);
+        } else if (action === 'jellyseerr') {
+            // Make Jellyseerr request
+            try {
+                const { requestMediaByTmdb } = await import('../services/jellyseerr');
+                const mediaType = media.mediaType as 'movie' | 'tv';
+                jellyseerrResult = await requestMediaByTmdb(tmdbId, mediaType);
+                console.log(`[Blocked API] Jellyseerr request sent for ${tmdbId} (${mediaType})`);
+            } catch (jellyseerrErr: any) {
+                console.error(`[Blocked API] Jellyseerr request failed for ${tmdbId}:`, jellyseerrErr?.message || jellyseerrErr);
+                // Continue with unblocking even if Jellyseerr fails
+            }
+
+            // Remove the UserMedia relation (unblock without adding to watchlist/watched)
+            await prisma.userMedia.delete({
+                where: { id: userMedia.id }
+            });
+            console.log(`[Blocked API] Removed UserMedia relation for ${tmdbId} (Action: jellyseerr)`);
         } else {
-            // For 'remove' (just unblock) or 'jellyseerr' (request), we remove the UserMedia relation
+            // For 'remove' (just unblock), we remove the UserMedia relation
             await prisma.userMedia.delete({
                 where: { id: userMedia.id }
             });
@@ -247,13 +265,11 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
             console.log(`[Blocked API] Removed media ${tmdbId} from redemption candidates cache`);
         }
 
-        // TODO: If action === 'jellyseerr', make Jellyseerr request
-        // This would require Jellyseerr integration which we can add later
-
         res.json({
             success: true,
-            message: `Content unblocked${newStatus ? ` and set to ${newStatus}` : ''}`,
-            newStatus
+            message: `Content unblocked${newStatus ? ` and set to ${newStatus}` : ''}${action === 'jellyseerr' ? ' and requested in Jellyseerr' : ''}`,
+            newStatus,
+            jellyseerrResult
         });
     } catch (error: any) {
         console.error('[Blocked API] Unblock error:', error?.message || error);
