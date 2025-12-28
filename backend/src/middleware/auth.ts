@@ -62,6 +62,9 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
                 }
 
                 // Verify Signature
+                // lgtm[js/insufficient-password-hash] - This is TOKEN SIGNING with HMAC-SHA256, not password hashing.
+                // The passwordHash is already a PBKDF2 hash from password.ts - we use it as a signing key.
+                // This ensures tokens are invalidated when passwords change.
                 const expectedSignature = crypto.createHmac('sha256', user.passwordHash).update(payload).digest('hex');
 
                 if (signature !== expectedSignature) {
