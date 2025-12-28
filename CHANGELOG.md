@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.3.8] - 2025-12-28
+
+### 🐛 Bug Fixes
+
+- **Hybrid Re-authentication:** Fixed 401 errors after local authentication
+  - When local auth succeeds, system now also fetches a real Jellyfin token if server is reachable
+  - Enables Jellyfin API calls (libraries, history) even when starting with cached credentials
+  - Falls back to local-only mode if Jellyfin is unreachable
+
+- **Offline Recommendations:** Recommendations now work even when Jellyfin is unavailable
+  - Jellyfin API calls (getItems, getHistory, getOwnedIds) wrapped in try-catch
+  - Uses locally cached anchor data from database when Jellyfin fails
+  - Only watch history fetch is affected; AI recommendations continue working
+
+- **Nginx Image Proxy:** Added `/images/` location block to nginx.conf
+  - Proxies cached media images from backend container
+  - Enables production image loading (was missing, causing 404s)
+  - 30-day browser cache for performance
+
 ## [2.3.7] - 2025-12-28
 
 ### ✨ New Features
