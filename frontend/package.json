@@ -20,7 +20,7 @@
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "recharts": "^2.15.0",
+    "recharts": "^3.6.0",
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
