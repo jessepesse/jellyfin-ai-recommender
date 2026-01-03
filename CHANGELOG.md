@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [Unreleased]
+## [2.4.0] - 2026-01-03
 
 ### ✨ New Features
 
@@ -23,6 +23,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - **Identity Mapping:** Safely maps valid Jellyfin Admin sessions to local admin privileges.
   - **DoS Protection:** Token cache includes strict TTL (5m) and size limits (1000 keys).
 
+
+### 🐛 Bug Fixes
+
+- **Jellyseerr Request Failure:** Fixed "Request" button errors
+  - **Auto-Select Seasons:** Automatically fetches and includes all seasons for TV show requests (prevents 500 errors).
+  - **Flexible Validator:** Resolved mismatch between frontend payload and backend validation schemas.
+  - **Increased Timeout:** Raised Jellyseerr client timeout to 120s to handle slow instances.
+  - **High CPU Usage:** Fixed dev environment performance
+  -**Detached Mode:** Switched Docker Compose to detached mode to prevent high CPU usage from interactive log streaming.
 
 ## [2.3.8] - 2025-12-28
 

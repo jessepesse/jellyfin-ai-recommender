@@ -1,4 +1,4 @@
-# 🎬 Jellyfin AI Recommender (v2.3.7)
+# 🎬 Jellyfin AI Recommender (v2.4.0)
 
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**
@@ -39,7 +39,7 @@ The fastest way to get started. **Recommended for most users.**
 | **Jellyfin Server** | Your media server URL (e.g., `http://192.168.1.100:8096`) |
 | **Jellyseerr** | For metadata enrichment & requests (e.g., `http://192.168.1.100:5055`) |
 | **Google Gemini API Key** | Free at [Google AI Studio](https://aistudio.google.com/apikey) (Default Provider) |
-| **OpenRouter API Key** | Optional: Support for DeepSeek, Llama, etc. [OpenRouter](https://openrouter.ai) |
+| **OpenRouter API Key** | Optional [OpenRouter](https://openrouter.ai) |
 
 ### 1. Create `docker-compose.yml`
 
