@@ -18,6 +18,10 @@ const tokenCache = new NodeCache({
     useClones: false // Performance optimization since we don't mutate cached objects
 });
 
+// Generate a secure random key for HMAC hashing of tokens in memory
+// This key is unique to each server instance/restart, which is fine because the cache is in-memory too.
+const CACHE_SECRET = crypto.randomBytes(32).toString('hex');
+
 interface CachedToken {
     userId: number; // Local DB ID
     jellyfinUserId: string;
@@ -108,9 +112,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         // 3. Jellyfin Token Validation (Standard Tokens)
         // Verify identity securely via Jellyfin API (or cache) + Local DB mapping
 
-        // SECURITY: Hash the token before cache lookup
+        // SECURITY: Hash the token using HMAC before cache lookup
         // This ensures raw tokens are not resident in the cache memory for long periods
-        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        // using HMAC prevents rainbow table attacks on the cache keys
+        const tokenHash = crypto.createHmac('sha256', CACHE_SECRET).update(token).digest('hex');
 
         // Check secure cache first
         const cached = tokenCache.get<CachedToken>(tokenHash);
