@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [2.4.1] - 2026-01-03
+ 
+### 🔒 Security
+- **Auth:** Migrated admin token caching to use **HMAC-SHA256** with randomized secret (fixes CodeQL alert).
+
+### 📦 Dependencies
+- **Frontend:** Updated `recharts` to v3.6.0.
+- **Frontend:** Updated `jsdom` to v27.4.0.
+- **Frontend:** Removed obsolete `@types/date-fns` (v4 has built-in types).
+
 ## [2.4.0] - 2026-01-03
 
 ### ✨ New Features
