@@ -13,6 +13,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - **Watchlist:** Implemented parsing of stored JSON genres.
   - **Weekly Watchlist:** Added genre ID-to-name mapping for recommendations.
   - **Blocked:** Implemented parsing of stored genres.
+- **Weekly Watchlist:** Added "All Caught Up" empty state message with next release date.
 
 ## [2.4.2] - 2026-01-03
 

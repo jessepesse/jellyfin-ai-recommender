@@ -6,7 +6,7 @@ import type { WeeklyWatchlist as IWeeklyWatchlist, WeeklyWatchlistItem } from '.
 import type { JellyfinItem } from '../types';
 import MediaCard from './MediaCard';
 import SkeletonCard from './SkeletonCard';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 
 const WeeklyWatchlist: React.FC = () => {
     const [watchlist, setWatchlist] = useState<IWeeklyWatchlist | null>(null);
@@ -131,6 +131,24 @@ const WeeklyWatchlist: React.FC = () => {
                 <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
             </div>
+
+            {/* All Caught Up State */}
+            {watchlist.movies.length === 0 && watchlist.tvShows.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+                    <div className="bg-slate-800/50 p-6 rounded-full mb-6 relative group">
+                        <div className="absolute inset-0 bg-green-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all duration-700"></div>
+                        <Sparkles className="w-12 h-12 text-green-400 relative z-10" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-white mb-3">You're all caught up!</h3>
+                    <p className="text-slate-400 max-w-md text-lg leading-relaxed">
+                        You've gone through all your recommendations for this week.
+                        <br />
+                        <span className="text-slate-300 font-medium block mt-2">
+                            Fresh picks will be ready on {format(addDays(startDate, 7), 'EEEE, MMM do')}.
+                        </span>
+                    </p>
+                </div>
+            )}
 
             {/* Movies Section - Grid Layout */}
             {watchlist.movies.length > 0 && (
