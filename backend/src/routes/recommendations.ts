@@ -68,6 +68,13 @@ router.get('/recommendations', async (req, res) => {
     }
 
     try {
+        // Prevent browser caching for recommendations to ensure refresh works
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+
+        console.log(`[Recommendations] Request: type=${type} genre=${genre} mood=${mood} refresh=${req.query.refresh}`);
+
         // Fetch items from library or all libraries
         // NOTE: These Jellyfin API calls are optional - recommendations can work without them
         // using locally cached anchor items from the database
@@ -191,7 +198,10 @@ router.get('/recommendations', async (req, res) => {
 
         const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}_${filters.mood || 'any'}`;
         const viewCacheKey = `view_recs_${cacheKey}`;
-        const forceRefresh = req.query.refresh === 'true';
+        // Ensure strictly boolean check on string 'true'
+        const forceRefresh = String(req.query.refresh).toLowerCase() === 'true';
+
+        console.log(`[Recommendations] User=${userName} Refresh=${forceRefresh} CacheKey=${cacheKey}`);
 
         // --- VIEW CACHE LOGIC ---
         // If not forcing refresh, try to load from view cache first
@@ -213,7 +223,13 @@ router.get('/recommendations', async (req, res) => {
                     return res.json(viewCached);
                 }
                 console.log('[ViewCache] Cache empty after filtering, generating new items...');
+            } else {
+                console.log('[ViewCache] No view cache found, generating...');
             }
+        } else {
+            console.log('[ViewCache] Force refresh requested - bypassing view cache');
+            // Optionally clear the view cache immediately to ensure fresh state
+            CacheService.del('recommendations', viewCacheKey);
         }
 
         // ... generation logic ...
