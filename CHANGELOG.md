@@ -20,6 +20,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Implemented automatic cache invalidation for `trending_{username}` on all user actions.
   - Added background cache refresh to ensure "instant" updates upon return to the Trending page.
   - Added scheduled (2-hour) background job to keep Trending cache fresh for all users.
+- **Recommendations:** Implemented persistent caching for recommendations.
+  - Recommendations now remain visible when navigating away and back.
+  - Items are automatically removed from the view as you interact with them (Watch/Block/Watchlist).
 
 ## [2.4.2] - 2026-01-03
 

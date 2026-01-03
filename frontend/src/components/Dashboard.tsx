@@ -51,22 +51,31 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     setSelectedMood(prev => prev === m ? null : m);
   };
 
-  const handleGetRecommendations = async () => {
+  // Load cached recommendations on mount if viewing recommendations page
+  React.useEffect(() => {
+    if (currentView === 'recommendations') {
+      handleGetRecommendations(false);
+    }
+  }, [currentView]); // Run when view changes to 'recommendations'
+
+  const handleGetRecommendations = async (refresh: boolean = true) => {
     setError(null);
     setIsLoading(true);
     try {
       const genreParam = selectedGenres.join(',') || undefined;
       // Build params object conditionally so we don't send undefined/null path/query values
-      const params: Record<string, string | undefined> = {};
+      const params: Record<string, any> = {};
       if (selectedType) params.type = selectedType;
       if (genreParam) params.genre = genreParam;
       if (selectedMood) params.mood = selectedMood;
+      params.refresh = refresh;
 
       // getRecommendations signature is (targetItemId, libraryId, options)
       // We intentionally omit targetItemId and libraryId for general recommendations.
       const recs = await getRecommendations('', '', params);
       // Log raw API response for debugging in browser console
       // Avoid logging raw API responses in production (may contain PII)
+      // console.log('Recommendations API response:', recs);
 
       // Backend guarantees strict items with tmdbId and posterUrl. Use them directly.
       let itemsArray: JellyfinItem[] = [];
@@ -133,7 +142,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
                 </div>
 
                 <div className="flex justify-center pt-2 pb-10">
-                  <HeroButton onClick={handleGetRecommendations} disabled={isLoading}>
+                  <HeroButton onClick={() => handleGetRecommendations(true)} disabled={isLoading}>
                     {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
                   </HeroButton>
                 </div>
