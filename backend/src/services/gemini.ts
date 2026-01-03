@@ -352,6 +352,7 @@ Constraints:
 
       // Use unified content generation
       const text = await generateAIContent(client, promptText, { json: true, jsonSchema: schema });
+      console.debug(`[AI] Response text received: ${text?.substring(0, 100)}... (Total: ${text?.length} chars)`);
 
       if (!text) {
         console.warn('AI returned no text; using heuristic fallback');
@@ -390,12 +391,19 @@ Constraints:
     }
 
     // Fallback heuristic
+    console.log('[AI] Triggering heuristic fallback due to AI failure or empty result.');
     try {
+      if (!likedItems || likedItems.length === 0) {
+        console.warn('[AI] No liked items to use for fallback!');
+        return [];
+      }
+
       const scored = (likedItems || []).slice().sort((a: MediaItemInput, b: MediaItemInput) => {
         const ratingA = a.voteAverage ?? a.vote_average ?? a.rating ?? 0;
         const ratingB = b.voteAverage ?? b.vote_average ?? b.rating ?? 0;
         return Number(ratingB) - Number(ratingA);
       });
+      console.log(`[AI] Fallback found ${scored.length} items to use as base.`);
       return scored.slice(0, 10).map((s: MediaItemInput): RecommendationCandidate => ({
         title: s.name || s.title || s.Title || 'Unknown',
         media_type: s.mediaType || s.media_type || s.type || 'movie',
