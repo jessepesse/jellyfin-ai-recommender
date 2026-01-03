@@ -10,7 +10,10 @@ interface BackupData {
     jellyseerrUrl?: string;
     jellyseerrApiKey?: string;
     geminiApiKey?: string;
-    geminiModel?: string;
+    geminiModel?: string; // Legacy
+    aiProvider?: string;
+    openrouterApiKey?: string;
+    aiModel?: string;
     isConfigured: boolean;
   } | null;
   users: Array<{
@@ -45,7 +48,7 @@ async function backupDatabase() {
     // Fetch all users
     const users = await prisma.user.findMany({
       include: {
-        media: {
+        userMedia: { // Renamed from media to userMedia
           include: {
             media: true
           }
@@ -54,14 +57,17 @@ async function backupDatabase() {
     });
 
     const backupData: BackupData = {
-      version: '2.0.3',
+      version: '2.4.1',
       exported_at: new Date().toISOString(),
       system_config: systemConfig ? {
         jellyfinUrl: systemConfig.jellyfinUrl || undefined,
         jellyseerrUrl: systemConfig.jellyseerrUrl || undefined,
         jellyseerrApiKey: systemConfig.jellyseerrApiKey || undefined,
         geminiApiKey: systemConfig.geminiApiKey || undefined,
-        geminiModel: systemConfig.geminiModel,
+        geminiModel: systemConfig.aiModel, // Map aiModel to geminiModel for legacy compat
+        aiProvider: systemConfig.aiProvider,
+        openrouterApiKey: systemConfig.openrouterApiKey || undefined,
+        aiModel: systemConfig.aiModel,
         isConfigured: systemConfig.isConfigured
       } : null,
       users: []
@@ -85,7 +91,10 @@ async function backupDatabase() {
       };
 
       // Organize media by status and type
-      for (const userMedia of user.media) {
+      // Check user.userMedia (was user.media)
+      const userMediaList = user.userMedia || [];
+
+      for (const userMedia of userMediaList) {
         const media = userMedia.media;
 
         const item = {
