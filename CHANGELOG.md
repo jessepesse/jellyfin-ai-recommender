@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [2.4.2] - 2026-01-03
+
+### 🐛 Bug Fixes
+- **Backup:** Fixed `backup_db.ts` script to work with new Dual AI database schema (resolves `ts-node` compilation errors during backup).
+- **Security:** Added explicit CodeQL alert suppression for HMAC cache hashing to clear false positives.
+
 ## [2.4.1] - 2026-01-03
  
 ### 🔒 Security
