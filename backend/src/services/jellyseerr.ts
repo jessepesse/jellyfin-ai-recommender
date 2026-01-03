@@ -349,15 +349,27 @@ export async function requestMediaByTmdb(tmdbId: number, mediaType: 'movie' | 't
       mediaType: mediaType, // 'movie' or 'tv'
       mediaId: Number(tmdbId),
     };
-    // For TV shows, include seasons array (can be empty)
+
+    // For TV shows, we must specify seasons. Fetch available seasons and request all.
     if (mediaType === 'tv') {
-      payload.seasons = [];
+      try {
+        const detailsResp = await client.get(`/api/v1/tv/${tmdbId}`);
+        if (detailsResp.data && Array.isArray(detailsResp.data.seasons)) {
+          // Select all seasons
+          payload.seasons = detailsResp.data.seasons.map((s: any) => s.seasonNumber);
+          console.debug(`[Jellyseerr] Auto-selecting seasons for TV ${tmdbId}:`, payload.seasons);
+        }
+      } catch (detailsErr) {
+        console.warn('[Jellyseerr] Failed to fetch TV details for season auto-selection, sending empty season list:', detailsErr);
+        payload.seasons = [];
+      }
     }
 
     // Debug: avoid logging full request payloads; log minimal identifying fields only
-    console.debug('[Jellyseerr] Request payload built', { mediaType: payload.mediaType, mediaId: payload.mediaId });
+    console.debug('[Jellyseerr] Sending request payload', { mediaType: payload.mediaType, mediaId: payload.mediaId, seasonsCount: payload.seasons?.length });
 
     const resp = await client.post('/api/v1/request', payload);
+    console.debug('[Jellyseerr] Request response:', resp.data);
     return resp.data;
   } catch (e: any) {
     console.error('Jellyseerr request error for', tmdbId, e?.response?.data || e.message || e);
