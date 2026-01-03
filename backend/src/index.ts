@@ -26,6 +26,8 @@ import { errorHandler } from './utils/errors';
 import cron from 'node-cron';
 import swaggerUi from 'swagger-ui-express';
 import { specs } from './config/swagger';
+import { TrendingService } from './services/trending';
+import { prisma } from './db';
 
 const app = express();
 const env = getEnv();
@@ -235,6 +237,24 @@ app.listen(port, () => {
       }
     });
     logger.info('Scheduled daily backfill at 03:00');
+
+    // Schedule trending cache refresh every 2 hours
+    cron.schedule('0 */2 * * *', async () => {
+      logger.info('Scheduled trending refresh triggered (every 2 hours)');
+      try {
+        const users = await prisma.user.findMany();
+        logger.info(`Refreshing trending cache for ${users.length} users...`);
+
+        // Refresh sequentially to avoid hammering Jellyseerr
+        for (const user of users) {
+          await TrendingService.refreshCache(user.username);
+        }
+        logger.info('Trending refresh completed');
+      } catch (e) {
+        logger.error({ err: e }, 'Scheduled trending refresh failed');
+      }
+    });
+    logger.info('Scheduled trending cache refresh (every 2h)');
   } catch (e) {
     logger.warn({ err: e }, 'Failed to schedule backfill');
   }

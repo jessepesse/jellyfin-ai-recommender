@@ -25,7 +25,8 @@ export interface TrendingItem {
 }
 
 export class TrendingService {
-    private static readonly CACHE_TTL = 600; // 10 minutes
+    // Cache validity: 3 hours (we refresh every 2 hours, so this ensures overlap)
+    private static readonly CACHE_TTL = 60 * 60 * 3;
 
     /**
      * Get trending items for a user
