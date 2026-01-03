@@ -10,6 +10,7 @@ import { validateBaseUrl } from '../utils/ssrf-protection';
 import { shouldFilterStatus, filterByJellyseerrStatus } from '../services/jellyseerr-status';
 import { prisma } from '../db';
 import { CacheService } from '../services/cache';
+import { getGenreName } from '../services/tmdb-genres';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ interface TrendingItem {
     mediaInfo?: {
         status: number;
     } | null;
+    genres: string[];
 }
 
 /**
@@ -104,7 +106,9 @@ router.get('/', async (req: Request, res: Response) => {
             mediaType: 'movie' as const,
             releaseDate: m.releaseDate,
             voteAverage: m.voteAverage,
+
             mediaInfo: m.mediaInfo,
+            genres: (m.genreIds || m.genre_ids || []).map((id: number) => getGenreName(id, 'movie')).filter(Boolean),
         }));
 
         const rawTvShows: TrendingItem[] = allTvShows.map((t: any) => ({
@@ -117,6 +121,7 @@ router.get('/', async (req: Request, res: Response) => {
             firstAirDate: t.firstAirDate,
             voteAverage: t.voteAverage,
             mediaInfo: t.mediaInfo,
+            genres: (t.genreIds || t.genre_ids || []).map((id: number) => getGenreName(id, 'tv')).filter(Boolean),
         }));
 
         // Get user's excluded TMDB IDs from database

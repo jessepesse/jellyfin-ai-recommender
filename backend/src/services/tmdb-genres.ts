@@ -52,6 +52,10 @@ export const TV_GENRES: Record<string, number> = {
     'western': 37,
 };
 
+// Reverse maps for ID -> Name lookup
+const MOVIE_GENRES_REV: Record<number, string> = Object.entries(MOVIE_GENRES).reduce((acc, [k, v]) => ({ ...acc, [v]: k }), {} as Record<number, string>);
+const TV_GENRES_REV: Record<number, string> = Object.entries(TV_GENRES).reduce((acc, [k, v]) => ({ ...acc, [v]: k }), {} as Record<number, string>);
+
 /**
  * Convert genre names to TMDB IDs
  * @param names - Array of genre names (case-insensitive)
@@ -74,4 +78,19 @@ export function genreNamesToIds(names: string[], type: 'movie' | 'tv'): number[]
 export function getGenreId(name: string, type: 'movie' | 'tv'): number | null {
     const map = type === 'movie' ? MOVIE_GENRES : TV_GENRES;
     return map[name.toLowerCase().trim()] ?? null;
+}
+
+/**
+ * Get genre name by ID (single lookup)
+ * Returns properly capitalized name (e.g. "Science Fiction")
+ */
+export function getGenreName(id: number, type: 'movie' | 'tv'): string | null {
+    const map = type === 'movie' ? MOVIE_GENRES_REV : TV_GENRES_REV;
+    const name = map[id];
+    if (!name) return null;
+
+    // Capitalize words
+    return name.split(' ')
+        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
 }

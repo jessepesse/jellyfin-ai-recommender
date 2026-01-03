@@ -31,6 +31,7 @@ export type Enriched = {
   voteAverage?: number;
   language?: string;
   releaseDate?: string;
+  genres?: string[];
 };
 
 function normalizeTitle(str: string | undefined): string {
@@ -147,6 +148,7 @@ export async function searchAndVerify(queryTitle: string, queryYear: string | nu
         tmdb_id: tmdb_id ? Number(tmdb_id) : undefined,
         media_type,
         releaseDate: releaseDate,
+        genres: match.genres?.map((g: any) => g.name || g) || [],
       };
 
       CacheService.set('jellyseerr', cacheKey, enriched);
@@ -305,6 +307,12 @@ export async function getMediaDetails(tmdbId: string | number, mediaType: 'movie
       return null;
     }
 
+    // Extract genres
+    const genresData = data.genres || [];
+    const genres = (Array.isArray(genresData) ? genresData : [])
+      .map((g: any) => g.name || g)
+      .filter(Boolean);
+
     const partialPath = data.posterPath || data.poster_path || data.poster || undefined;
     const backdropPartial = data.backdropPath || data.backdrop_path || data.backdrop || undefined;
     const posterUrl = await constructPosterUrl(partialPath);
@@ -320,6 +328,7 @@ export async function getMediaDetails(tmdbId: string | number, mediaType: 'movie
       voteAverage: data.voteAverage ?? data.vote_average ?? data.rating ?? undefined,
       language: data.originalLanguage ?? data.language ?? undefined,
       releaseDate: data.releaseDate || data.firstAirDate || data.release_date || data.first_air_date || undefined,
+      genres,
     };
 
     CacheService.set('jellyseerr', cacheKey, enriched);

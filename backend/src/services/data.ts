@@ -238,6 +238,7 @@ export async function getFullWatchlist(username: string) {
     mediaType: e.media?.mediaType ?? 'movie',
     releaseYear: e.media?.releaseYear ?? '',
     status: e.status,
+    genres: e.media?.genres ? JSON.parse(e.media.genres) : [],
   }));
 }
 

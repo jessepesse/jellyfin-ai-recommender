@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+### ✨ New Features
+- **Genre Display:** Added genre mapping and display across the application (previously missing).
+  - **Trending:** Added genres to Trending Page cards.
+  - **Search & Recommendations:** Implemented genre population from Jellyseerr.
+  - **Watchlist:** Implemented parsing of stored JSON genres.
+  - **Weekly Watchlist:** Added genre ID-to-name mapping for recommendations.
+  - **Blocked:** Implemented parsing of stored genres.
+
 ## [2.4.2] - 2026-01-03
 
 ### 🐛 Bug Fixes

@@ -22,6 +22,7 @@ interface TrendingItem {
     releaseDate?: string;
     firstAirDate?: string;
     voteAverage: number;
+    genres?: string[];
 }
 
 interface TrendingResponse {
@@ -81,6 +82,7 @@ const TrendingPage: React.FC = () => {
             releaseYear: releaseDate ? releaseDate.substring(0, 4) : 'Unknown',
             voteAverage: item.voteAverage || 0,
             backdropUrl: backdropUrl,
+            genres: item.genres,
             UserData: { Played: false, UnplayedItemCount: 1, PlaybackPositionTicks: 0, IsFavorite: false },
         } as JellyfinItem;
     };

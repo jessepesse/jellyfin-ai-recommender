@@ -374,6 +374,8 @@ router.get('/recommendations', async (req, res) => {
                         console.log(`[Filter] DROP: "${recTitle}" (${rec.release_year}) - Verification Failed`);
                         continue;
                     }
+                    // Ensure genres are explicitly passed if available (Enriched type has them, but verifying)
+                    // enriched object is what gets pushed to buffer
                     const tmdb = enriched.tmdb_id ? Number(enriched.tmdb_id) : null;
                     if (!tmdb || !Number.isFinite(tmdb)) continue;
 

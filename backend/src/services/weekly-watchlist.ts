@@ -9,7 +9,7 @@
 
 import prisma from '../db';
 import { GeminiService } from './gemini';
-import { genreNamesToIds } from './tmdb-genres';
+import { genreNamesToIds, getGenreName } from './tmdb-genres';
 import { discoverMovies, discoverTV, keywordNamesToIds, TMDBMovie, TMDBTV } from './tmdb-discover';
 
 interface WatchlistItem {
@@ -17,6 +17,7 @@ interface WatchlistItem {
     title: string;
     posterUrl: string | null;
     overview: string;
+    genres?: string[];
 }
 
 interface GenerationResult {
@@ -293,6 +294,7 @@ export class WeeklyWatchlistService {
                 overview: candidate?.overview || '',
                 voteAverage: candidate?.vote_average || 0,
                 releaseDate: candidate?.release_date || null,
+                genres: candidate?.genre_ids?.map(id => getGenreName(id, 'movie')).filter(Boolean) as string[] || [],
             };
         });
 
@@ -320,6 +322,7 @@ export class WeeklyWatchlistService {
                 overview: candidate?.overview || '',
                 voteAverage: candidate?.vote_average || 0,
                 releaseDate: candidate?.first_air_date || null,
+                genres: candidate?.genre_ids?.map(id => getGenreName(id, 'tv')).filter(Boolean) as string[] || [],
             };
         });
 

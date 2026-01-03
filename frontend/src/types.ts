@@ -7,6 +7,7 @@ export interface JellyfinItem extends SharedMediaItem {
     overview: string | null;
     backdropUrl: string | null;
     voteAverage: number;
+    genres?: string[];
 }
 
 export type { JellyfinLibrary };

@@ -252,6 +252,7 @@ export interface TrendingItem {
     releaseDate?: string;
     firstAirDate?: string;
     voteAverage: number;
+    genres?: string[];
 }
 
 export interface TrendingResponse {

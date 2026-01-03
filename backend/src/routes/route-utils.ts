@@ -39,6 +39,7 @@ export interface ToFrontendItemInput {
     vote_average?: number | null;
     rating?: number | null;
     reason?: string;
+    genres?: string[];
 }
 
 /**
@@ -46,21 +47,21 @@ export interface ToFrontendItemInput {
  */
 export function toFrontendItem(item: ToFrontendItemInput | null | undefined): FrontendItem | null {
     if (!item) return null;
-    
+
     const tmdbRaw = item.tmdbId ?? item.tmdb_id ?? item.id ?? item.tmdb ?? item.tmdbId;
     const tmdbId = tmdbRaw !== undefined && tmdbRaw !== null ? Number(tmdbRaw) : null;
-    
+
     // Return null if tmdbId is not valid - FrontendItem requires a number
     if (tmdbId === null || !Number.isFinite(tmdbId)) return null;
-    
+
     const title = item.title || item.name || item.Title || '';
     const overview = item.overview ?? item.plot ?? item.synopsis ?? undefined;
     const mediaTypeRaw = item.mediaType ?? item.media_type ?? item.type ?? item.MediaType ?? 'movie';
     const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.toLowerCase() : 'movie';
-    const releaseYear = item.releaseYear ?? 
-        (item.releaseDate ? String(item.releaseDate).substring(0,4) : 
-        (item.firstAirDate ? String(item.firstAirDate).substring(0,4) : '')) ?? '';
-    
+    const releaseYear = item.releaseYear ??
+        (item.releaseDate ? String(item.releaseDate).substring(0, 4) :
+            (item.firstAirDate ? String(item.firstAirDate).substring(0, 4) : '')) ?? '';
+
     // Poster resolution: Prefer local cached image, fallback to source URL
     let posterUrl: string | null = null;
     if (item.posterUrl) {
@@ -68,7 +69,7 @@ export function toFrontendItem(item: ToFrontendItemInput | null | undefined): Fr
         if (item.posterUrl.startsWith('/images/')) {
             const filename = item.posterUrl.replace('/images/', '');
             posterUrl = `/api/images/${filename}`;
-        } 
+        }
         // If posterUrl is already a proxy URL, use it
         else if (item.posterUrl.startsWith('/api/proxy/image') || item.posterUrl.startsWith('/api/images/')) {
             posterUrl = item.posterUrl;
@@ -77,11 +78,11 @@ export function toFrontendItem(item: ToFrontendItemInput | null | undefined): Fr
         else {
             posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(item.posterUrl)}`;
         }
-    } 
+    }
     // Fallback to posterSourceUrl if posterUrl is missing
     else if (item.posterSourceUrl) {
-        posterUrl = item.posterSourceUrl.startsWith('/api/proxy/image') 
-            ? item.posterSourceUrl 
+        posterUrl = item.posterSourceUrl.startsWith('/api/proxy/image')
+            ? item.posterSourceUrl
             : `/api/proxy/image?type=poster&path=${encodeURIComponent(item.posterSourceUrl)}`;
     }
     // Last resort: try legacy fields
@@ -91,9 +92,9 @@ export function toFrontendItem(item: ToFrontendItemInput | null | undefined): Fr
             posterUrl = `/api/proxy/image?type=poster&path=${encodeURIComponent(posterSource)}`;
         }
     }
-    
+
     const voteAverage = item.voteAverage ?? item.vote_average ?? item.rating ?? 0;
-    
+
     // Backdrop resolution: Prefer local cached image, fallback to source URL
     let backdropUrl: string | null = null;
     if (item.backdropUrl) {
@@ -124,7 +125,7 @@ export function toFrontendItem(item: ToFrontendItemInput | null | undefined): Fr
             backdropUrl = `/api/proxy/image?type=backdrop&path=${encodeURIComponent(backdropSource)}`;
         }
     }
-    
+
     return {
         tmdbId,
         title,
@@ -134,7 +135,8 @@ export function toFrontendItem(item: ToFrontendItemInput | null | undefined): Fr
         posterUrl: posterUrl || undefined,
         voteAverage: voteAverage === undefined || voteAverage === null ? 0 : Number(voteAverage),
         backdropUrl: backdropUrl || undefined,
-    };
+        genres: item.genres || [],
+    } as any;
 }
 
 /**

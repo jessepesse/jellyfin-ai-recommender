@@ -27,4 +27,5 @@ export interface SharedMediaItem {
     status?: MediaStatus;
     reason?: string;
     CommunityRating?: number;
+    genres?: string[];
 }

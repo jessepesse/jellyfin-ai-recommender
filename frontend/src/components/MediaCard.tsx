@@ -276,6 +276,19 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 {currentMediaType === 'movie' ? '🎬 Movie' : '📺 TV'}
               </span>
             )}
+            {/* Genre Pills (Card View - Max 2) */}
+            {item.genres && item.genres.length > 0 && (
+              <>
+                <span>•</span>
+                <div className="flex gap-1 overflow-hidden">
+                  {item.genres.slice(0, 2).map((g, i) => (
+                    <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] whitespace-nowrap">
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -307,119 +320,81 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   </>
                 ) : null}
               </div>
+
             </div>
+            {/* Full Genre List (Modal View) */}
+            {item.genres && item.genres.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {item.genres.map((g, i) => (
+                  <span key={i} className="px-2 py-1 rounded-md bg-white/10 text-slate-300 text-sm border border-white/5">
+                    {g}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
-            <div className="prose prose-invert max-w-none">
-              <p className="text-slate-300 leading-relaxed">
-                {item.overview || 'No synopsis available.'}
-              </p>
-            </div>
+          <div className="prose prose-invert max-w-none">
+            <p className="text-slate-300 leading-relaxed">
+              {item.overview || 'No synopsis available.'}
+            </p>
+          </div>
 
-            <div className="pt-4 border-t border-white/10 flex flex-wrap gap-4 items-center justify-between">
-              <a
-                href={tmdbLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-[#0d253f] hover:bg-[#01b4e4] text-white px-4 py-2 rounded-lg transition-colors font-medium border border-[#01b4e4]/30"
-              >
-                <ExternalLink className="w-4 h-4" />
-                View on TMDB
-              </a>
+          <div className="pt-4 border-t border-white/10 flex flex-wrap gap-4 items-center justify-between">
+            <a
+              href={tmdbLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-[#0d253f] hover:bg-[#01b4e4] text-white px-4 py-2 rounded-lg transition-colors font-medium border border-[#01b4e4]/30"
+            >
+              <ExternalLink className="w-4 h-4" />
+              View on TMDB
+            </a>
 
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Request */}
-                <button
-                  aria-label="Request"
-                  title="Request"
-                  onClick={async () => {
-                    if (requesting) return;
-                    setRequesting(true);
-                    const id = Number(item.tmdbId);
-                    try {
-                      if (variant === 'blocked') {
-                        if (typeof onRemove === 'function') onRemove(id);
-                        setShowInfo(false);
-                        await unblockItem(id, 'jellyseerr');
-                      } else {
-                        await postJellyseerrRequest(id, currentMediaType as 'movie' | 'tv');
-                      }
-                      setRequested(true);
-                      if (typeof onRemove === 'function') onRemove(Number(id));
-                      setShowInfo(false);
-                    } catch (err) {
-                      console.error('Request failed', err);
-                    } finally {
-                      setRequesting(false);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 transition-colors border border-cyan-500/20"
-                >
-                  {requesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <DownloadCloud className="w-5 h-5" />}
-                  <span className="font-medium">Request</span>
-                </button>
-
-                {/* Watchlist */}
-                <button
-                  aria-label={variant === 'watchlist' ? "Remove" : "Watchlist"}
-                  title={variant === 'watchlist' ? "Remove from Watchlist" : "Add to Watchlist"}
-                  onClick={() => {
-                    const id = Number(item.tmdbId);
-                    // Always remove from view and close modal
-                    if (typeof onRemove === 'function') onRemove(id as number);
-                    setShowInfo(false);
-                    // If currently on watchlist, remove it
-                    if (variant === 'watchlist') {
-                      const payloadItemRem = {
-                        tmdbId: item.tmdbId ?? null,
-                        title: item.title ?? 'Unknown Title',
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        mediaType: (currentMediaType as any),
-                        posterUrl: item.posterUrl ?? null,
-                        releaseYear: item.releaseYear,
-                        overview: item.overview ?? '',
-                        voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                        backdropUrl: item.backdropUrl ?? '',
-                      };
-                      postRemoveFromWatchlist(payloadItemRem).catch(console.error);
-                    } else if (variant === 'blocked') {
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Request */}
+              <button
+                aria-label="Request"
+                title="Request"
+                onClick={async () => {
+                  if (requesting) return;
+                  setRequesting(true);
+                  const id = Number(item.tmdbId);
+                  try {
+                    if (variant === 'blocked') {
                       if (typeof onRemove === 'function') onRemove(id);
                       setShowInfo(false);
-                      unblockItem(id, 'watchlist')
-                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ } })
-                        .catch(console.error);
+                      await unblockItem(id, 'jellyseerr');
                     } else {
-                      // Add to watchlist
-                      const payloadItem = {
-                        tmdbId: item.tmdbId ?? null,
-                        title: item.title ?? 'Unknown Title',
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        mediaType: (currentMediaType as any),
-                        posterUrl: item.posterUrl ?? null,
-                        releaseYear: item.releaseYear,
-                        overview: item.overview ?? '',
-                        voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                        backdropUrl: item.backdropUrl ?? '',
-                      };
-                      postActionWatchlist(payloadItem)
-                        .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ } })
-                        .catch(console.error);
+                      await postJellyseerrRequest(id, currentMediaType as 'movie' | 'tv');
                     }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 hover:text-yellow-300 transition-colors border border-yellow-500/20"
-                >
-                  <Bookmark className="w-5 h-5" />
-                  <span className="font-medium">Watchlist</span>
-                </button>
-
-                {/* Watched */}
-                <button
-                  aria-label="Watched"
-                  title="Mark Watched"
-                  onClick={() => {
-                    const id = Number(item.tmdbId);
-                    if (typeof onRemove === 'function') onRemove(id as number);
+                    setRequested(true);
+                    if (typeof onRemove === 'function') onRemove(Number(id));
                     setShowInfo(false);
-                    const payloadItemWatched = {
+                  } catch (err) {
+                    console.error('Request failed', err);
+                  } finally {
+                    setRequesting(false);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 transition-colors border border-cyan-500/20"
+              >
+                {requesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <DownloadCloud className="w-5 h-5" />}
+                <span className="font-medium">Request</span>
+              </button>
+
+              {/* Watchlist */}
+              <button
+                aria-label={variant === 'watchlist' ? "Remove" : "Watchlist"}
+                title={variant === 'watchlist' ? "Remove from Watchlist" : "Add to Watchlist"}
+                onClick={() => {
+                  const id = Number(item.tmdbId);
+                  // Always remove from view and close modal
+                  if (typeof onRemove === 'function') onRemove(id as number);
+                  setShowInfo(false);
+                  // If currently on watchlist, remove it
+                  if (variant === 'watchlist') {
+                    const payloadItemRem = {
                       tmdbId: item.tmdbId ?? null,
                       title: item.title ?? 'Unknown Title',
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -430,65 +405,114 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                       voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                       backdropUrl: item.backdropUrl ?? '',
                     };
-                    if (variant === 'blocked') {
-                      if (typeof onRemove === 'function') onRemove(id);
-                      setShowInfo(false);
-                      unblockItem(id, 'watched').catch(console.error);
-                    } else {
-                      postActionWatched(payloadItemWatched).catch(console.error);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 transition-colors border border-green-500/20"
-                >
-                  <Eye className="w-5 h-5" />
-                  <span className="font-medium">Watched</span>
-                </button>
+                    postRemoveFromWatchlist(payloadItemRem).catch(console.error);
+                  } else if (variant === 'blocked') {
+                    if (typeof onRemove === 'function') onRemove(id);
+                    setShowInfo(false);
+                    unblockItem(id, 'watchlist')
+                      .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ } })
+                      .catch(console.error);
+                  } else {
+                    // Add to watchlist
+                    const payloadItem = {
+                      tmdbId: item.tmdbId ?? null,
+                      title: item.title ?? 'Unknown Title',
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      mediaType: (currentMediaType as any),
+                      posterUrl: item.posterUrl ?? null,
+                      releaseYear: item.releaseYear,
+                      overview: item.overview ?? '',
+                      voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
+                      backdropUrl: item.backdropUrl ?? '',
+                    };
+                    postActionWatchlist(payloadItem)
+                      .then(() => { try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ } })
+                      .catch(console.error);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 hover:text-yellow-300 transition-colors border border-yellow-500/20"
+              >
+                <Bookmark className="w-5 h-5" />
+                <span className="font-medium">Watchlist</span>
+              </button>
 
-                {/* Block */}
-                {/* Block / Unblock */}
-                {variant === 'blocked' ? (
-                  <button
-                    aria-label="Unblock"
-                    title="Unblock"
-                    onClick={() => {
-                      const id = Number(item.tmdbId);
-                      if (typeof onRemove === 'function') onRemove(id as number);
-                      setShowInfo(false);
-                      unblockItem(id, 'remove').catch(console.error);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
-                  >
-                    <X className="w-5 h-5" />
-                    <span className="font-medium">Unblock</span>
-                  </button>
-                ) : (
-                  <button
-                    aria-label="Block"
-                    title="Block / Hide"
-                    onClick={() => {
-                      const id = Number(item.tmdbId);
-                      if (typeof onRemove === 'function') onRemove(id as number);
-                      setShowInfo(false);
-                      const payloadItemBlock = {
-                        tmdbId: item.tmdbId ?? null,
-                        title: item.title ?? 'Unknown Title',
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        mediaType: (currentMediaType as any),
-                        posterUrl: item.posterUrl ?? null,
-                        releaseYear: item.releaseYear,
-                        overview: item.overview ?? '',
-                        voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                        backdropUrl: item.backdropUrl ?? '',
-                      };
-                      postActionBlock(payloadItemBlock).catch(console.error);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
-                  >
-                    <Ban className="w-5 h-5" />
-                    <span className="font-medium">Block</span>
-                  </button>
-                )}
-              </div>
+              {/* Watched */}
+              <button
+                aria-label="Watched"
+                title="Mark Watched"
+                onClick={() => {
+                  const id = Number(item.tmdbId);
+                  if (typeof onRemove === 'function') onRemove(id as number);
+                  setShowInfo(false);
+                  const payloadItemWatched = {
+                    tmdbId: item.tmdbId ?? null,
+                    title: item.title ?? 'Unknown Title',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    mediaType: (currentMediaType as any),
+                    posterUrl: item.posterUrl ?? null,
+                    releaseYear: item.releaseYear,
+                    overview: item.overview ?? '',
+                    voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
+                    backdropUrl: item.backdropUrl ?? '',
+                  };
+                  if (variant === 'blocked') {
+                    if (typeof onRemove === 'function') onRemove(id);
+                    setShowInfo(false);
+                    unblockItem(id, 'watched').catch(console.error);
+                  } else {
+                    postActionWatched(payloadItemWatched).catch(console.error);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 transition-colors border border-green-500/20"
+              >
+                <Eye className="w-5 h-5" />
+                <span className="font-medium">Watched</span>
+              </button>
+
+              {/* Block */}
+              {/* Block / Unblock */}
+              {variant === 'blocked' ? (
+                <button
+                  aria-label="Unblock"
+                  title="Unblock"
+                  onClick={() => {
+                    const id = Number(item.tmdbId);
+                    if (typeof onRemove === 'function') onRemove(id as number);
+                    setShowInfo(false);
+                    unblockItem(id, 'remove').catch(console.error);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
+                >
+                  <X className="w-5 h-5" />
+                  <span className="font-medium">Unblock</span>
+                </button>
+              ) : (
+                <button
+                  aria-label="Block"
+                  title="Block / Hide"
+                  onClick={() => {
+                    const id = Number(item.tmdbId);
+                    if (typeof onRemove === 'function') onRemove(id as number);
+                    setShowInfo(false);
+                    const payloadItemBlock = {
+                      tmdbId: item.tmdbId ?? null,
+                      title: item.title ?? 'Unknown Title',
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      mediaType: (currentMediaType as any),
+                      posterUrl: item.posterUrl ?? null,
+                      releaseYear: item.releaseYear,
+                      overview: item.overview ?? '',
+                      voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
+                      backdropUrl: item.backdropUrl ?? '',
+                    };
+                    postActionBlock(payloadItemBlock).catch(console.error);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-colors border border-red-500/20"
+                >
+                  <Ban className="w-5 h-5" />
+                  <span className="font-medium">Block</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

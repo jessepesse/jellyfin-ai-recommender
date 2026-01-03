@@ -72,6 +72,8 @@ router.get('/', async (req: Request, res: Response) => {
             .filter(um => um.media.mediaType === 'movie')
             .map(um => ({
                 ...um.media,
+                // Parse genres if string
+                genres: um.media.genres ? JSON.parse(um.media.genres) : [],
                 // Convert relative image paths to absolute URLs
                 posterUrl: toAbsoluteImageUrl(req, um.media.posterUrl || um.media.posterSourceUrl),
                 backdropUrl: toAbsoluteImageUrl(req, um.media.backdropUrl || um.media.backdropSourceUrl)
@@ -81,6 +83,8 @@ router.get('/', async (req: Request, res: Response) => {
             .filter(um => um.media.mediaType === 'tv')
             .map(um => ({
                 ...um.media,
+                // Parse genres if string
+                genres: um.media.genres ? JSON.parse(um.media.genres) : [],
                 // Convert relative image paths to absolute URLs
                 posterUrl: toAbsoluteImageUrl(req, um.media.posterUrl || um.media.posterSourceUrl),
                 backdropUrl: toAbsoluteImageUrl(req, um.media.backdropUrl || um.media.backdropSourceUrl)
