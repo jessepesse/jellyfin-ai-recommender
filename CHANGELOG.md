@@ -15,6 +15,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - **Blocked:** Implemented parsing of stored genres.
 - **Weekly Watchlist:** Added "All Caught Up" empty state message with next release date.
 
+### 🐛 Bug Fixes
+- **Trending:** Fixed issue where added/blocked items remained on the Trending page due to caching.
+  - Implemented automatic cache invalidation for `trending_{username}` on all user actions.
+
 ## [2.4.2] - 2026-01-03
 
 ### 🐛 Bug Fixes
