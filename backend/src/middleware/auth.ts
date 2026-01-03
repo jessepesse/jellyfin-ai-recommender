@@ -115,6 +115,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         // SECURITY: Hash the token using HMAC before cache lookup
         // This ensures raw tokens are not resident in the cache memory for long periods
         // using HMAC prevents rainbow table attacks on the cache keys
+        // lgtm[js/insufficient-password-hash] - Cache key generation requires speed. HMAC-SHA256 with secret is sufficient for in-memory cache.
         const tokenHash = crypto.createHmac('sha256', CACHE_SECRET).update(token).digest('hex');
 
         // Check secure cache first
