@@ -102,7 +102,9 @@ router.get('/setup-defaults', async (req, res) => {
             jellyseerrApiKey: process.env.JELLYSEERR_API_KEY || dbCfg?.jellyseerrApiKey || null,
             tmdbApiKey: process.env.TMDB_API_KEY || dbCfg?.tmdbApiKey || null,
             geminiApiKey: process.env.GEMINI_API_KEY || dbCfg?.geminiApiKey || null,
-            geminiModel: process.env.GEMINI_MODEL || dbCfg?.geminiModel || 'gemini-3-flash-preview',
+            aiProvider: process.env.AI_PROVIDER || dbCfg?.aiProvider || 'google',
+            openrouterApiKey: process.env.OPENROUTER_API_KEY || dbCfg?.openrouterApiKey || null,
+            aiModel: process.env.AI_MODEL || dbCfg?.aiModel || 'gemini-3-flash-preview',
         };
         res.json(defaults);
     } catch (e) {
@@ -122,6 +124,7 @@ router.post('/verify', async (req, res) => {
         const jellyseerrApiKey = payload.jellyseerrApiKey as string | undefined;
         const tmdbApiKey = payload.tmdbApiKey as string | undefined;
         const geminiApiKey = payload.geminiApiKey as string | undefined;
+        const openrouterApiKey = payload.openrouterApiKey as string | undefined;
 
         // Jellyfin check
         const jellyfinCheck = (async () => {
@@ -150,9 +153,6 @@ router.post('/verify', async (req, res) => {
                 const url = validateRequestUrl(`${base}/api/v1/status`);
                 const headers: Record<string, string> = {};
                 if (jellyseerrApiKey && !jellyseerrApiKey.startsWith('*')) headers['X-Api-Key'] = String(jellyseerrApiKey);
-
-                // Skip check if key is masked/missing but URL is present (could be public or auth disabled?? unlikely)
-                // But for explicit verify, we try.
 
                 const resp = await axios.get(validateSafeUrl(url), { headers, timeout: 8000 });
                 if (resp.status === 200) {
@@ -189,7 +189,7 @@ router.post('/verify', async (req, res) => {
             }
         })();
 
-        // Gemini check
+        // Google AI (Gemini) check
         const geminiCheck = (async () => {
             try {
                 if (!geminiApiKey || geminiApiKey.startsWith('*')) return { ok: true, message: 'Skipped (Masked)' };
@@ -214,8 +214,34 @@ router.post('/verify', async (req, res) => {
             }
         })();
 
-        const [jRes, jsRes, tRes, gRes] = await Promise.all([jellyfinCheck, jellyseerrCheck, tmdbCheck, geminiCheck]);
-        res.json({ jellyfin: jRes, jellyseerr: jsRes, tmdb: tRes, gemini: gRes });
+        // OpenRouter check
+        const openrouterCheck = (async () => {
+            try {
+                if (!openrouterApiKey || openrouterApiKey.startsWith('*')) return { ok: true, message: 'Skipped (Not provided or masked)' };
+
+                // Test OpenRouter by listing models (lightweight endpoint)
+                const resp = await axios.get('https://openrouter.ai/api/v1/models', {
+                    headers: {
+                        'Authorization': `Bearer ${openrouterApiKey}`,
+                        'HTTP-Referer': 'https://github.com/jellyfin-ai-recommender',
+                        'X-Title': 'Jellyfin AI Recommender'
+                    },
+                    timeout: 8000
+                });
+
+                if (resp.status === 200 && resp.data?.data) {
+                    const modelCount = resp.data.data.length || 0;
+                    return { ok: true, message: `OK (${modelCount} models available)` };
+                }
+                return { ok: false, message: `HTTP ${resp.status}` };
+            } catch (e: any) {
+                const msg = e?.response ? `${e.response.status} ${e.response.statusText || ''}`.trim() : (e?.message || String(e));
+                return { ok: false, message: msg };
+            }
+        })();
+
+        const [jRes, jsRes, tRes, gRes, orRes] = await Promise.all([jellyfinCheck, jellyseerrCheck, tmdbCheck, geminiCheck, openrouterCheck]);
+        res.json({ jellyfin: jRes, jellyseerr: jsRes, tmdb: tRes, gemini: gRes, openrouter: orRes });
     } catch (err: any) {
         console.error('Verification endpoint error', err);
         res.status(500).json({ error: 'Verification failed', detail: String(err?.message || err) });
@@ -252,6 +278,9 @@ router.post('/setup', async (req, res) => {
             tmdbApiKey: payload.tmdbApiKey,
             geminiApiKey: payload.geminiApiKey,
             geminiModel: payload.geminiModel,
+            aiProvider: payload.aiProvider,
+            openrouterApiKey: payload.openrouterApiKey,
+            aiModel: payload.aiModel,
         };
         const result = await ConfigService.saveConfig(allowed);
         res.json({ ok: true, result });
@@ -280,7 +309,9 @@ router.get('/config-editor', async (req, res) => {
             jellyseerrApiKey: maskApiKey(cfg.jellyseerrApiKey),
             tmdbApiKey: maskApiKey(cfg.tmdbApiKey),
             geminiApiKey: maskApiKey(cfg.geminiApiKey),
-            geminiModel: cfg.geminiModel || 'gemini-3-flash-preview',
+            aiProvider: cfg.aiProvider || 'google',
+            openrouterApiKey: maskApiKey(cfg.openrouterApiKey),
+            aiModel: cfg.aiModel || 'gemini-3-flash-preview',
             isConfigured: cfg.isConfigured || false,
         };
 
@@ -307,7 +338,8 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
         const updatePayload: Record<string, string | null> = {
             jellyfinUrl: payload.jellyfinUrl || null,
             jellyseerrUrl: payload.jellyseerrUrl || null,
-            geminiModel: payload.geminiModel || 'gemini-3-flash-preview',
+            aiProvider: payload.aiProvider || 'google',
+            aiModel: payload.aiModel || 'gemini-3-flash-preview',
         };
 
         console.log('[ConfigEditor] Saving config. Payload keys:', Object.keys(payload));
@@ -322,7 +354,6 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
             console.log('[ConfigEditor] Updating TMDB API Key (provided and unmasked)');
             updatePayload.tmdbApiKey = payload.tmdbApiKey;
         } else if (currentConfig.tmdbApiKey) {
-            // console.log('[ConfigEditor] Preserving existing TMDB API Key'); // Optional debug
             updatePayload.tmdbApiKey = currentConfig.tmdbApiKey;
         } else {
             console.log('[ConfigEditor] No TMDB API Key provided or existing');
@@ -334,11 +365,18 @@ router.put('/config-editor', validateConfigUpdate, async (req: Request, res: Res
             updatePayload.geminiApiKey = currentConfig.geminiApiKey;
         }
 
+        if (payload.openrouterApiKey && !isMasked(payload.openrouterApiKey)) {
+            updatePayload.openrouterApiKey = payload.openrouterApiKey;
+        } else if (currentConfig.openrouterApiKey) {
+            updatePayload.openrouterApiKey = currentConfig.openrouterApiKey;
+        }
+
         console.log('[ConfigEditor] Final Data to Save:', {
             ...updatePayload,
             jellyseerrApiKey: updatePayload.jellyseerrApiKey ? '***' : null,
             tmdbApiKey: updatePayload.tmdbApiKey ? '***' : null,
-            geminiApiKey: updatePayload.geminiApiKey ? '***' : null
+            geminiApiKey: updatePayload.geminiApiKey ? '***' : null,
+            openrouterApiKey: updatePayload.openrouterApiKey ? '***' : null
         });
 
         const jellyseerrUrlChanged = updatePayload.jellyseerrUrl &&

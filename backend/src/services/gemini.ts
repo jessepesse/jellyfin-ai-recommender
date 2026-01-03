@@ -1,64 +1,132 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { z } from 'zod';
 import ConfigService from './config';
 import { MediaItemInput, UserData, RecommendationCandidate, RecommendationFilters } from '../types';
 
-// Default model with thinking support enabled
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
 // Thinking dynamically adjusts based on prompt complexity
-const modelName = 'gemini-3-flash-preview';
-console.debug('Using Gemini model:', modelName);
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
 
-// Construct SDK client at runtime and return both the raw client, the generative model instance, and the resolved model name
-interface GeminiClientBundle {
-  client: GoogleGenerativeAI;
-  model: GenerativeModel;
+// Unified AI Client Bundle that works with both Google AI and OpenRouter
+export interface AIClientBundle {
+  provider: 'google' | 'openrouter';
   modelName: string;
+  // Google AI SDK
+  googleClient?: GoogleGenerativeAI;
+  googleModel?: GenerativeModel;
+  // OpenRouter via OpenAI SDK
+  openrouterClient?: OpenAI;
 }
 
-async function buildClientAndModel(): Promise<GeminiClientBundle> {
+// Build AI client based on configured provider
+export async function buildClientAndModel(): Promise<AIClientBundle> {
   const cfg = await ConfigService.getConfig();
-  const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
-  const apiKey = rawKey ? rawKey.trim() : '';
-  const source = (cfg && cfg.geminiApiKey) ? 'DB' : (process.env.GEMINI_API_KEY ? 'ENV' : 'NONE');
-  if (!apiKey) {
-    throw new Error('Gemini API key not configured');
-  } else {
-    try {
-      // Log source only, never log API keys (even masked) to prevent timing attacks
-      console.info(`Gemini key source: ${source}`);
-    } catch (e) {
-      // best-effort logging only
+  const provider = cfg.aiProvider || 'google';
+  const modelNameFromCfg = cfg.aiModel ? String(cfg.aiModel).trim() : DEFAULT_MODEL;
+
+  console.log(`[AI] Provider: ${provider}, Model: ${modelNameFromCfg}`);
+
+  if (provider === 'openrouter') {
+    // OpenRouter setup
+    const rawKey = cfg.openrouterApiKey ? String(cfg.openrouterApiKey) : (process.env.OPENROUTER_API_KEY || '');
+    const apiKey = rawKey.trim();
+
+    if (!apiKey) {
+      throw new Error('OpenRouter API key not configured');
     }
+
+    const openrouterClient = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+      defaultHeaders: {
+        'HTTP-Referer': 'https://github.com/jellyfin-ai-recommender',
+        'X-Title': 'Jellyfin AI Recommender'
+      }
+    });
+
+    // OpenRouter requires google/ prefix for Gemini models if not already present
+    // But commonly used models on OpenRouter might be 'google/gemini-2.0-flash-exp:free' etc.
+    // If the user selects a model from dropdown that is google specific (e.g. 'gemini-1.5-pro'), prepending google/ is safer.
+    // Ideally the dropdown values should already be correct for OpenRouter or mapped.
+    // For now we assume the model name might need 'google/' prefix if using mapped external names.
+    const openrouterModelName = (modelNameFromCfg.indexOf('/') === -1 && modelNameFromCfg.startsWith('gemini'))
+      ? `google/${modelNameFromCfg}`
+      : modelNameFromCfg;
+
+    return {
+      provider: 'openrouter',
+      modelName: openrouterModelName,
+      openrouterClient
+    };
+  } else {
+    // Google AI Direct setup
+    const rawKey = cfg.geminiApiKey ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
+    const apiKey = rawKey.trim();
+
+    if (!apiKey) {
+      throw new Error('Gemini API key not configured');
+    }
+
+    const googleClient = new GoogleGenerativeAI(apiKey);
+
+    // Configure thinking level for Gemini 3 Flash/Pro models
+    const isGemini3Model = modelNameFromCfg.includes('gemini-3');
+    const isProModel = modelNameFromCfg.includes('-pro');
+    const thinkingLevel = isProModel ? 'high' : 'medium';
+
+    const thinkingConfig = isGemini3Model ? {
+      thinkingConfig: {
+        thinkingBudget: thinkingLevel as 'low' | 'medium' | 'high'
+      }
+    } : {};
+
+    const googleModel = googleClient.getGenerativeModel({
+      model: modelNameFromCfg,
+      ...thinkingConfig
+    });
+
+    return {
+      provider: 'google',
+      modelName: modelNameFromCfg,
+      googleClient,
+      googleModel
+    };
+  }
+}
+
+// Unified content generation function that works with both providers
+export async function generateAIContent(
+  client: AIClientBundle,
+  prompt: string,
+  options?: { json?: boolean; jsonSchema?: object }
+): Promise<string> {
+  if (client.provider === 'openrouter' && client.openrouterClient) {
+    const response = await client.openrouterClient.chat.completions.create({
+      model: client.modelName,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: options?.json ? { type: 'json_object' } : undefined,
+      max_tokens: 8000,
+    });
+    return response.choices[0]?.message?.content || '';
+  } else if (client.provider === 'google' && client.googleModel) {
+    const response = await client.googleModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: options?.json ? {
+        responseMimeType: 'application/json',
+        responseSchema: options.jsonSchema as any
+      } : undefined
+    });
+
+    const body = response?.response;
+    if (body && typeof body.text === 'function') {
+      const result = body.text();
+      return typeof result === 'string' ? result : await result;
+    }
+    return '';
   }
 
-  // Instantiate SDK client (pass API key as string directly)
-  const client = new GoogleGenerativeAI(apiKey);
-
-  // Obtain the model object from the client
-  const modelNameFromCfg = cfg && cfg.geminiModel ? String(cfg.geminiModel).trim() : modelName;
-
-  // Configure thinking level for Gemini 3 Flash/Pro models
-  // Flash supports: minimal, low, medium, high
-  // Pro supports: low, high (default)
-  // Use 'high' for Pro (maximizes reasoning depth for recommendations)
-  // Use 'medium' for Flash (balanced thinking for most tasks)
-  const isGemini3Model = modelNameFromCfg.includes('gemini-3');
-  const isProModel = modelNameFromCfg.includes('-pro');
-  const thinkingLevel = isProModel ? 'high' : 'medium';
-
-  const thinkingConfig = isGemini3Model ? {
-    thinkingConfig: {
-      thinkingBudget: thinkingLevel as 'low' | 'medium' | 'high'
-    }
-  } : {};
-
-  const model = client.getGenerativeModel({
-    model: modelNameFromCfg,
-    ...thinkingConfig
-  });
-
-  return { client, model, modelName: modelNameFromCfg };
+  throw new Error('No AI client configured');
 }
 
 // Zod schema for validated AI output
@@ -226,10 +294,11 @@ Each object must strictly follow this schema:
   }
 
   // Summarize a user's taste profile using Gemini (compact text)
-  // Thinking is automatically enabled for 2.5+ and 3.0+ models
+  // Summarize a user's taste profile using AI (compact text)
+  // Works with both Google AI and OpenRouter
   public static async summarizeProfile(username: string, seedItems: MediaItemInput[], type: 'movie' | 'tv'): Promise<string> {
     try {
-      const { model } = await buildClientAndModel();
+      const client = await buildClientAndModel();
       const titles = (seedItems || []).slice(0, 80).map((s: MediaItemInput) => s.title || s.name || s.Title || '').filter(Boolean).slice(0, 80);
       const prompt = `
 Analyze the user's ${type} taste based on these titles:
@@ -245,28 +314,7 @@ Constraints:
 - Keep each point under 20 words if possible.
 `;
 
-      // Use modern API with proper message format
-      const resp = await model.generateContent({
-        contents: [{
-          role: 'user',
-          parts: [{ text: prompt }]
-        }]
-      });
-      let text = '';
-      try {
-        const body = resp?.response;
-        if (body && typeof body.text === 'function') {
-          const maybe = body.text();
-          // Handle both sync and async text() results
-          text = (maybe && typeof maybe === 'object' && 'then' in maybe) ? await maybe : String(maybe);
-        } else if (typeof resp?.response === 'string') {
-          text = resp.response;
-        } else {
-          text = String(resp);
-        }
-      } catch (e) {
-        text = String(resp);
-      }
+      const text = await generateAIContent(client, prompt);
       return (text || '').trim().substring(0, 2000);
     } catch (e) {
       console.warn('summarizeProfile failed', e);
@@ -286,71 +334,42 @@ Constraints:
     const prompt = this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters, tasteProfile, exclusionTable);
 
     try {
-      console.debug('Attempting to call Gemini via official SDK with model:', modelName);
+      const client = await buildClientAndModel();
+      console.debug(`[AI] Attempting to call ${client.provider} with model: ${client.modelName}`);
 
-      const { model } = await buildClientAndModel();
       // Ensure prompt is a string
       const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
 
-      // Use modern Gemini API with thinking support (for 2.5+ and 3.0+ models)
-      // Thinking is automatically enabled for supported models and adjusts dynamically based on prompt complexity
-      let response: any;
+      // Get JSON schema for structured output if available
+      let schema: object | undefined;
       try {
         const { zodToJsonSchema } = await import('zod-to-json-schema');
         // Cast to any to avoid TypeScript incompatibilities between zod versions/types.
-        const schema = (zodToJsonSchema as any)(RecommendationSchema as any);
-
-        // Modern API call structure for thinking models
-        // Use model.generateContent with proper message format
-        response = await model.generateContent({
-          contents: [{
-            role: 'user',
-            parts: [{ text: promptText }]
-          }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: schema
-          }
-        });
+        schema = (zodToJsonSchema as any)(RecommendationSchema as any);
       } catch (e) {
-        // If zod-to-json-schema isn't available or something went wrong, fall back to existing behavior
-        response = await model.generateContent(promptText);
+        // zod-to-json-schema not available, proceed without schema
       }
 
-      // Extract text from the SDK response
-      let text = '';
-      try {
-        const body = response?.response;
-        if (body && typeof body.text === 'function') {
-          const maybe = body.text();
-          text = (maybe instanceof Promise) ? await maybe : maybe;
-        } else if (typeof response?.response === 'string') {
-          text = response.response;
-        } else {
-          text = JSON.stringify(response);
-        }
-      } catch (e) {
-        console.warn('Failed to extract text from Gemini SDK response, falling back to JSON stringify', e);
-        text = JSON.stringify(response);
-      }
+      // Use unified content generation
+      const text = await generateAIContent(client, promptText, { json: true, jsonSchema: schema });
 
       if (!text) {
-        console.warn('Gemini SDK returned no text; using heuristic fallback');
-        throw new Error('Empty Gemini response');
+        console.warn('AI returned no text; using heuristic fallback');
+        throw new Error('Empty AI response');
       }
 
       // Extract JSON array from text. Only attempt JSON.parse when a JSON array is found.
       const first = text.indexOf('[');
       const last = text.lastIndexOf(']');
       if (first === -1 || last === -1 || last <= first) {
-        console.warn('No JSON array found in Gemini output; skipping parse. Raw output:', text.substring(0, 200));
+        console.warn('No JSON array found in AI output; skipping parse. Raw output:', text.substring(0, 200));
       } else {
         const jsonText = text.substring(first, last + 1);
         try {
           const parsed = JSON.parse(jsonText);
           const validated = RecommendationSchema.safeParse(parsed);
           if (validated.success) {
-            // Return parsed items but importantly DO NOT include any TMDB id from Gemini.
+            // Return parsed items but importantly DO NOT include any TMDB id from AI.
             // We include release_year and reason so downstream enrichment can use year matching.
             return validated.data.map((p): RecommendationCandidate => ({
               title: p.title,
@@ -359,18 +378,15 @@ Constraints:
               reason: p.reason,
             }));
           } else {
-            console.warn('Gemini output failed Zod validation:', validated.error);
+            console.warn('AI output failed Zod validation:', validated.error);
           }
         } catch (e) {
-          console.error('Failed to parse Gemini JSON output:', e);
+          console.error('Failed to parse AI JSON output:', e);
         }
       }
     } catch (e: any) {
-      try { console.error('Gemini SDK Error:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); } catch { console.error('Gemini SDK Error (string):', String(e)); }
-      console.error('Gemini SDK error.response:', (e as any)?.response);
-      console.error('Gemini SDK error.message:', (e as any)?.message);
-      console.error('Gemini SDK error.status:', (e as any)?.status || (e as any)?.response?.status);
-      console.warn('Gemini SDK failed; using heuristic fallback');
+      try { console.error('AI SDK Error:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); } catch { console.error('AI SDK Error (string):', String(e)); }
+      console.warn('AI SDK failed; using heuristic fallback');
     }
 
     // Fallback heuristic
@@ -421,18 +437,8 @@ Constraints:
     if (candidates.length === 0) return [];
 
     try {
-      // Create model WITHOUT thinking config for pure JSON output
-      const cfg = await ConfigService.getConfig();
-      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
-      const apiKey = rawKey.trim();
-      if (!apiKey) throw new Error('Gemini API key not configured');
-
-      const googleClient = new GoogleGenerativeAI(apiKey);
-      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
-
-      // Use model WITHOUT thinking config for JSON tasks
-      const model = googleClient.getGenerativeModel({ model: modelName });
-      console.debug(`[Gemini Ranking] Using model: ${modelName} for ${candidates.length} candidates (no thinking)`);
+      const client = await buildClientAndModel();
+      console.debug(`[AI Ranking] Using provider: ${client.provider}, model: ${client.modelName} for ${candidates.length} candidates`);
 
       // Format candidates for prompt
       const candidateList = candidates.slice(0, 30).map((c, i) =>
@@ -450,7 +456,7 @@ Constraints:
         ? `Requested genre: ${userContext.requestedGenre}`
         : '';
 
-      // Provide detailed mood descriptions for Gemini
+      // Provide detailed mood descriptions for AI
       const moodDescriptions: Record<string, string> = {
         'mind-bending': 'MIND-BENDING: Complex plots, twist endings, psychological themes, surreal, nonlinear timelines, makes you think',
         'dark': 'DARK & GRITTY: Noir, dystopian, crime, violence, morally ambiguous, intense, serious themes',
@@ -479,35 +485,22 @@ Return JSON array of ${limit} best picks: [{"tmdbId": 123, "title": "Name"}, ...
 ONLY JSON. NO TEXT.`;
 
       // Debug: log prompt size and first candidate
-      console.debug(`[Gemini Ranking] Prompt length: ${prompt.length} chars, first candidate: ${candidates[0]?.title}`);
+      console.debug(`[AI Ranking] Prompt length: ${prompt.length} chars, first candidate: ${candidates[0]?.title}`);
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 8000,  // Increased to prevent truncation
-        },
-      });
+      const responseText = await generateAIContent(client, prompt, { json: true });
+      console.debug(`[AI Ranking] Raw response length: ${responseText.length} chars`);
 
-      // Debug: Check response structure and finish reason
-      const candidate = result.response.candidates?.[0];
-      console.debug(`[Gemini Ranking] Response candidates count: ${result.response.candidates?.length || 0}, finishReason: ${candidate?.finishReason || 'unknown'}`);
-
-      const responseText = result.response.text();
-      console.debug(`[Gemini Ranking] Raw response length: ${responseText.length} chars`);
-      console.debug(`[Gemini Ranking] Response content (escaped): ${JSON.stringify(responseText).substring(0, 500)}`);
-
-      // Try parsing directly first (responseMimeType should give clean JSON)
+      // Try parsing directly first
       let parsed: any[] = [];
       try {
         parsed = JSON.parse(responseText);
-        console.debug(`[Gemini Ranking] Direct parse succeeded with ${parsed.length} items`);
+        console.debug(`[AI Ranking] Direct parse succeeded with ${parsed.length} items`);
       } catch (directParseError) {
-        console.debug(`[Gemini Ranking] Direct parse failed: ${(directParseError as Error).message}`);
+        console.debug(`[AI Ranking] Direct parse failed: ${(directParseError as Error).message}`);
         // If direct parse fails, try regex extraction
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
-          console.warn('[Gemini Ranking] No valid JSON in response, first 300 chars:', JSON.stringify(responseText.substring(0, 300)));
+          console.warn('[AI Ranking] No valid JSON in response, first 300 chars:', JSON.stringify(responseText.substring(0, 300)));
           // Fallback: return top candidates by rating
           return candidates
             .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
@@ -517,11 +510,11 @@ ONLY JSON. NO TEXT.`;
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      console.debug(`[Gemini Ranking] Selected ${parsed.length} items from ${candidates.length} candidates`);
+      console.debug(`[AI Ranking] Selected ${parsed.length} items from ${candidates.length} candidates`);
 
       return parsed.slice(0, limit);
     } catch (e: any) {
-      console.error('[Gemini Ranking] Error:', e?.message || e);
+      console.error('[AI Ranking] Error:', e?.message || e);
       // Fallback: return top candidates by rating
       return candidates
         .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
@@ -564,14 +557,7 @@ ONLY JSON. NO TEXT.`;
     }
 
     try {
-      const cfg = await ConfigService.getConfig();
-      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
-      const apiKey = rawKey.trim();
-      if (!apiKey) throw new Error('Gemini API key not configured');
-
-      const googleClient = new GoogleGenerativeAI(apiKey);
-      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
-      const model = googleClient.getGenerativeModel({ model: modelName });
+      const client = await buildClientAndModel();
 
       // Format watch history for prompt
       const historyList = watchHistory.slice(0, 50).map(item =>
@@ -601,18 +587,10 @@ Return ONLY valid JSON:
   "minRating": 7.0
 }`;
 
-      console.debug(`[Gemini Taste] Analyzing ${watchHistory.length} ${mediaType} items`);
+      console.debug(`[AI Taste] Analyzing ${watchHistory.length} ${mediaType} items`);
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 8000,
-        },
-      });
-
-      const responseText = result.response.text();
-      console.debug(`[Gemini Taste] Response length: ${responseText.length} chars`);
+      const responseText = await generateAIContent(client, prompt, { json: true });
+      console.debug(`[AI Taste] Response length: ${responseText.length} chars`);
 
       // Try to parse JSON - handle markdown code blocks
       let parsed: any;
@@ -632,16 +610,16 @@ Return ONLY valid JSON:
           try {
             parsed = JSON.parse(jsonMatch[0]);
           } catch (innerErr) {
-            console.debug(`[Gemini Taste] JSON extraction failed, raw response: ${cleanedText.substring(0, 200)}`);
+            console.debug(`[AI Taste] JSON extraction failed, raw response: ${cleanedText.substring(0, 200)}`);
             throw new Error('No valid JSON in response');
           }
         } else {
-          console.debug(`[Gemini Taste] No JSON found, raw response: ${cleanedText.substring(0, 200)}`);
+          console.debug(`[AI Taste] No JSON found, raw response: ${cleanedText.substring(0, 200)}`);
           throw new Error('No valid JSON in response');
         }
       }
 
-      console.debug(`[Gemini Taste] Analysis complete: ${parsed.genres?.length || 0} genres, ${parsed.keywords?.length || 0} keywords`);
+      console.debug(`[AI Taste] Analysis complete: ${parsed.genres?.length || 0} genres, ${parsed.keywords?.length || 0} keywords`);
 
       return {
         tasteProfile: parsed.tasteProfile || 'Personalized picks curated just for you! 🎬',
@@ -651,7 +629,7 @@ Return ONLY valid JSON:
         minRating: typeof parsed.minRating === 'number' ? Math.max(5, Math.min(9, parsed.minRating)) : 6.5,
       };
     } catch (e: any) {
-      console.error('[Gemini Taste] Analysis failed:', e?.message || e);
+      console.error('[AI Taste] Analysis failed:', e?.message || e);
       // Fallback: extract most common genres from history
       const genreCounts: Record<string, number> = {};
       watchHistory.forEach(item => {
@@ -707,15 +685,7 @@ Return ONLY valid JSON:
     }
 
     try {
-      const cfg = await ConfigService.getConfig();
-      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
-      const apiKey = rawKey.trim();
-      if (!apiKey) throw new Error('Gemini API key not configured');
-
-      const googleClient = new GoogleGenerativeAI(apiKey);
-      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
-      const model = googleClient.getGenerativeModel({ model: modelName });
-
+      const client = await buildClientAndModel();
       console.debug(`[Curator] Processing ${candidates.length} candidates for user with taste: ${userTaste.tasteProfile.substring(0, 50)}...`);
 
       // Format candidates (limit to first 150 to avoid token limits)
@@ -747,15 +717,7 @@ Return ONLY a valid JSON array (no markdown, no explanation):
 
 IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.6,
-          maxOutputTokens: 16000,
-        },
-      });
-
-      const responseText = result.response.text();
+      const responseText = await generateAIContent(client, prompt, { json: true });
       console.debug(`[Curator] Response length: ${responseText.length} chars`);
 
       // Parse JSON
@@ -811,15 +773,7 @@ IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
     }
 
     try {
-      const cfg = await ConfigService.getConfig();
-      const rawKey = (cfg && cfg.geminiApiKey) ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
-      const apiKey = rawKey.trim();
-      if (!apiKey) throw new Error('Gemini API key not configured');
-
-      const googleClient = new GoogleGenerativeAI(apiKey);
-      const modelName = (cfg && cfg.geminiModel) ? String(cfg.geminiModel).trim() : 'gemini-2.0-flash';
-      const model = googleClient.getGenerativeModel({ model: modelName });
-
+      const client = await buildClientAndModel();
       console.debug(`[Critic] Reviewing ${filtered.length} candidates, blocklist size: ${blocklist.length}`);
 
       // Format curator picks with their reasons
@@ -849,15 +803,7 @@ Return ONLY a valid JSON array (no markdown, no explanation):
 
 IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 16000,
-        },
-      });
-
-      const responseText = result.response.text();
+      const responseText = await generateAIContent(client, prompt, { json: true });
       console.debug(`[Critic] Response length: ${responseText.length} chars`);
       console.debug(`[Critic] Raw response: ${responseText.substring(0, 300)}`);
 

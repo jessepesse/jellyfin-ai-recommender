@@ -9,6 +9,7 @@
 import { prisma } from '../db';
 import ConfigService from './config';
 import { Prisma } from '../generated/prisma/client';
+import { buildClientAndModel, generateAIContent } from './gemini';
 
 interface RedemptionCandidate {
     media: Prisma.MediaGetPayload<{}>;
@@ -233,25 +234,15 @@ Return ONLY valid JSON (no markdown, no code blocks):
 `;
 
         // Use Gemini API directly for text generation
+        // Use unified AI service
         try {
-            // Get API key from database settings (like other services)
-            const config = await ConfigService.getConfig();
-            const apiKey = config.geminiApiKey;
+            const client = await buildClientAndModel();
+            console.log(`[Advocate] Analyzing with ${client.provider} (${client.modelName})`);
 
-            if (!apiKey) {
-                throw new Error('GEMINI_API_KEY not configured in settings');
-            }
-
-            const { GoogleGenerativeAI } = await import('@google/generative-ai');
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const modelName = config.geminiModel || 'gemini-2.0-flash-exp';
-            const model = genAI.getGenerativeModel({ model: modelName });
-
-            const result = await model.generateContent(prompt);
-            const response = result.response.text();
+            const responseText = await generateAIContent(client, prompt, { json: true });
 
             // Clean response - remove markdown code blocks if present
-            let cleanedResponse = response.trim();
+            let cleanedResponse = responseText.trim();
             if (cleanedResponse.startsWith('```json')) {
                 cleanedResponse = cleanedResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
             } else if (cleanedResponse.startsWith('```')) {
@@ -261,7 +252,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
             const analysis = JSON.parse(cleanedResponse);
             return analysis;
         } catch (error: any) {
-            console.error('[Advocate] Gemini API error:', error?.message);
+            console.error('[Advocate] AI analysis error:', error?.message);
             // Return a default "don't recommend" response on error
             return {
                 shouldRecommend: false,

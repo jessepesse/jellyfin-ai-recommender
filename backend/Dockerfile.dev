@@ -32,4 +32,5 @@ RUN chmod +x start.sh 2>/dev/null || true
 EXPOSE 3001
 
 # Use tsx watch for hot reload in development (with auto-migration)
-CMD ["sh", "-c", "npx prisma db push && npx tsx watch --clear-screen=false src/index.ts"]
+# Note: --accept-data-loss is used for dev to handle schema changes
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npx tsx watch --clear-screen=false src/index.ts"]

@@ -17,6 +17,7 @@ export interface TestResults {
   jellyfin: ServiceTestResult;
   jellyseerr: ServiceTestResult;
   gemini: ServiceTestResult;
+  openrouter: ServiceTestResult;
 }
 
 export interface SetupFormData {
@@ -24,7 +25,9 @@ export interface SetupFormData {
   jellyseerrUrl: string;
   jellyseerrApiKey: string;
   geminiApiKey: string;
-  geminiModel: string;
+  aiProvider: 'google' | 'openrouter';
+  openrouterApiKey: string;
+  aiModel: string;
 }
 
 export interface UseSetupWizardReturn {
@@ -54,6 +57,7 @@ const defaultTestResults: TestResults = {
   jellyfin: { status: 'idle', message: '' },
   jellyseerr: { status: 'idle', message: '' },
   gemini: { status: 'idle', message: '' },
+  openrouter: { status: 'idle', message: '' },
 };
 
 const defaultFormData: SetupFormData = {
@@ -61,7 +65,9 @@ const defaultFormData: SetupFormData = {
   jellyseerrUrl: '',
   jellyseerrApiKey: '',
   geminiApiKey: '',
-  geminiModel: 'gemini-3-flash-preview',
+  aiProvider: 'google',
+  openrouterApiKey: '',
+  aiModel: 'gemini-3-flash-preview',
 };
 
 export function useSetupWizard(): UseSetupWizardReturn {
@@ -85,7 +91,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
           jellyseerrUrl: defaults.jellyseerrUrl || prev.jellyseerrUrl,
           jellyseerrApiKey: defaults.jellyseerrApiKey || prev.jellyseerrApiKey,
           geminiApiKey: defaults.geminiApiKey || prev.geminiApiKey,
-          geminiModel: defaults.geminiModel || prev.geminiModel,
+          aiProvider: (defaults.aiProvider as 'google' | 'openrouter') || prev.aiProvider,
+          openrouterApiKey: defaults.openrouterApiKey || prev.openrouterApiKey,
+          aiModel: defaults.aiModel || prev.aiModel,
         }));
       } catch (e) {
         console.warn('Failed to load setup defaults', e);
@@ -108,6 +116,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
       jellyfin: { status: 'testing', message: '' },
       jellyseerr: { status: 'testing', message: '' },
       gemini: { status: 'testing', message: '' },
+      openrouter: { status: 'testing', message: '' },
     });
 
     try {
@@ -116,6 +125,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
         jellyseerrUrl: formData.jellyseerrUrl,
         jellyseerrApiKey: formData.jellyseerrApiKey,
         geminiApiKey: formData.geminiApiKey,
+        openrouterApiKey: formData.openrouterApiKey,
       });
 
       setTestResults({
@@ -131,6 +141,10 @@ export function useSetupWizard(): UseSetupWizardReturn {
           status: data.gemini?.ok ? 'success' : 'error',
           message: data.gemini?.message || ''
         },
+        openrouter: {
+          status: data.openrouter?.ok ? 'success' : 'error',
+          message: data.openrouter?.message || ''
+        },
       });
     } catch (e: unknown) {
       const err = e as { message?: string };
@@ -139,6 +153,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
         jellyfin: { status: 'error', message: '' },
         jellyseerr: { status: 'error', message: '' },
         gemini: { status: 'error', message: '' },
+        openrouter: { status: 'error', message: '' },
       });
     }
   }, [formData]);
@@ -147,10 +162,15 @@ export function useSetupWizard(): UseSetupWizardReturn {
     e.preventDefault();
     setError(null);
 
+    // Check if the selected provider's API key test passed
+    const selectedProviderPassed = formData.aiProvider === 'google'
+      ? testResults.gemini.status === 'success'
+      : testResults.openrouter.status === 'success';
+
     const allPassed =
       testResults.jellyfin.status === 'success' &&
       testResults.jellyseerr.status === 'success' &&
-      testResults.gemini.status === 'success';
+      selectedProviderPassed;
 
     if (!allPassed) {
       const ok = window.confirm('Not all connection tests passed. Are you sure you want to save anyway?');
@@ -164,7 +184,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
         jellyseerrUrl: formData.jellyseerrUrl,
         jellyseerrApiKey: formData.jellyseerrApiKey,
         geminiApiKey: formData.geminiApiKey,
-        geminiModel: formData.geminiModel,
+        aiProvider: formData.aiProvider,
+        openrouterApiKey: formData.openrouterApiKey,
+        aiModel: formData.aiModel,
       });
       window.location.reload();
     } catch (err: unknown) {
@@ -182,7 +204,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
     try {
       const fileContent = await file.text();
-      let parsed: { system_config?: SetupFormData; data?: SetupFormData } | null = null;
+      let parsed: { system_config?: Record<string, unknown>; data?: Record<string, unknown> } | null = null;
 
       try {
         parsed = JSON.parse(fileContent);
@@ -195,23 +217,29 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
       // Extract system config if available (multi-user backups)
       if (parsed?.system_config) {
+        const cfg = parsed.system_config as Record<string, string>;
         setFormData(prev => ({
-          jellyfinUrl: parsed!.system_config?.jellyfinUrl || prev.jellyfinUrl,
-          jellyseerrUrl: parsed!.system_config?.jellyseerrUrl || prev.jellyseerrUrl,
-          jellyseerrApiKey: parsed!.system_config?.jellyseerrApiKey || prev.jellyseerrApiKey,
-          geminiApiKey: parsed!.system_config?.geminiApiKey || prev.geminiApiKey,
-          geminiModel: parsed!.system_config?.geminiModel || prev.geminiModel,
+          jellyfinUrl: cfg.jellyfinUrl || prev.jellyfinUrl,
+          jellyseerrUrl: cfg.jellyseerrUrl || prev.jellyseerrUrl,
+          jellyseerrApiKey: cfg.jellyseerrApiKey || prev.jellyseerrApiKey,
+          geminiApiKey: cfg.geminiApiKey || prev.geminiApiKey,
+          aiProvider: (cfg.aiProvider as 'google' | 'openrouter') || prev.aiProvider,
+          openrouterApiKey: cfg.openrouterApiKey || prev.openrouterApiKey,
+          // Support both old geminiModel and new aiModel field names
+          aiModel: cfg.aiModel || cfg.geminiModel || prev.aiModel,
         }));
       }
       // Legacy single-user format
       else if (parsed?.data) {
-        const legacyData = parsed.data;
+        const cfg = parsed.data as Record<string, string>;
         setFormData(prev => ({
-          jellyfinUrl: legacyData.jellyfinUrl || prev.jellyfinUrl,
-          jellyseerrUrl: legacyData.jellyseerrUrl || prev.jellyseerrUrl,
-          jellyseerrApiKey: legacyData.jellyseerrApiKey || prev.jellyseerrApiKey,
-          geminiApiKey: legacyData.geminiApiKey || prev.geminiApiKey,
-          geminiModel: legacyData.geminiModel || prev.geminiModel,
+          jellyfinUrl: cfg.jellyfinUrl || prev.jellyfinUrl,
+          jellyseerrUrl: cfg.jellyseerrUrl || prev.jellyseerrUrl,
+          jellyseerrApiKey: cfg.jellyseerrApiKey || prev.jellyseerrApiKey,
+          geminiApiKey: cfg.geminiApiKey || prev.geminiApiKey,
+          aiProvider: (cfg.aiProvider as 'google' | 'openrouter') || prev.aiProvider,
+          openrouterApiKey: cfg.openrouterApiKey || prev.openrouterApiKey,
+          aiModel: cfg.aiModel || cfg.geminiModel || prev.aiModel,
         }));
       }
 
@@ -228,7 +256,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
   const isAllTestsPassed =
     testResults.jellyfin.status === 'success' &&
     testResults.jellyseerr.status === 'success' &&
-    testResults.gemini.status === 'success';
+    (formData.aiProvider === 'google'
+      ? testResults.gemini.status === 'success'
+      : testResults.openrouter.status === 'success');
 
   return {
     formData,

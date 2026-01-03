@@ -8,7 +8,9 @@ export type SystemConfig = {
   jellyseerrApiKey?: string | null;
   tmdbApiKey?: string | null;
   geminiApiKey?: string | null;
-  geminiModel?: string | null;
+  aiProvider?: 'google' | 'openrouter' | null;
+  openrouterApiKey?: string | null;
+  aiModel?: string | null;
   isConfigured?: boolean;
 };
 
@@ -70,9 +72,15 @@ class ConfigService {
       geminiApiKey: isDbConfigured && dbConfig?.geminiApiKey
         ? dbConfig.geminiApiKey
         : (dbConfig?.geminiApiKey || process.env.GEMINI_API_KEY || null),
-      geminiModel: isDbConfigured && dbConfig?.geminiModel
-        ? dbConfig.geminiModel
-        : (dbConfig?.geminiModel || process.env.GEMINI_MODEL || 'gemini-3-flash-preview'),
+      aiProvider: isDbConfigured && dbConfig?.aiProvider
+        ? (dbConfig.aiProvider as 'google' | 'openrouter')
+        : ((dbConfig?.aiProvider as 'google' | 'openrouter') || (process.env.AI_PROVIDER as 'google' | 'openrouter') || 'google'),
+      openrouterApiKey: isDbConfigured && dbConfig?.openrouterApiKey
+        ? dbConfig.openrouterApiKey
+        : (dbConfig?.openrouterApiKey || process.env.OPENROUTER_API_KEY || null),
+      aiModel: isDbConfigured && dbConfig?.aiModel
+        ? dbConfig.aiModel
+        : (dbConfig?.aiModel || process.env.AI_MODEL || 'gemini-3-flash-preview'),
       // CRITICAL: only consider the system configured when the DB row explicitly
       // marks `isConfigured` true. Presence of environment variables should NOT
       // cause the application to treat the system as configured — the Setup
@@ -109,7 +117,9 @@ class ConfigService {
       jellyseerrApiKey?: string;
       tmdbApiKey?: string;
       geminiApiKey?: string;
-      geminiModel?: string;
+      aiProvider?: string;
+      openrouterApiKey?: string;
+      aiModel?: string;
       isConfigured: boolean;
     }
 
@@ -122,7 +132,9 @@ class ConfigService {
     if (payload.jellyseerrApiKey) data.jellyseerrApiKey = payload.jellyseerrApiKey;
     if (payload.tmdbApiKey) data.tmdbApiKey = payload.tmdbApiKey;
     if (payload.geminiApiKey) data.geminiApiKey = payload.geminiApiKey;
-    if (payload.geminiModel) data.geminiModel = payload.geminiModel;
+    if (payload.aiProvider) data.aiProvider = payload.aiProvider;
+    if (payload.openrouterApiKey) data.openrouterApiKey = payload.openrouterApiKey;
+    if (payload.aiModel) data.aiModel = payload.aiModel;
 
     const result = await prisma.systemConfig.upsert({
       where: { id: 1 },
@@ -133,9 +145,12 @@ class ConfigService {
     // Clear cache after saving new config
     this.clearCache();
 
-    // If a Gemini API key was provided, log a confirmation
+    // If an AI API key was provided, log a confirmation
     if (payload.geminiApiKey || result.geminiApiKey) {
-      console.info('SystemConfig: Gemini API key saved — will be used at runtime.');
+      console.info('SystemConfig: Gemini API key saved — will be used when provider is Google AI.');
+    }
+    if (payload.openrouterApiKey || result.openrouterApiKey) {
+      console.info('SystemConfig: OpenRouter API key saved — will be used when provider is OpenRouter.');
     }
 
     // If a TMDB API key was provided, log a confirmation

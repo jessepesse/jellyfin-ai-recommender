@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### ✨ New Features
+
+- **Dual AI Provider Support:** Added support for both **Google AI (Gemini)** and **OpenRouter**
+  - **Provider Swapping:** Users can switch between Google AI and OpenRouter in Settings at any time.
+  - **Model Configuration:** Configurable model name (e.g. `gemini-2.0-flash-exp`) for OpenRouter.
+  - **Unified Abstraction:** Backend services now use a provider-agnostic `generateAIContent` interface.
+  - **Setup Wizard:** Updated to support selecting provider and entering OpenRouter API Key.
+  - **Env Variables:** Added `AI_PROVIDER`, `OPENROUTER_API_KEY`, `AI_MODEL` to docker-compose and validation schema.
+
+### 🔒 Security
+
+- **Robust Admin Authentication:** Fixed and hardened Admin access for Jellyfin users
+  - **Jellyfin Token Validation:** Middleware now actively validates standard Jellyfin tokens against the server (`/Users/Me`) for admin routes.
+  - **Secure Caching:** Implemented `node-cache` with **SHA-256 Hashing** to store validated sessions without keeping raw tokens in memory.
+  - **Identity Mapping:** Safely maps valid Jellyfin Admin sessions to local admin privileges.
+  - **DoS Protection:** Token cache includes strict TTL (5m) and size limits (1000 keys).
+
+
 ## [2.3.8] - 2025-12-28
 
 ### 🐛 Bug Fixes

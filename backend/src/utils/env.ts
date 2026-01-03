@@ -20,9 +20,15 @@ const envSchema = z.object({
   JELLYSEERR_URL: z.string().url().optional(),
 
   // API keys (non-empty strings when present)
-  JELLYSEERR_API_KEY: z.string().min(1).optional(),
-  GEMINI_API_KEY: z.string().min(1).optional(),
-  GEMINI_MODEL: z.string().min(1).default('gemini-3-flash-preview'),
+  // API keys (keys can be empty string from env interpolation, treat as undefined)
+  JELLYSEERR_API_KEY: z.string().transform(v => v === '' ? undefined : v).optional(),
+  GEMINI_API_KEY: z.string().transform(v => v === '' ? undefined : v).optional(),
+  GEMINI_MODEL: z.string().default('gemini-3-flash-preview'), // Legacy
+
+  // New AI Config
+  AI_PROVIDER: z.string().transform(v => v === '' ? undefined : v).default('google'),
+  OPENROUTER_API_KEY: z.string().transform(v => v === '' ? undefined : v).optional(),
+  AI_MODEL: z.string().transform(v => v === '' ? undefined : v).optional(),
 
   // CORS configuration
   CORS_ORIGIN: z.string().url().optional(),

@@ -10,7 +10,9 @@ const ConfigEditor: React.FC = () => {
     jellyseerrApiKey: '',
     tmdbApiKey: '',
     geminiApiKey: '',
-    geminiModel: 'gemini-3-flash-preview',
+    aiProvider: 'google' as 'google' | 'openrouter',
+    openrouterApiKey: '',
+    aiModel: 'gemini-3-flash-preview',
   });
 
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,9 @@ const ConfigEditor: React.FC = () => {
           jellyseerrApiKey: response.config.jellyseerrApiKey || '',
           tmdbApiKey: response.config.tmdbApiKey || '',
           geminiApiKey: response.config.geminiApiKey || '',
-          geminiModel: response.config.geminiModel || 'gemini-3-flash-preview',
+          aiProvider: (response.config.aiProvider as 'google' | 'openrouter') || 'google',
+          openrouterApiKey: response.config.openrouterApiKey || '',
+          aiModel: response.config.aiModel || 'gemini-3-flash-preview',
         });
       }
     } catch (error) {
@@ -62,6 +66,7 @@ const ConfigEditor: React.FC = () => {
         jellyseerrApiKey: config.jellyseerrApiKey.startsWith('*') ? undefined : config.jellyseerrApiKey || undefined,
         tmdbApiKey: config.tmdbApiKey.startsWith('*') ? undefined : config.tmdbApiKey || undefined,
         geminiApiKey: config.geminiApiKey.startsWith('*') ? undefined : config.geminiApiKey || undefined,
+        openrouterApiKey: config.openrouterApiKey.startsWith('*') ? undefined : config.openrouterApiKey || undefined,
       });
 
       setVerifyResults(response.results || {});
@@ -91,7 +96,9 @@ const ConfigEditor: React.FC = () => {
         jellyseerrApiKey: config.jellyseerrApiKey || undefined,
         tmdbApiKey: config.tmdbApiKey || undefined,
         geminiApiKey: config.geminiApiKey || undefined,
-        geminiModel: config.geminiModel || undefined,
+        aiProvider: config.aiProvider || undefined,
+        openrouterApiKey: config.openrouterApiKey || undefined,
+        aiModel: config.aiModel || undefined,
       };
 
       const response = await putSystemConfigEditor(payload);
@@ -222,37 +229,94 @@ const ConfigEditor: React.FC = () => {
           </p>
         </div>
 
-        {/* Gemini API Key */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Gemini API Key
+        {/* AI Provider Section */}
+        <div className="pt-4 border-t border-slate-700">
+          <label className="block text-sm font-medium text-slate-300 mb-3">
+            AI Provider
           </label>
-          <input
-            type="text"
-            value={config.geminiApiKey}
-            onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
-            placeholder="Enter new key or leave masked to keep existing"
-            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
-          />
-          <p className="text-xs text-slate-500 mt-1">
-            Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Google AI Studio</a>
+          <div className="flex gap-4 mb-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="aiProvider"
+                value="google"
+                checked={config.aiProvider === 'google'}
+                onChange={() => setConfig({ ...config, aiProvider: 'google' })}
+                className="w-4 h-4 text-violet-500 bg-slate-800 border-slate-700 focus:ring-violet-500"
+              />
+              <span className="text-slate-200">Google AI (Direct)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="aiProvider"
+                value="openrouter"
+                checked={config.aiProvider === 'openrouter'}
+                onChange={() => setConfig({ ...config, aiProvider: 'openrouter' })}
+                className="w-4 h-4 text-violet-500 bg-slate-800 border-slate-700 focus:ring-violet-500"
+              />
+              <span className="text-slate-200">OpenRouter</span>
+            </label>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            Active provider: <span className="text-violet-400 font-medium">{config.aiProvider === 'google' ? 'Google AI (Direct)' : 'OpenRouter'}</span>
           </p>
+
+          {/* API Keys Grid - Both visible for easy switching */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Google AI API Key */}
+            <div className={config.aiProvider !== 'google' ? 'opacity-50' : ''}>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Google AI API Key {config.aiProvider === 'google' && <span className="text-green-400 text-xs">(active)</span>}
+              </label>
+              <input
+                type="text"
+                value={config.geminiApiKey}
+                onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
+                placeholder="Enter Google AI API key"
+                disabled={config.aiProvider !== 'google'}
+                className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Get API key</a>
+              </p>
+            </div>
+
+            {/* OpenRouter API Key */}
+            <div className={config.aiProvider !== 'openrouter' ? 'opacity-50' : ''}>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                OpenRouter API Key {config.aiProvider === 'openrouter' && <span className="text-green-400 text-xs">(active)</span>}
+              </label>
+              <input
+                type="text"
+                value={config.openrouterApiKey}
+                onChange={(e) => setConfig({ ...config, openrouterApiKey: e.target.value })}
+                placeholder="Enter OpenRouter API key"
+                disabled={config.aiProvider !== 'openrouter'}
+                className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Get API key</a>
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Gemini Model */}
+        {/* AI Model */}
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">
-            Gemini Model
+            AI Model
           </label>
           <select
-            value={config.geminiModel}
-            onChange={(e) => setConfig({ ...config, geminiModel: e.target.value })}
+            value={config.aiModel}
+            onChange={(e) => setConfig({ ...config, aiModel: e.target.value })}
             className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
-            <option value="gemini-3-flash-preview">gemini-3-flash-preview (Recommended)</option>
-            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-            <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash (Recommended)</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
           </select>
         </div>
       </div>

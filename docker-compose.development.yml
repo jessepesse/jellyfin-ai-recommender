@@ -19,6 +19,11 @@ services:
       - IMAGE_DIR=/app/backend/images
       - PORT=3001
       - NODE_ENV=development
+      # AI Configuration (Optional - can be set in .env or via UI)
+      - AI_PROVIDER=${AI_PROVIDER:-google}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_MODEL=${AI_MODEL}
     volumes:
       # Source code for hot reload
       - ./backend/src:/app/backend/src

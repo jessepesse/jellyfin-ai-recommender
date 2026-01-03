@@ -205,27 +205,27 @@ export const getSystemStatus = async (): Promise<{ configured: boolean }> => {
 };
 
 
-export const postSystemSetup = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
+export const postSystemSetup = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; aiProvider?: string; openrouterApiKey?: string; aiModel?: string }) => {
     const response = await apiClient.post('/system/setup', payload);
     return response.data;
 };
 
-export const postSystemVerify = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string }) => {
+export const postSystemVerify = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; openrouterApiKey?: string }) => {
     const response = await apiClient.post('/system/verify', payload);
     return response.data;
 };
 
-export const getSystemSetupDefaults = async (): Promise<{ jellyfinUrl?: string | null; jellyseerrUrl?: string | null; jellyseerrApiKey?: string | null; tmdbApiKey?: string | null; geminiApiKey?: string | null; geminiModel?: string | null }> => {
+export const getSystemSetupDefaults = async (): Promise<{ jellyfinUrl?: string | null; jellyseerrUrl?: string | null; jellyseerrApiKey?: string | null; tmdbApiKey?: string | null; geminiApiKey?: string | null; aiProvider?: string | null; openrouterApiKey?: string | null; aiModel?: string | null }> => {
     const response = await apiClient.get('/system/setup-defaults');
     return response.data;
 };
 
-export const getSystemConfigEditor = async (): Promise<{ ok: boolean; config: { jellyfinUrl: string; jellyseerrUrl: string; jellyseerrApiKey: string; tmdbApiKey: string; geminiApiKey: string; geminiModel: string; isConfigured: boolean } }> => {
+export const getSystemConfigEditor = async (): Promise<{ ok: boolean; config: { jellyfinUrl: string; jellyseerrUrl: string; jellyseerrApiKey: string; tmdbApiKey: string; geminiApiKey: string; aiProvider: string; openrouterApiKey: string; aiModel: string; isConfigured: boolean } }> => {
     const response = await apiClient.get('/system/config-editor');
     return response.data;
 };
 
-export const putSystemConfigEditor = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; geminiModel?: string }) => {
+export const putSystemConfigEditor = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; aiProvider?: string; openrouterApiKey?: string; aiModel?: string }) => {
     const response = await apiClient.put('/system/config-editor', payload);
     return response.data;
 };

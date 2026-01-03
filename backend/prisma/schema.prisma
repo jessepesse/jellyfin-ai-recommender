@@ -85,7 +85,9 @@ model SystemConfig {
   jellyseerrApiKey String?
   tmdbApiKey       String?
   geminiApiKey     String?
-  geminiModel      String  @default("gemini-3-flash-preview")
+  aiProvider       String  @default("google")  // "google" | "openrouter"
+  openrouterApiKey String?
+  aiModel          String  @default("gemini-3-flash-preview")
   isConfigured     Boolean @default(false)
 }
 

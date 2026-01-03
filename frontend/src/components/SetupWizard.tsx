@@ -43,7 +43,7 @@ const SetupWizard: React.FC = () => {
       <div className="w-full max-w-xl bg-slate-900/80 backdrop-blur-md rounded-2xl p-6 shadow-lg border border-white/5">
         <h2 className="text-2xl font-semibold mb-4">Welcome — Setup</h2>
         <p className="text-sm text-slate-300 mb-6">Enter your Jellyfin and external service configuration. Power users can still use .env; this wizard stores values in the local database.</p>
-        
+
         {/* Restore from Backup Section */}
         <div className="mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
           <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
@@ -100,19 +100,77 @@ const SetupWizard: React.FC = () => {
               {renderStatusIcon(testResults.jellyseerr)}
             </div>
 
-            <label className="text-sm">Gemini API Key</label>
-            <div className="flex items-center">
-              <input className="p-2 rounded bg-slate-800 border border-slate-700 flex-1 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition" value={formData.geminiApiKey} onChange={e => updateField('geminiApiKey', e.target.value)} placeholder="Gemini API Key" />
-              {renderStatusIcon(testResults.gemini)}
+            {/* AI Provider Section */}
+            <div className="mt-4 pt-4 border-t border-slate-700">
+              <label className="text-sm font-medium mb-2 block">AI Provider</label>
+              <div className="flex gap-4 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="aiProvider"
+                    value="google"
+                    checked={formData.aiProvider === 'google'}
+                    onChange={() => updateField('aiProvider', 'google')}
+                    className="w-4 h-4 text-cyan-500 bg-slate-800 border-slate-700 focus:ring-cyan-500"
+                  />
+                  <span className="text-slate-200">Google AI (Direct)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="aiProvider"
+                    value="openrouter"
+                    checked={formData.aiProvider === 'openrouter'}
+                    onChange={() => updateField('aiProvider', 'openrouter')}
+                    className="w-4 h-4 text-cyan-500 bg-slate-800 border-slate-700 focus:ring-cyan-500"
+                  />
+                  <span className="text-slate-200">OpenRouter</span>
+                </label>
+              </div>
             </div>
-            {testResults.gemini.status === 'error' && testResults.gemini.message && <div className="text-sm text-red-400">{testResults.gemini.message}</div>}
 
-            <label className="text-sm">Gemini Model</label>
-            <select className="p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition" value={formData.geminiModel} onChange={e => updateField('geminiModel', e.target.value)}>
-              <option value="gemini-3-flash-preview">gemini-3-flash-preview (Recommended)</option>
-              <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-              <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+            {/* Google AI API Key */}
+            <div className={formData.aiProvider !== 'google' ? 'opacity-50' : ''}>
+              <label className="text-sm">Google AI (Gemini) API Key</label>
+              <div className="flex items-center">
+                <input
+                  className="p-2 rounded bg-slate-800 border border-slate-700 flex-1 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+                  value={formData.geminiApiKey}
+                  onChange={e => updateField('geminiApiKey', e.target.value)}
+                  placeholder="Gemini API Key"
+                  disabled={formData.aiProvider !== 'google'}
+                />
+                {formData.aiProvider === 'google' && renderStatusIcon(testResults.gemini)}
+              </div>
+              {formData.aiProvider === 'google' && testResults.gemini.status === 'error' && testResults.gemini.message && <div className="text-sm text-red-400">{testResults.gemini.message}</div>}
+              <p className="text-xs text-slate-400 mt-1">Get from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google AI Studio</a></p>
+            </div>
+
+            {/* OpenRouter API Key */}
+            <div className={formData.aiProvider !== 'openrouter' ? 'opacity-50' : ''}>
+              <label className="text-sm">OpenRouter API Key</label>
+              <div className="flex items-center">
+                <input
+                  className="p-2 rounded bg-slate-800 border border-slate-700 flex-1 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+                  value={formData.openrouterApiKey}
+                  onChange={e => updateField('openrouterApiKey', e.target.value)}
+                  placeholder="OpenRouter API Key"
+                  disabled={formData.aiProvider !== 'openrouter'}
+                />
+                {formData.aiProvider === 'openrouter' && renderStatusIcon(testResults.openrouter)}
+              </div>
+              {formData.aiProvider === 'openrouter' && testResults.openrouter.status === 'error' && testResults.openrouter.message && <div className="text-sm text-red-400">{testResults.openrouter.message}</div>}
+              <p className="text-xs text-slate-400 mt-1">Get from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">OpenRouter</a></p>
+            </div>
+
+            {/* AI Model Selection */}
+            <label className="text-sm">AI Model</label>
+            <select className="p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition" value={formData.aiModel} onChange={e => updateField('aiModel', e.target.value)}>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash (Recommended)</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
             </select>
           </div>
 

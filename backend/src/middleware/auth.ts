@@ -3,6 +3,26 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import prisma from '../db';
 import { logger } from '../utils/logger';
+import { JellyfinService } from '../jellyfin';
+import NodeCache from 'node-cache';
+
+const jellyfinService = new JellyfinService();
+
+// Secure Cache for Admin Tokens
+// We use NodeCache for automatic TTL management to prevent stale sessions
+// We use SHA-256 hashing for keys to prevent storing raw tokens in memory (Heap Dump protection)
+const tokenCache = new NodeCache({
+    stdTTL: 300, // 5 minutes standard TTL
+    checkperiod: 60, // Check for expired keys every 60 seconds
+    maxKeys: 1000, // Prevent DoS by limiting cache size
+    useClones: false // Performance optimization since we don't mutate cached objects
+});
+
+interface CachedToken {
+    userId: number; // Local DB ID
+    jellyfinUserId: string;
+    isSystemAdmin: boolean;
+}
 
 // Extend Express Request to include user
 declare global {
@@ -85,32 +105,74 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
             }
         }
 
-        // 3. Jellyfin Token Validation
-        // For Jellyfin tokens, we can't easily validate them offline unless we cached them.
-        // But for "Online" operations, we usually just pass the token to Jellyfin API.
-        // However, for accessing OUR protected routes (like /admin/users), we need to know who the user is.
-        // Option A: Call Jellyfin /Users/Me to validate. (Expensive on every request?)
-        // Option B: Trust the token if we have seen it before? (Complexity)
+        // 3. Jellyfin Token Validation (Standard Tokens)
+        // Verify identity securely via Jellyfin API (or cache) + Local DB mapping
 
-        // Current implementation in other parts seems to rely on the fact that if you have a token, you can call Jellyfin.
-        // But for local DB access (admin stats), we need to know `req.user`.
+        // SECURITY: Hash the token before cache lookup
+        // This ensures raw tokens are not resident in the cache memory for long periods
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-        // Since we don't have a session store for Jellyfin tokens, we might need to fetch user by something?
-        // Actually, the client usually sends `X-Emby-Authorization` header which contains UserId?
-        // Not always reliable.
+        // Check secure cache first
+        const cached = tokenCache.get<CachedToken>(tokenHash);
 
-        // Compromise:
-        // If we are functioning as a proxy, we trust the token works for Jellyfin.
-        // But for /admin routes, we SHOULD validate it.
-        // How? By calling `AuthService` or similar?
-        // Let's skip complex Jellyfin validation for now to avoid breaking existing flows,
-        // BUT for `requireAdmin`, we will act primarily on Local Token OR X-Is-Admin header (Legacy, secure later).
+        if (cached) {
+            // Cache Hit: User was recently validated against Jellyfin
 
-        // Wait, if I am implementing Security, I should verify.
-        // I will allow 'next()' for non-local tokens, letting the route handler decide or assuming legacy behavior.
-        // BUT I will populate `req.user` if I can.
+            // Check if local user still exists/valid
+            const user = await prisma.user.findUnique({ where: { id: cached.userId } });
+            if (user) {
+                req.user = {
+                    id: user.id,
+                    username: user.username,
+                    isSystemAdmin: user.isSystemAdmin, // Refresh admin status from DB
+                    jellyfinUserId: cached.jellyfinUserId
+                };
+            }
+            return next();
+        }
 
-        // For now, only Local Token populates `req.user` reliably offline.
+        // Cache Miss: Perform Full Validation
+        // This is an expensive operation (network call), but necessary for security.
+        try {
+            // Verify token with Jellyfin Server
+            const jellyfinUser = await jellyfinService.getMe(token);
+
+            if (jellyfinUser) {
+                // Token is valid and belongs to 'jellyfinUser'.
+
+                // Security Check: Match against known local users
+                // We trust the username returned by the Jellyfin Server (Authenticated Source)
+                const localUser = await prisma.user.findUnique({
+                    where: { username: jellyfinUser.Name }
+                });
+
+                if (localUser) {
+                    // Success! Map identity.
+
+                    req.user = {
+                        id: localUser.id,
+                        username: localUser.username,
+                        isSystemAdmin: localUser.isSystemAdmin,
+                        jellyfinUserId: jellyfinUser.Id
+                    };
+
+                    // Store in Secure Cache
+                    tokenCache.set(tokenHash, {
+                        userId: localUser.id,
+                        jellyfinUserId: jellyfinUser.Id,
+                        isSystemAdmin: localUser.isSystemAdmin
+                    });
+                } else {
+                    // Token is valid in Jellyfin, but no matching local user found.
+                    // Treat as Guest (no req.user).
+                }
+            }
+        } catch (validationErr) {
+            // Failed to validate with Jellyfin (network or error). 
+            // We cannot safely grant admin access.
+            logger.warn({ err: validationErr }, 'Failed to validate Jellyfin token online');
+        }
+
         return next();
 
     } catch (error) {

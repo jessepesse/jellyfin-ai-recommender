@@ -260,4 +260,42 @@ export class JellyfinService {
             return new Set();
         }
     }
+
+    /**
+     * Validate a token and get the current user's profile from Jellyfin.
+     * Used by auth middleware to verify identity of Admin users.
+     */
+    public async getMe(accessToken: string, serverUrl?: string): Promise<{ Id: string, Name: string, Policy: { IsAdministrator: boolean } } | null> {
+        try {
+            const baseRaw = await JellyfinService.getBaseUrl(serverUrl);
+            if (!baseRaw) return null;
+
+            const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
+            const headers = JellyfinService.getHeaders(accessToken);
+
+            const url = validateRequestUrl(`${base}/Users/Me`);
+
+            // codeql[js/request-forgery] - internal utility with validated URL
+            const response = await axios.get<any>(validateSafeUrl(url), { headers, timeout: 5000 });
+
+            if (response.data && response.data.Id) {
+                return {
+                    Id: response.data.Id,
+                    Name: response.data.Name,
+                    Policy: {
+                        IsAdministrator: response.data.Policy?.IsAdministrator || false
+                    }
+                };
+            }
+            return null;
+        } catch (error) {
+            // 401 means invalid token
+            if (isAuthError(error)) {
+                return null;
+            }
+            console.error('[Jellyfin] Error in getMe:', (error as any).message);
+            return null;
+        }
+    }
 }
+
