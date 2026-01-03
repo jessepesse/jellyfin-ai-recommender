@@ -18,7 +18,7 @@ async function getClient(): Promise<import('axios').AxiosInstance> {
   const base = validateBaseUrl(rawBase);
   const key = rawKey ? rawKey.trim() : '';
   // Return axios client with validated runtime base URL and sanitized API key header
-  return axios.create({ baseURL: base, headers: { 'X-Api-Key': key }, timeout: 10000 });
+  return axios.create({ baseURL: base, headers: { 'X-Api-Key': key }, timeout: 30000 });
 }
 
 export type Enriched = {
