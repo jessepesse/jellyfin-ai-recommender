@@ -83,8 +83,15 @@ export const validateSearch = [
  * Validation rules for media request
  */
 export const validateMediaRequest = [
-  body('tmdbId').isInt({ min: 1 }).withMessage('TMDB ID must be a positive integer'),
+  // Frontend sends 'mediaId', but we also support 'tmdbId' alias if sent manually
+  body().custom((value, { req }) => {
+    const id = req.body.mediaId || req.body.tmdbId;
+    if (!id || isNaN(Number(id)) || Number(id) <= 0) {
+      throw new Error('Valid mediaId or tmdbId is required');
+    }
+    return true;
+  }),
   body('mediaType').isIn(['movie', 'tv']).withMessage('Media type must be "movie" or "tv"'),
-  body('title').isString().trim().notEmpty().withMessage('Title is required'),
+  // Title is optional (fetched from TMDB/Jellyseerr if needed)
   handleValidationErrors,
 ];
