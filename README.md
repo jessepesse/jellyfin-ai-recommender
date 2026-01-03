@@ -41,6 +41,31 @@ The fastest way to get started. **Recommended for most users.**
 | **Google Gemini API Key** | Free at [Google AI Studio](https://aistudio.google.com/apikey) (Default Provider) |
 | **OpenRouter API Key** | Optional [OpenRouter](https://openrouter.ai) |
 
+### 🧠 Model Providers (Dual AI)
+
+You can choose between two AI providers:
+
+#### 1. Google AI (Default)
+- **Direct access** to Gemini models via Google's official SDK.
+- **Cost:** Free tier available (Google AI Studio).
+- **Configuration:** Set `AI_PROVIDER=google` (or leave default) and `GEMINI_API_KEY`.
+
+#### 2. OpenRouter (New in v2.4.0)
+- **Unified access** to Gemini models via OpenRouter's API.
+- **Why use it?** If you prefer a centralized API for multiple models or need specific routing.
+- **Configuration:**
+  - Set `AI_PROVIDER=openrouter`
+  - Set `OPENROUTER_API_KEY`
+  - Set `AI_MODEL` (e.g., `google/gemini-2.0-flash-exp:free`) - **Note:** Prefix is required!
+
+**Docker Compose Example:**
+```yaml
+environment:
+  - AI_PROVIDER=openrouter
+  - OPENROUTER_API_KEY=sk-or-v1-...
+  - AI_MODEL=google/gemini-2.0-flash-exp:free
+```
+
 ### 1. Create `docker-compose.yml`
 
 ```yaml
