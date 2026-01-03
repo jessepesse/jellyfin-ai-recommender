@@ -38,7 +38,8 @@ The fastest way to get started. **Recommended for most users.**
 | **Docker & Docker Compose** | [Install Docker](https://docs.docker.com/get-docker/) |
 | **Jellyfin Server** | Your media server URL (e.g., `http://192.168.1.100:8096`) |
 | **Jellyseerr** | For metadata enrichment & requests (e.g., `http://192.168.1.100:5055`) |
-| **Google Gemini API Key** | Free at [Google AI Studio](https://aistudio.google.com/apikey) |
+| **Google Gemini API Key** | Free at [Google AI Studio](https://aistudio.google.com/apikey) (Default Provider) |
+| **OpenRouter API Key** | Optional: Support for DeepSeek, Llama, etc. [OpenRouter](https://openrouter.ai) |
 
 ### 1. Create `docker-compose.yml`
 
@@ -64,7 +65,10 @@ services:
       # - JELLYFIN_URL=http://your-jellyfin:8096
       # - JELLYSEERR_URL=http://your-jellyseerr:5055
       # - JELLYSEERR_API_KEY=your-api-key
-      # - GEMINI_API_KEY=your-gemini-key
+      # - AI_PROVIDER=google                     # 'google' or 'openrouter'
+      # - GEMINI_API_KEY=your-gemini-key         # Required if provider is google
+      # - OPENROUTER_API_KEY=your-openrouter-key # Required if provider is openrouter
+      # - AI_MODEL=gemini-2.0-flash-exp          # Optional: Custom model
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s
@@ -84,7 +88,8 @@ docker compose up -d
 2. The **Setup Wizard** will guide you through configuration:
    - Enter your Jellyfin server URL
    - Enter your Jellyseerr URL and API key
-   - Enter your Google Gemini API key
+   - Select AI Provider (Google Gemini or OpenRouter)
+   - Enter your API credentials
 3. Log in with your Jellyfin credentials
 4. Start getting AI-powered recommendations! 🎉
 
@@ -129,7 +134,7 @@ This project is a full-stack monorepo split into a separate Frontend and Backend
 - **Node.js** (v18+) & npm
 - **Jellyfin Server** (accessible URL)
 - **Jellyseerr Server** (for metadata enrichment & requests)
-- **Google Gemini API Key** (for recommendations)
+- **AI Provider API Key** (Google Gemini OR OpenRouter)
 
 ### 2. Installation
 
