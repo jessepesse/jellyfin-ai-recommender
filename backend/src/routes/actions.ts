@@ -7,6 +7,7 @@ import { updateMediaStatus, removeFromWatchlist } from '../services/data';
 import { requestMediaByTmdb } from '../services/jellyseerr';
 import { validateUserAction, validateMediaRequest } from '../middleware/validators';
 import { CacheService } from '../services/cache';
+import { TrendingService } from '../services/trending';
 
 const router = Router();
 
@@ -80,6 +81,10 @@ router.post('/watchlist/remove', async (req, res) => {
         // Invalidate trending cache (item might need to reappear if it was filtered out by watchlist status)
         if (ok) {
             CacheService.del('api', `trending_${username}`);
+
+            // Background refresh
+            TrendingService.refreshCache(username).catch(err => console.error('Background refresh failed', err));
+
             return res.json({ ok: true });
         }
         return res.status(500).json({ error: 'Failed to remove from watchlist' });
@@ -107,6 +112,9 @@ router.post('/block', validateUserAction, async (req: Request, res: Response) =>
 
         // Invalidate trending cache
         CacheService.del('api', `trending_${username}`);
+
+        // Background refresh
+        TrendingService.refreshCache(username).catch(err => console.error('Background refresh failed', err));
 
         res.json({ ok: true });
     } catch (e) {

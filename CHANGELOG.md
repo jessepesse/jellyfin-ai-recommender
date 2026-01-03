@@ -18,6 +18,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### 🐛 Bug Fixes
 - **Trending:** Fixed issue where added/blocked items remained on the Trending page due to caching.
   - Implemented automatic cache invalidation for `trending_{username}` on all user actions.
+  - Added background cache refresh to ensure "instant" updates upon return to the Trending page.
 
 ## [2.4.2] - 2026-01-03
 
