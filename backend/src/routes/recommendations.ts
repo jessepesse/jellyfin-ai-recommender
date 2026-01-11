@@ -225,9 +225,15 @@ router.get('/recommendations', async (req, res) => {
                     CacheService.set('recommendations', viewCacheKey, viewCached, 60 * 60 * 24); // 24h retention for view
                     return res.json(viewCached);
                 }
-                console.log('[ViewCache] Cache empty after filtering, generating new items...');
+                // Cache is empty after filtering - DO NOT auto-generate
+                // User must explicitly click "Get Recommendations" to fetch new items
+                console.log('[ViewCache] Cache empty after filtering - returning empty (user must click button to generate)');
+                return res.json([]);
             } else {
-                console.log('[ViewCache] No view cache found, generating...');
+                // No cache exists - DO NOT auto-generate
+                // Return empty array; user must click "Get Recommendations" to start generation
+                console.log('[ViewCache] No view cache found - returning empty (user must click button to generate)');
+                return res.json([]);
             }
         } else {
             console.log('[ViewCache] Force refresh requested - bypassing view cache');

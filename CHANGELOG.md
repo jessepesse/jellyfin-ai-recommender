@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-01-11
+
 ### ✨ New Features
 - **Genre Display:** Added genre mapping and display across the application (previously missing).
   - **Trending:** Added genres to Trending Page cards.
@@ -21,7 +23,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - Added background cache refresh to ensure "instant" updates upon return to the Trending page.
   - Added scheduled (2-hour) background job to keep Trending cache fresh for all users.
 - **Recommendations View Cache:** Implemented persistent caching for the recommendations view. Recommendations now stay visible even after navigation and are only refreshed when explicitly requested.
-
 
 ## [2.4.2] - 2026-01-03
 
