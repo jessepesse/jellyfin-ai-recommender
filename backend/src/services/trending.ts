@@ -48,12 +48,14 @@ export class TrendingService {
      * Typically called in background after user actions
      */
     static async refreshCache(username: string): Promise<void> {
+        // Sanitize username for logging to prevent format string injection (CodeQL js/tainted-format-string)
+        const safeUsername = String(username).replace(/[%$]/g, '');
         try {
-            console.log(`[Trending] Refreshing cache for ${username}...`);
+            console.log('[Trending] Refreshing cache for %s...', safeUsername);
             await this.fetchAndCacheTrending(username);
-            console.log(`[Trending] Cache refreshed for ${username}`);
+            console.log('[Trending] Cache refreshed for %s', safeUsername);
         } catch (error) {
-            console.error(`[Trending] Failed to refresh cache for ${username}:`, error);
+            console.error('[Trending] Failed to refresh cache for %s:', safeUsername, error);
         }
     }
 
