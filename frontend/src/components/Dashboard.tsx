@@ -51,20 +51,13 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     setSelectedMood(prev => prev === m ? null : m);
   };
 
-  // Load cached recommendations on mount if viewing recommendations page
-  React.useEffect(() => {
-    if (currentView === 'recommendations') {
-      handleGetRecommendations(false);
-    }
-  }, [currentView]); // Run when view changes to 'recommendations'
-
-  const handleGetRecommendations = async (refresh: boolean = true) => {
+  const handleGetRecommendations = React.useCallback(async (refresh: boolean = true) => {
     setError(null);
     setIsLoading(true);
     try {
       const genreParam = selectedGenres.join(',') || undefined;
       // Build params object conditionally so we don't send undefined/null path/query values
-      const params: Record<string, any> = {};
+      const params: Record<string, string | boolean | undefined> = {};
       if (selectedType) params.type = selectedType;
       if (genreParam) params.genre = genreParam;
       if (selectedMood) params.mood = selectedMood;
@@ -89,7 +82,14 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedType, selectedGenres, selectedMood]);
+
+  // Load cached recommendations on mount if viewing recommendations page
+  React.useEffect(() => {
+    if (currentView === 'recommendations') {
+      handleGetRecommendations(false);
+    }
+  }, [currentView, handleGetRecommendations]);
 
   return (
     <div className="flex-1 p-4 md:p-8 overflow-y-auto flex flex-col h-full pb-30">
