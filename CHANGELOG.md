@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.4.4] - 2026-01-11
+
+### 🔒 Security
+- **CodeQL Fix:** Resolved tainted format string alert in `trending.ts` by sanitizing user input in log statements.
+
+### 📦 Dependencies
+- **Backend:** Updated `zod` from 4.3.4 to 4.3.5.
+- **Frontend:** Updated `globals` from 16.5.0 to 17.0.0.
+- **Frontend:** Updated `typescript-eslint` from 8.50.1 to 8.51.0.
+- **Root:** Updated `@commitlint/cli` from 20.2.0 to 20.3.0.
+- **Root:** Updated `@commitlint/config-conventional` from 20.2.0 to 20.3.0.
+
 ## [2.4.3] - 2026-01-11
 
 ### ✨ New Features
