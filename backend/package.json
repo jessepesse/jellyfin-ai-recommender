@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "2.4.4",
+  "version": "2.4.5",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.41.0",
     "@jellyfin-ai/types": "file:../shared",
     "@prisma/adapter-better-sqlite3": "^7.1.0",
     "@prisma/client": "^7.1.0",

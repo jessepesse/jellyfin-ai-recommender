@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.4.5] - 2026-02-12
+
+### 🔧 Technical
+
+- **SDK Migration:** Migrated from deprecated `@google/generative-ai` to `@google/genai` SDK.
+  - Updated `buildClientAndModel()` to use new `GoogleGenAI` client.
+  - Updated `generateAIContent()` to use `ai.models.generateContent()` API.
+  - Updated `system.ts` Gemini verification to use new SDK.
+  - ThinkingBudget now uses numeric tokens instead of string levels.
+- **Implicit Caching Optimization:** Restructured AI prompt for Gemini implicit caching.
+  - Stable sections (ROLE, RULES, OUTPUT FORMAT) moved to prompt beginning.
+  - Variable sections (TASTE, CONTEXT, EXCLUSION) moved to prompt end.
+  - Maximizes implicit cache hits for up to 90% cost reduction on cached tokens.
+
 ## [2.4.4] - 2026-01-11
 
 ### 🔒 Security
