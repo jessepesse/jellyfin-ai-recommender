@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GoogleGenAI, type GenerateContentConfig } from '@google/genai';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import ConfigService from './config';
@@ -12,9 +12,10 @@ const DEFAULT_MODEL = 'gemini-3-flash-preview';
 export interface AIClientBundle {
   provider: 'google' | 'openrouter';
   modelName: string;
-  // Google AI SDK
-  googleClient?: GoogleGenerativeAI;
-  googleModel?: GenerativeModel;
+  // Google GenAI SDK (new)
+  googleClient?: GoogleGenAI;
+  // Per-call model config (thinkingConfig etc.)
+  modelConfig?: GenerateContentConfig;
   // OpenRouter via OpenAI SDK
   openrouterClient?: OpenAI;
 }
@@ -60,7 +61,7 @@ export async function buildClientAndModel(): Promise<AIClientBundle> {
       openrouterClient
     };
   } else {
-    // Google AI Direct setup
+    // Google AI Direct setup (new @google/genai SDK)
     const rawKey = cfg.geminiApiKey ? String(cfg.geminiApiKey) : (process.env.GEMINI_API_KEY || '');
     const apiKey = rawKey.trim();
 
@@ -68,29 +69,24 @@ export async function buildClientAndModel(): Promise<AIClientBundle> {
       throw new Error('Gemini API key not configured');
     }
 
-    const googleClient = new GoogleGenerativeAI(apiKey);
+    const googleClient = new GoogleGenAI({ apiKey });
 
     // Configure thinking level for Gemini 3 Flash/Pro models
     const isGemini3Model = modelNameFromCfg.includes('gemini-3');
     const isProModel = modelNameFromCfg.includes('-pro');
     const thinkingLevel = isProModel ? 'high' : 'medium';
 
-    const thinkingConfig = isGemini3Model ? {
+    const modelConfig: GenerateContentConfig = isGemini3Model ? {
       thinkingConfig: {
-        thinkingBudget: thinkingLevel as 'low' | 'medium' | 'high'
+        thinkingBudget: thinkingLevel === 'high' ? 8192 : 4096
       }
     } : {};
-
-    const googleModel = googleClient.getGenerativeModel({
-      model: modelNameFromCfg,
-      ...thinkingConfig
-    });
 
     return {
       provider: 'google',
       modelName: modelNameFromCfg,
       googleClient,
-      googleModel
+      modelConfig
     };
   }
 }
@@ -109,21 +105,22 @@ export async function generateAIContent(
       max_tokens: 8000,
     });
     return response.choices[0]?.message?.content || '';
-  } else if (client.provider === 'google' && client.googleModel) {
-    const response = await client.googleModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: options?.json ? {
+  } else if (client.provider === 'google' && client.googleClient) {
+    const config: GenerateContentConfig = {
+      ...client.modelConfig,
+      ...(options?.json ? {
         responseMimeType: 'application/json',
         responseSchema: options.jsonSchema as any
-      } : undefined
+      } : {})
+    };
+
+    const response = await client.googleClient.models.generateContent({
+      model: client.modelName,
+      contents: prompt,
+      config,
     });
 
-    const body = response?.response;
-    if (body && typeof body.text === 'function') {
-      const result = body.text();
-      return typeof result === 'string' ? result : await result;
-    }
-    return '';
+    return response.text ?? '';
   }
 
   throw new Error('No AI client configured');
@@ -246,40 +243,26 @@ export class GeminiService {
     // Count exclusion items for transparency
     const exclusionCount = exclusionSection.split('\n').filter(line => line.startsWith('|')).length;
 
+    // Prompt structure optimized for Gemini implicit caching:
+    // Stable sections first (ROLE, RULES, OUTPUT FORMAT) then variable (TASTE, CONTEXT, EXCLUSION)
+    // This ensures the prompt prefix is identical across users/requests, maximizing cache hits.
     return `
 ### ROLE
 Act as a senior film critic and expert database curator (TMDb specialist).
 Your goal is to recommend **exactly 40** distinct items that perfectly match the user's taste profile but are NOT in their current library.
 
-### CONTEXT & TASTE PROFILE
-- **Media Type:** ${mediaType}
-- **Vibe/Genre:** ${genreNote}${moodNote}
-
-${hasProfile ? `**Taste Analysis:**\n${profileSection}` : profileSection}
-
 ---
 
-### �️ EXCLUSION DATA (POISON LIST) - ${exclusionCount} items
-The user has ALREADY watched/collected the following items.
-**CRITICAL RULE:** Do NOT recommend anything from this list. Treat these titles as "poison".
-If you are about to suggest a sequel/prequel to a movie in this list, SKIP IT unless it is significantly better rated.
-
-| Title | Year |
-|-------|------|
-${exclusionSection}
-
----
-
-### 💎 SELECTION RULES
+### SELECTION RULES
 1. **Discovery First:** Focus on hidden gems, highly-rated non-mainstream hits, or classics the user might have missed.
 2. **No Franchise Stacking:** Do NOT recommend more than 1 item from the same franchise (e.g., if you suggest "Alien", do not suggest "Aliens").
 3. **Accuracy:** Use the EXACT theatrical release year from TMDb. If unsure, skip the item.
 4. **Variety:** Mix genres slightly. If the user likes Sci-Fi, include some Sci-Fi Horror or Sci-Fi Thriller, not just Space Operas.
-5. **No Poison:** NEVER suggest anything from the POISON LIST above. Double-check every recommendation.
+5. **No Poison:** NEVER suggest anything from the POISON LIST below. Double-check every recommendation.
 
 ---
 
-### 📝 OUTPUT FORMAT
+### OUTPUT FORMAT
 Return **ONLY** a raw JSON array (no markdown, no backticks).
 Each object must strictly follow this schema:
 [
@@ -290,6 +273,25 @@ Each object must strictly follow this schema:
     "reason": "A short, punchy sentence why this fits the vibe."
   }
 ]
+
+---
+
+### CONTEXT & TASTE PROFILE
+- **Media Type:** ${mediaType}
+- **Vibe/Genre:** ${genreNote}${moodNote}
+
+${hasProfile ? `**Taste Analysis:**\n${profileSection}` : profileSection}
+
+---
+
+### EXCLUSION DATA (POISON LIST) - ${exclusionCount} items
+The user has ALREADY watched/collected the following items.
+**CRITICAL RULE:** Do NOT recommend anything from this list. Treat these titles as "poison".
+If you are about to suggest a sequel/prequel to a movie in this list, SKIP IT unless it is significantly better rated.
+
+| Title | Year |
+|-------|------|
+${exclusionSection}
 `;
   }
 

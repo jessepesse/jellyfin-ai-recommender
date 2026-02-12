@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import ConfigService from '../services/config';
 import { sanitizeUrl, validateRequestUrl, validateSafeUrl } from '../utils/ssrf-protection';
 import { validateConfigUpdate } from '../middleware/validators';
@@ -193,18 +193,9 @@ router.post('/verify', async (req, res) => {
         const geminiCheck = (async () => {
             try {
                 if (!geminiApiKey || geminiApiKey.startsWith('*')) return { ok: true, message: 'Skipped (Masked)' };
-                let client: any;
+                const client = new GoogleGenAI({ apiKey: String(geminiApiKey) });
                 try {
-                    client = new (GoogleGenerativeAI as any)({ apiKey: String(geminiApiKey) });
-                } catch {
-                    try { client = new (GoogleGenerativeAI as any)(String(geminiApiKey)); } catch (i2) { throw i2; }
-                }
-                try {
-                    if (typeof client.listModels === 'function') {
-                        await client.listModels({ pageSize: 1 });
-                    } else if (typeof client.models?.list === 'function') {
-                        await client.models.list({ pageSize: 1 });
-                    }
+                    await client.models.list({ config: { pageSize: 1 } });
                 } catch (callErr: any) {
                     return { ok: false, message: String(callErr?.message || callErr) };
                 }
