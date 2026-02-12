@@ -6,6 +6,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.4.6] - 2026-02-12
+
+### 🔒 Security
+
+- **qs:** Updated `qs` to `6.14.2` to resolve DoS vulnerability (GHSA-w7fw-mjwx-w883) via `npm audit fix`.
+- **CI Fix:** Added explicit `react-is` dependency to frontend to fix CI build failures (backported from v2.4.5 hotfix).
+
 ## [2.4.5] - 2026-02-12
 
 ### 🔧 Technical
