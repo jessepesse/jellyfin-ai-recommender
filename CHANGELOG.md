@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.4.7] - 2026-02-15
+
+### 🐛 Bug Fixes
+
+- **Prisma:** Fixed `MODULE_NOT_FOUND: query_compiler_fast_bg.sqlite.js` by locking all Prisma packages (`prisma`, `@prisma/client`, `@prisma/adapter-better-sqlite3`) to exact version `7.4.0`. The `^7.1.0` caret range allowed version drift between CLI and runtime, breaking database operations.
+
+### 📦 Dependencies
+
+- **Backend:** Updated `@prisma/client` from ^7.1.0 to 7.4.0.
+- **Backend:** Updated `@prisma/adapter-better-sqlite3` from ^7.1.0 to 7.4.0.
+- **Backend:** Updated `prisma` from ^7.1.0 to 7.4.0.
+
 ## [2.4.6] - 2026-02-12
 
 ### 🔒 Security
