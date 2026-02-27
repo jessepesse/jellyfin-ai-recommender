@@ -1,7 +1,7 @@
 # Backend Development Dockerfile with Hot Reload
 # Uses tsx watch mode for automatic reloading on code changes
 
-FROM node:22-slim
+FROM node:25-slim
 
 WORKDIR /app/backend
 
@@ -16,7 +16,7 @@ COPY backend/prisma ./prisma/
 COPY shared ../shared
 
 # Install all dependencies
-RUN npm install
+RUN npm install && npm rebuild better-sqlite3
 
 # Generate Prisma client
 ARG DATABASE_URL="file:./prisma/dev.db"
