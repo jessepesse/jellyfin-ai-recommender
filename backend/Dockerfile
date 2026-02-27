@@ -1,4 +1,4 @@
-FROM node:25-slim
+FROM node:22-slim
 
 WORKDIR /app/backend
 
