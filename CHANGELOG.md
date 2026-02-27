@@ -6,6 +6,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.4.8] - 2026-02-27
+
+### 🔒 Security
+
+- **minimatch:** Updated to `10.2.4` to fix high-severity ReDoS vulnerability (**CVE-2026-26996**).
+- **hono:** Updated to `4.12.3` to address timing comparison hardening in `basicAuth` and `bearerAuth`.
+
+### 🚀 Features
+
+- **AI Model Update:** Updated Google AI model selection to use `gemini-3.1-pro-preview` as the older Gemini 3 Pro version is being retired.
+
+### 🔧 Technical
+
+- **ESLint 10 Migration:** Upgraded frontend toolchain to ESLint 10.
+  - Migrated from legacy `.eslintrc` format to modern `eslint.config.js` (Flat Config).
+  - Replaced `eslint-plugin-react-hooks` with modern `@eslint-react/eslint-plugin`.
+- **Node.js Update:** Standardized Docker images on **Node.js v25** to ensure native module compatibility (e.g., `better-sqlite3`) while meeting ESLint 10's requirements.
+- **Docker Fixes:** Added `npm rebuild better-sqlite3` to backend build process to prevent `ERR_DLOPEN_FAILED` when changing Node versions.
+
+### 📦 Dependencies
+
+- **Project:** Updated 15 dependencies via Dependabot, including `tailwindcss`, `@tailwindcss/vite`, `openai`, `lucide-react`, and various dev tools.
+
 ## [2.4.7] - 2026-02-15
 
 ### 🐛 Bug Fixes
