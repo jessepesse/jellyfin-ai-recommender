@@ -416,7 +416,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Fixed
 
-- Increased nginx proxy timeout to 180s for slow AI models (e.g., gemini-3-pro-preview)
+- Increased nginx proxy timeout to 180s for slow AI models (e.g., gemini-3.1-pro-preview)
 - Added debug logging for import progress username tracking
 
 ---
@@ -1323,7 +1323,7 @@ Complete rewrite of the application architecture from a monolithic Python script
 
     Gemini Thinking Models: Updated to support Gemini 2.5+ and 3.0+ thinking capabilities with automatic dynamic reasoning adjustment.
 
-    Model Selection: Dropdown with current Google AI models (gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro, gemini-3-pro-preview).
+    Model Selection: Dropdown with current Google AI models (gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro, gemini-3.1-pro-preview).
 
 🐛 Bug Fixes
 
