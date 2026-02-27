@@ -64,6 +64,8 @@
     "glob": "^10.4.0",
     "inflight": "npm:@pnpm/npm-lifecycle@1.1.0",
     "lodash.get": "npm:lodash@^4.17.21",
-    "lodash.isequal": "npm:lodash@^4.17.21"
+    "lodash.isequal": "npm:lodash@^4.17.21",
+    "minimatch": "^10.2.4",
+    "hono": "^4.11.10"
   }
 }
