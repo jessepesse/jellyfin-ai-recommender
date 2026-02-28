@@ -136,14 +136,22 @@ class ConfigService {
     if (payload.openrouterApiKey) data.openrouterApiKey = payload.openrouterApiKey;
     if (payload.aiModel) data.aiModel = payload.aiModel;
 
-    const result = await prisma.systemConfig.upsert({
-      where: { id: 1 },
-      update: data,
-      create: { id: 1, ...data },
-    });
-
-    // Clear cache after saving new config
+    // Invalidate before the write so any concurrent read during the upsert
+    // goes to DB and does not re-populate with stale data after we finish.
     this.clearCache();
+
+    let result: PrismaSystemConfig;
+    try {
+      result = await prisma.systemConfig.upsert({
+        where: { id: 1 },
+        update: data,
+        create: { id: 1, ...data },
+      });
+    } catch (e) {
+      // Ensure cache stays cold if the write fails
+      this.clearCache();
+      throw e;
+    }
 
     // If an AI API key was provided, log a confirmation
     if (payload.geminiApiKey || result.geminiApiKey) {

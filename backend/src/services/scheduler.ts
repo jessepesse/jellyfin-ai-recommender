@@ -22,6 +22,8 @@ export function initScheduler(): void {
     // Weekly Watchlist Generation
     // Runs every Monday at 03:00
     // Cron format: minute hour day-of-month month day-of-week
+    const timezone = process.env.SCHEDULER_TIMEZONE || process.env.TZ || 'UTC';
+
     cron.schedule('0 3 * * 1', async () => {
         console.log('[Scheduler] Starting weekly watchlist generation');
         try {
@@ -31,11 +33,11 @@ export function initScheduler(): void {
             console.error('[Scheduler] Weekly watchlist generation failed:', error?.message || error);
         }
     }, {
-        timezone: 'Europe/Helsinki' // Adjust to server timezone
+        timezone,
     });
 
     isSchedulerInitialized = true;
-    console.log('[Scheduler] Initialized - Weekly watchlist generation scheduled for Mondays at 03:00');
+    console.log(`[Scheduler] Initialized - Weekly watchlist generation scheduled for Mondays at 03:00 (${timezone})`);
 }
 
 /**

@@ -37,9 +37,6 @@ declare global {
                 username: string;
                 isSystemAdmin: boolean;
                 jellyfinUserId?: string;
-
-                // Allow other properties
-                [key: string]: any;
             };
         }
     }

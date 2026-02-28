@@ -1,3 +1,4 @@
+import pLimit from 'p-limit';
 import { JellyfinService } from '../jellyfin';
 import * as JellyseerrService from './jellyseerr';
 import * as DataService from './data';
@@ -62,8 +63,12 @@ export async function syncHistory(
     const existingWatchedSet = new Set(existingData.watchedIds);
     console.log(`[Sync] Found ${existingWatchedSet.size} existing watched items in database`);
 
-    // Step 3: Process each history item
-    for (const item of history) {
+    // Step 3: Process history items concurrently (max 5 in-flight Jellyseerr calls)
+    // p-limit replaces the per-item 100ms sleep: requests are throttled by
+    // concurrency, not by artificial delay, so large syncs are significantly faster.
+    const limit = pLimit(5);
+
+    await Promise.all(history.map(item => limit(async () => {
       try {
         // Extract TMDB ID from ProviderIds.Tmdb
         const tmdbRaw = item.ProviderIds?.Tmdb ?? item.ProviderIds?.tmdb ?? null;
@@ -71,21 +76,21 @@ export async function syncHistory(
         if (!tmdbRaw) {
           console.debug(`[Sync] Skipping "${item.Name}" - no TMDB ID`);
           result.skipped++;
-          continue;
+          return;
         }
 
         const tmdbId = Number(tmdbRaw);
         if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
           console.debug(`[Sync] Skipping "${item.Name}" - invalid TMDB ID: ${tmdbRaw}`);
           result.skipped++;
-          continue;
+          return;
         }
 
         // Check if already in database
         if (existingWatchedSet.has(tmdbId)) {
           console.debug(`[Sync] Skipping TMDB ${tmdbId} "${item.Name}" - already in database`);
           result.skipped++;
-          continue;
+          return;
         }
 
         // Determine media type (Movie or Series -> tv)
@@ -110,7 +115,7 @@ export async function syncHistory(
             result.failed++;
             result.errors.push(`No TMDB ID for "${item.Name}"`);
           }
-          continue;
+          return;
         }
 
         // Step 5: Save to database with enriched metadata
@@ -130,16 +135,13 @@ export async function syncHistory(
         result.new++;
         console.log(`[Sync] ✓ Saved "${enriched.title}" (TMDB: ${tmdbId})`);
 
-        // Add delay to avoid rate limiting Jellyseerr
-        await new Promise(resolve => setTimeout(resolve, 100));
-
       } catch (itemError: any) {
         result.failed++;
         const errorMsg = `Failed to process "${item.Name}": ${itemError.message}`;
         result.errors.push(errorMsg);
         console.error(`[Sync] ${errorMsg}`);
       }
-    }
+    })));
 
     console.log(`[Sync] Complete: ${result.new} new, ${result.skipped} skipped, ${result.failed} failed`);
     return result;
