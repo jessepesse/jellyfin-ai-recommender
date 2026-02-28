@@ -6,6 +6,36 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-02-28
+
+### 🔒 Security (P0)
+
+- **Path Traversal:** Sanitized `filename` parameter in `/api/images/:filename` to reject `..` sequences and absolute paths, preventing directory traversal out of the image directory.
+- **SSRF via Image Proxy:** Validated proxy target URLs through `sanitizeUrl()` before issuing requests; added `X-Content-Type-Options: nosniff` and stripped forwarded `Cookie`/`Authorization` headers from proxied responses.
+- **Stored XSS via `Content-Disposition`:** Replaced raw `username` interpolation in attachment filenames with `encodeURIComponent`, eliminating header-injection vectors on the export endpoint.
+- **Token Leakage in Logs:** Removed `x-access-token` from debug log output across sync and settings routes.
+
+### 🏗️ Architecture (P1–P2)
+
+- **Enrichment Queue (P1):** Bounded background enrichment to 3 concurrent Jellyseerr calls via `EnrichmentQueue`, preventing SQLite lock contention and request floods during large imports.
+- **Cache Stampede (P2):** Added in-flight `Promise` registry to `CacheService.getOrSet` — concurrent callers for the same key now join the existing fetch instead of launching duplicates.
+- **Import Concurrency (P2):** Added per-user `Set<string>` lock to `ImportService`; `POST /settings/import` returns HTTP 409 when an import is already active for the same user.
+- **Redundant API Calls (P2):** Extended `FullMediaDetails` to carry poster/backdrop URLs and metadata from the same Jellyseerr response — eliminated the parallel `getMediaDetails` call per recommendation candidate.
+- **N+1 DB Writes (P2):** Moved all secondary `prisma.media.update()` calls in `syncMediaItem` (image download + poster/metadata backfill) into a bounded `imageBackfillQueue(2)`; all updates collected in one object and applied with a single write per item.
+- **Dynamic Imports (P2):** Replaced three `await import()` calls inside the recommendation route handler with static top-of-file imports.
+- **Double Route Mounting (P2):** Extracted image proxy into named `proxyRouter` export; each router now mounted exactly once at its canonical path — duplicate `/`, `/user`, `/debug`, and second `/system` mounts removed.
+
+### 🔧 Code Quality (P3)
+
+- **Scheduler Timezone (P3):** Replaced hardcoded `Europe/Helsinki` with `SCHEDULER_TIMEZONE` env var, falling back to `TZ` then `UTC`. Active timezone logged at startup.
+- **Stale Config Cache (P3):** `saveConfig()` now invalidates the in-memory cache before the DB write, ensuring concurrent reads go to SQLite rather than re-populating stale data.
+- **Blocking Sleep in Sync (P3):** Removed per-item 100 ms `setTimeout` from `syncHistory`. Replaced sequential loop with `Promise.all + p-limit(5)` for concurrent Jellyseerr enrichment.
+- **Type Safety on `req.user` (P3):** Stripped `[key: string]: any` index signature from the Express `Request` augmentation — only the four declared properties remain, restoring strict compiler checks across all routes.
+
+### 📦 Dependencies
+
+- Added `p-limit@3.1.0` for bounded concurrency in sync history processing.
+
 ## [2.4.8] - 2026-02-27
 
 ### 🔒 Security
