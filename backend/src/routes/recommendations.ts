@@ -14,18 +14,20 @@ import { CacheService } from '../services/cache';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
 import { getAnchorItems, collectCandidateIds, buildAnchorContext, MOOD_KEYWORDS } from '../services/anchor-recommendations';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
 
 /**
  * GET /search - Search for media via Jellyseerr
+ * Identity sourced exclusively from req.user (set by authMiddleware).
  */
-router.get('/search', async (req, res) => {
+router.get('/search', authMiddleware, async (req, res) => {
     try {
         const q = req.query.query as string | undefined;
-        const userName = req.headers['x-user-name'] as string;
-        const userId = req.headers['x-user-id'] as string;
+        // Identity comes from the verified token, not from client-supplied headers.
+        const userName = req.user?.username;
 
         if (!q) return res.status(400).json({ error: 'Missing query parameter' });
 
@@ -33,8 +35,8 @@ router.get('/search', async (req, res) => {
         let mapped = (results || []).map(r => toFrontendItem(r)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
 
         // Filter out items already tracked by this user
-        if (userName || userId) {
-            const userData = await getUserData(userName || userId);
+        if (userName) {
+            const userData = await getUserData(userName);
             const existingIds = new Set<number>([
                 ...(userData.watchedIds || []),
                 ...(userData.watchlistIds || []),
@@ -54,18 +56,23 @@ router.get('/search', async (req, res) => {
 
 /**
  * GET /recommendations - AI-powered recommendations with buffer system
+ * Identity sourced exclusively from req.user (set by authMiddleware).
  */
-router.get('/recommendations', async (req, res) => {
+router.get('/recommendations', authMiddleware, async (req, res) => {
     const { libraryId, type, genre, mood } = req.query;
+    // x-access-token is still read for Jellyfin API calls (it IS the bearer credential).
+    // Identity (username, Jellyfin user ID) comes from req.user — verified by authMiddleware.
     const accessToken = req.headers['x-access-token'] as string;
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
     const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 
-    if (!accessToken || !userId) {
-        return res.status(401).json({ error: 'Unauthorized: Access token or User ID missing' });
+    if (!accessToken || !req.user) {
+        return res.status(401).json({ error: 'Unauthorized: Valid authentication required' });
     }
+
+    // Derive identity from the verified token — never from client-supplied headers.
+    const userId = req.user.jellyfinUserId ?? String(req.user.id);
+    const userName = req.user.username;
 
     try {
         // Prevent browser caching for recommendations to ensure refresh works

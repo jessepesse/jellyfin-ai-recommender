@@ -86,12 +86,12 @@ const generalLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
-  // Skip rate limiting for read-only system endpoints (status checks, config reads)
+  // Skip rate limiting only for truly public, read-only health/status endpoints.
+  // NOTE: /system/setup-defaults is intentionally excluded — it now requires admin
+  //       auth and must be rate-limited like any other authenticated endpoint.
   skip: (req) => {
     const readOnlyPaths = [
       '/system/status',
-      '/system/setup-defaults',
-      '/system/config-editor',
       '/health',
     ];
     return readOnlyPaths.some(path => req.path.includes(path)) && req.method === 'GET';

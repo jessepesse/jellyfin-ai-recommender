@@ -111,22 +111,13 @@ apiClient.interceptors.response.use(
 
 function authHeaders() {
     const token = localStorage.getItem('jellyfin_token');
-    const user = localStorage.getItem('jellyfin_user');
     const server = localStorage.getItem('jellyfin_server');
-    const isAdmin = localStorage.getItem('jellyfin_isAdmin');
     const headers: Record<string, string> = {};
+    // Only send the bearer token and the Jellyfin server URL.
+    // Identity (username, user ID, admin status) is derived server-side from the
+    // verified token via authMiddleware — never trusted from client-supplied headers.
     if (token) headers['x-access-token'] = token;
     if (server) headers['x-jellyfin-url'] = server;
-    if (isAdmin) headers['x-is-admin'] = isAdmin;
-    if (user) {
-        try {
-            const parsed = JSON.parse(user);
-            if (parsed.id) headers['x-user-id'] = parsed.id;
-            if (parsed.name) headers['x-user-name'] = parsed.name;
-        } catch {
-            // ignore
-        }
-    }
     return { headers };
 }
 

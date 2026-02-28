@@ -5,14 +5,19 @@
 import { Router, Request, Response } from 'express';
 import importService from '../services/import';
 import { exportUserData, exportAllUsersData } from '../services/export';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
 /**
  * GET /settings/import/progress/:username - SSE endpoint for import progress
+ * The authenticated user may only poll their own import progress.
  */
-router.get('/import/progress/:username', (req, res) => {
-    const { username } = req.params;
+router.get('/import/progress/:username', authMiddleware, (req, res) => {
+    // Enforce that users can only observe their own import job.
+    const username = req.user?.username;
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
+    if (username !== req.params.username) return res.status(403).json({ error: 'Forbidden' });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -50,14 +55,14 @@ router.get('/import/progress/:username', (req, res) => {
 
 /**
  * POST /settings/import - Import legacy database.json
+ * Identity sourced exclusively from req.user (set by authMiddleware).
  */
-router.post('/import', async (req, res) => {
+router.post('/import', authMiddleware, async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
-        const token = req.headers['x-access-token'] as string | undefined;
+        // Identity comes from the verified token — never from client-supplied headers.
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const token = req.headers['x-access-token'] as string | undefined;
 
         const payload = req.body;
         let parsed: any = payload;
@@ -69,10 +74,9 @@ router.post('/import', async (req, res) => {
             }
         }
 
-        const username = userName || userId;
+        const username = req.user.username;
 
-        // codeql[js/tainted-format-string] - False positive: values are in template literal, not printf-style format
-        console.log(`[Import] Username for progress tracking: "${username}" (userName: "${userName}", userId: "${userId}")`);
+        console.log(`[Import] Username for progress tracking: "${username}"`);
         console.log(`[Import] Received payload keys:`, Object.keys(parsed || {}));
         console.log(`[Import] Parsed.data keys:`, parsed?.data ? Object.keys(parsed.data) : 'no data key');
         console.log(`[Import] Direct movies array:`, Array.isArray(parsed?.movies) ? parsed.movies.length : 'not array');
@@ -117,19 +121,19 @@ router.post('/import', async (req, res) => {
  * GET /settings/export - Export database to JSON
  * Admins: Export all users' data
  * Non-admins: Export only their own data
+ * Identity and admin status sourced exclusively from req.user (set by authMiddleware).
  */
-router.get('/export', async (req, res) => {
+router.get('/export', authMiddleware, async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
-        const isAdmin = req.headers['x-is-admin'] === 'true';
         const token = req.headers['x-access-token'] as string | undefined;
 
-        if (!userId || !token) {
+        // Identity and privilege come from the verified token — never from client headers.
+        if (!req.user || !token) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        const username = userName || userId;
+        const username = req.user.username;
+        const isAdmin = req.user.isSystemAdmin;
 
         let exportData;
         let filename;
