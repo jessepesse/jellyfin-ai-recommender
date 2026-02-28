@@ -9,7 +9,8 @@ import { getUserData, getFullWatchlist } from '../services/data';
 import prisma from '../services/data';
 import { GeminiService } from '../services/gemini';
 import { TasteService } from '../services/taste';
-import { search as jellySearch, Enriched, getMediaDetails } from '../services/jellyseerr';
+import { search as jellySearch, Enriched, getFullDetails, searchAndEnrich } from '../services/jellyseerr';
+import { extractTmdbIds } from '../services/jellyfin-normalizer';
 import { CacheService } from '../services/cache';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
@@ -122,7 +123,6 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
             jellyfinAvailable = false;
         }
 
-        const { extractTmdbIds } = await import('../services/jellyfin-normalizer');
         const historyTmdbIds = extractTmdbIds(history);
 
         // Try to get owned IDs, but continue if it fails
@@ -171,7 +171,6 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
         }
 
         const filters = { type: type as string | undefined, genre: genre as string | undefined, mood: req.query.mood as string | undefined };
-        const { searchAndEnrich } = await (async () => await import('../services/jellyseerr'))();
 
         // Buffer-based fetch
         const TARGET_COUNT = 10;
@@ -273,7 +272,6 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
 
             // Fetch details for candidates (limit to 50 to allow for filtering)
             const candidateType: 'movie' | 'tv' = filters.type === 'tv' ? 'tv' : 'movie';
-            const { getFullDetails } = await import('../services/jellyseerr');
 
             // Phase 1: Collect all matching candidates with their details
             const candidatesForRanking: Array<{
@@ -294,6 +292,9 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                 }
 
                 try {
+                    // getFullDetails now returns all basic Enriched fields (title, overview,
+                    // voteAverage, posterUrl, etc.) from the same API call — no separate
+                    // getMediaDetails() needed, halving Jellyseerr requests per candidate.
                     const fullDetails = await getFullDetails(tmdbId, candidateType);
                     if (!fullDetails) continue;
 
@@ -309,10 +310,6 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                         }
                     }
 
-                    // Get basic details first for overview check
-                    const details = await getMediaDetails(tmdbId, candidateType);
-                    if (!details || !details.tmdb_id) continue;
-
                     // Filter by mood keywords if specified
                     if (moodFilter && MOOD_KEYWORDS[moodFilter]) {
                         const moodKeywords = MOOD_KEYWORDS[moodFilter];
@@ -324,28 +321,28 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                         );
 
                         // Also check overview for mood match as fallback
-                        const overviewLower = (details.overview || '').toLowerCase();
+                        const overviewLower = (fullDetails.overview || '').toLowerCase();
                         const hasOverviewMatch = moodKeywords.some(mk => overviewLower.includes(mk.toLowerCase()));
 
                         if (!hasMatchingKeyword && !hasOverviewMatch) {
                             // Only skip if we already have some candidates
                             if (candidatesForRanking.length >= 10) {
-                                console.debug(`[Anchor] MOOD SKIP: "${details.title}" - no keywords match mood "${moodFilter}"`);
+                                console.debug(`[Anchor] MOOD SKIP: "${fullDetails.title}" - no keywords match mood "${moodFilter}"`);
                                 continue;
                             }
                         } else {
-                            console.debug(`[Anchor] MOOD MATCH: "${details.title}" matches mood "${moodFilter}"`);
+                            console.debug(`[Anchor] MOOD MATCH: "${fullDetails.title}" matches mood "${moodFilter}"`);
                         }
                     }
 
                     candidatesForRanking.push({
-                        tmdbId: details.tmdb_id,
-                        title: details.title,
+                        tmdbId: fullDetails.tmdb_id,
+                        title: fullDetails.title,
                         genres: fullDetails.genres,
-                        overview: details.overview,
-                        voteAverage: details.voteAverage,
+                        overview: fullDetails.overview,
+                        voteAverage: fullDetails.voteAverage,
                     });
-                    console.debug(`[Anchor] CANDIDATE: "${details.title}" [${fullDetails.genres.slice(0, 2).join(', ')}] ⭐${details.voteAverage?.toFixed(1) || 'N/A'}`);
+                    console.debug(`[Anchor] CANDIDATE: "${fullDetails.title}" [${fullDetails.genres.slice(0, 2).join(', ')}] ⭐${fullDetails.voteAverage?.toFixed(1) || 'N/A'}`);
                     await new Promise(resolve => setTimeout(resolve, 25));
                 } catch (e) {
                     // Skip failed fetches
@@ -378,10 +375,10 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                     const candidate = candidatesForRanking.find(c => c.tmdbId === ranked.tmdbId);
                     if (!candidate) continue;
 
-                    // Fetch full enriched data for the approved item
-                    const details = await getMediaDetails(ranked.tmdbId, candidateType);
-                    if (details && details.tmdb_id && !buffer.find(b => Number(b.tmdb_id) === ranked.tmdbId)) {
-                        buffer.push(details);
+                    // getFullDetails is already cached from Phase 1 — no new network call
+                    const fullDetails = await getFullDetails(ranked.tmdbId, candidateType);
+                    if (fullDetails && fullDetails.tmdb_id && !buffer.find(b => Number(b.tmdb_id) === ranked.tmdbId)) {
+                        buffer.push(fullDetails);
                         excludedIds.add(ranked.tmdbId);
                         console.log(`[Anchor+Gemini] ACCEPT: "${ranked.title}" - ${ranked.reason}`);
                     }

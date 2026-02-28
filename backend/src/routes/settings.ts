@@ -76,6 +76,12 @@ router.post('/import', authMiddleware, async (req, res) => {
 
         const username = req.user.username;
 
+        // Reject a second concurrent import for the same user — avoids progress
+        // map races and silent overwrites when the client double-submits.
+        if (importService.isActive(username)) {
+            return res.status(409).json({ error: 'An import is already in progress for this user' });
+        }
+
         console.log(`[Import] Username for progress tracking: "${username}"`);
         console.log(`[Import] Received payload keys:`, Object.keys(parsed || {}));
         console.log(`[Import] Parsed.data keys:`, parsed?.data ? Object.keys(parsed.data) : 'no data key');

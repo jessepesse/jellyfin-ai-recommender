@@ -14,6 +14,12 @@ import prisma from '../db';
 const router = Router();
 
 // ---------------------------------------------------------------------------
+// Image Proxy (exported separately so api.ts can mount it at /proxy without
+// also creating alias paths for the system-management routes below)
+// ---------------------------------------------------------------------------
+export const proxyRouter = Router();
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -49,7 +55,7 @@ async function bootstrapOrAdmin(req: Request, res: Response, next: NextFunction)
 // ---------------------------------------------------------------------------
 
 /**
- * GET /proxy/image
+ * GET /image  (mounted by api.ts at /proxy → canonical path: /api/proxy/image)
  * Routes images through the backend to avoid 403s from Jellyseerr.
  *
  * SSRF mitigations:
@@ -58,7 +64,7 @@ async function bootstrapOrAdmin(req: Request, res: Response, next: NextFunction)
  *   - Any absolute URL for a different host is validated with an async DNS lookup
  *     that rejects RFC 1918 / link-local / loopback destinations.
  */
-router.get('/proxy/image', async (req, res) => {
+proxyRouter.get('/image', async (req, res) => {
     try {
         const imagePath = req.query.path as string;
         const type = (req.query.type as string) || 'poster';

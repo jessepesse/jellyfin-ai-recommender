@@ -29,6 +29,13 @@ const cache = new NodeCache({
   useClones: false, // Return references for better performance
 });
 
+// In-flight request registry: maps a full cache key to the promise currently
+// computing its value.  Concurrent callers that see a cache miss for the same
+// key will join the existing promise instead of launching duplicate fetchers,
+// eliminating the cache-stampede problem under high concurrency.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const inFlight = new Map<string, Promise<any>>();
+
 /**
  * Get TTL for a specific namespace
  */
@@ -129,7 +136,11 @@ export const CacheService = {
   },
 
   /**
-   * Get or set pattern - fetch from cache or compute and cache
+   * Get or set pattern - fetch from cache or compute and cache.
+   *
+   * Stampede prevention: if a fetch for `key` is already in progress, the
+   * caller awaits the existing promise rather than starting a second fetcher.
+   * This is safe for Node.js's single-threaded event loop.
    */
   async getOrSet<T>(
     namespace: CacheNamespace,
@@ -142,9 +153,27 @@ export const CacheService = {
       return cached;
     }
 
-    const value = await fetcher();
-    this.set(namespace, key, value, customTTL);
-    return value;
+    const fullKey = buildKey(namespace, key);
+
+    // Join an existing in-flight fetch for this key rather than duplicating it
+    const existing = inFlight.get(fullKey);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+
+    const promise = fetcher()
+      .then(value => {
+        this.set(namespace, key, value, customTTL);
+        inFlight.delete(fullKey);
+        return value;
+      })
+      .catch(err => {
+        inFlight.delete(fullKey);
+        throw err;
+      });
+
+    inFlight.set(fullKey, promise);
+    return promise;
   },
 };
 

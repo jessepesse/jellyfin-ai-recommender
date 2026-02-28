@@ -459,9 +459,24 @@ export async function getRecommendations(tmdbId: number, mediaType: 'movie' | 't
 }
 
 /**
- * Full details response type with enriched metadata
+ * Full details response type with enriched metadata.
+ *
+ * Includes all basic Enriched fields (title, overview, etc.) extracted from the
+ * same Jellyseerr/TMDB endpoint call, so callers no longer need a separate
+ * getMediaDetails() call for the same tmdbId — halving Jellyseerr API load.
  */
 export type FullMediaDetails = {
+  // Basic item fields (same source endpoint as getMediaDetails — no extra call)
+  tmdb_id: number;
+  media_type: 'movie' | 'tv';
+  title: string;
+  overview?: string;
+  voteAverage?: number;
+  language?: string;
+  releaseDate?: string;
+  posterUrl?: string;
+  backdropUrl?: string;
+  // Enriched-only fields
   genres: string[];  // TMDB genre names: ["Science Fiction", "Action"]
   keywords: string[];
   director?: string;
@@ -521,6 +536,12 @@ export async function getFullDetails(tmdbId: number, mediaType: 'movie' | 'tv'):
     // Extract tagline
     const tagline = data.tagline || undefined;
 
+    // Extract basic Enriched fields — same response, no extra HTTP call needed
+    const partialPath = data.posterPath || data.poster_path || data.poster || undefined;
+    const backdropPartial = data.backdropPath || data.backdrop_path || data.backdrop || undefined;
+    const posterUrl = await constructPosterUrl(partialPath);
+    const backdropUrl = await constructBackdropUrl(backdropPartial);
+
     // Fetch similar and recommendations in parallel
     const [similar, recommendations] = await Promise.all([
       getSimilar(tmdbId, mediaType),
@@ -528,6 +549,17 @@ export async function getFullDetails(tmdbId: number, mediaType: 'movie' | 'tv'):
     ]);
 
     const result: FullMediaDetails = {
+      // Basic fields (replaces a separate getMediaDetails() call for the same id)
+      tmdb_id: tmdbId,
+      media_type: mediaType,
+      title: data.title || data.name || data.originalTitle || data.original_name || '',
+      overview: data.overview || data.plot || data.synopsis || undefined,
+      voteAverage: data.voteAverage ?? data.vote_average ?? data.rating ?? undefined,
+      language: data.originalLanguage ?? data.language ?? undefined,
+      releaseDate: data.releaseDate || data.firstAirDate || data.release_date || data.first_air_date || undefined,
+      posterUrl: posterUrl ?? undefined,
+      backdropUrl: backdropUrl ?? undefined,
+      // Enriched-only fields
       genres,
       keywords,
       director,

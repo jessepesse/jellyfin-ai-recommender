@@ -35,6 +35,7 @@ class EnrichmentQueue {
 }
 
 const enrichmentQueue = new EnrichmentQueue(3);
+const imageBackfillQueue = new EnrichmentQueue(2);
 
 function parseTmdbId(item: MediaItemInput | null | undefined): number | null {
   const raw = item?.tmdbId ?? item?.tmdb_id ?? item?.media_id ?? item?.id ?? null;
@@ -102,82 +103,69 @@ export async function syncMediaItem(item: MediaItemInput) {
     create: createData,
   });
 
-  // Download and cache images locally to prevent broken links
-  try {
-    const needsPosterDownload = posterUrl && (posterUrl.startsWith('http') || posterUrl.startsWith('/api/proxy'));
-    const needsBackdropDownload = backdropUrl && (backdropUrl.startsWith('http') || backdropUrl.startsWith('/api/proxy'));
+  // Snapshot values needed by the queued task before returning
+  const mediaId = media.id;
+  const capturedPosterUrl = media.posterUrl;
 
-    if (needsPosterDownload || needsBackdropDownload) {
-      const localImages = await ImageService.downloadMediaImages(
-        tmdbId,
-        validType,
-        posterUrl,
-        backdropUrl
-      );
+  // Defer all secondary writes (image downloads + poster/metadata backfill) to a
+  // bounded queue so the hot sync path returns immediately after the upsert.
+  // All updates are collected in a single object and applied with ONE update call.
+  imageBackfillQueue.add(async () => {
+    const updates: Record<string, unknown> = {};
 
-      // Update database with local image paths (posterUrl/backdropUrl)
-      // Keep posterSourceUrl/backdropSourceUrl as original URLs for fallback
-      const imageUpdate: any = {};
-      if (localImages.posterUrl && localImages.posterUrl !== posterUrl) {
-        imageUpdate.posterUrl = localImages.posterUrl; // Update to local path
-        media.posterUrl = localImages.posterUrl;
-        console.log(`[syncMediaItem] Updating posterUrl: ${posterUrl} -> ${localImages.posterUrl}`);
-      }
-      if (localImages.backdropUrl && localImages.backdropUrl !== backdropUrl) {
-        imageUpdate.backdropUrl = localImages.backdropUrl; // Update to local path
-        media.backdropUrl = localImages.backdropUrl;
-        console.log(`[syncMediaItem] Updating backdropUrl: ${backdropUrl} -> ${localImages.backdropUrl}`);
-      }
+    // 1. Download remote images to local paths
+    try {
+      const needsPosterDownload = posterUrl && (posterUrl.startsWith('http') || posterUrl.startsWith('/api/proxy'));
+      const needsBackdropDownload = backdropUrl && (backdropUrl.startsWith('http') || backdropUrl.startsWith('/api/proxy'));
 
-      if (Object.keys(imageUpdate).length > 0) {
-        await prisma.media.update({ where: { id: media.id }, data: imageUpdate });
-        console.log(`[syncMediaItem] Database updated with local image paths for tmdbId ${tmdbId}`);
-      }
-    }
-  } catch (error) {
-    console.warn(`[syncMediaItem] Failed to download images for tmdbId ${tmdbId}:`, error);
-    // Continue without failing the entire sync
-  }
-
-  // If posterUrl is missing in DB but available from incoming item or Jellyseerr, try to persist it
-  try {
-    if ((!media.posterUrl || media.posterUrl === null) && (item?.posterUrl || validTitle)) {
-      // Prefer incoming posterUrl
-      const incomingPoster = item?.posterUrl ?? item?.poster_url ?? item?.poster_path ?? null;
-      if (incomingPoster) {
-        await prisma.media.update({ where: { id: media.id }, data: { posterUrl: incomingPoster } });
-        media.posterUrl = incomingPoster;
-      } else if (item?.title) {
-        // Attempt to search Jellyseerr for a poster
-        try {
-          const candidates = await jellySearch(validTitle);
-          if (Array.isArray(candidates) && candidates.length > 0) {
-            const first = candidates.find(c => c.tmdb_id && Number(c.tmdb_id) === tmdbId) || candidates[0];
-            const poster = first.posterUrl ?? null;
-            if (poster) {
-              await prisma.media.update({ where: { id: media.id }, data: { posterUrl: poster } });
-              media.posterUrl = poster;
-            }
-            // Backfill other rich fields from Jellyseerr candidate when available
-            const toUpdate: any = {};
-            if (first.overview) toUpdate.overview = first.overview;
-            if (first.backdropUrl) toUpdate.backdropUrl = first.backdropUrl;
-            if (first.voteAverage !== undefined && first.voteAverage !== null) toUpdate.voteAverage = Number(first.voteAverage);
-            if (first.language) toUpdate.language = String(first.language);
-            if (Object.keys(toUpdate).length > 0) {
-              await prisma.media.update({ where: { id: media.id }, data: toUpdate });
-              Object.assign(media, toUpdate);
-            }
-          }
-        } catch (inner) {
-          // swallow search errors but log
-          console.warn('Jellyseerr search failed during poster backfill for', validTitle, inner);
+      if (needsPosterDownload || needsBackdropDownload) {
+        const localImages = await ImageService.downloadMediaImages(tmdbId, validType, posterUrl, backdropUrl);
+        if (localImages.posterUrl && localImages.posterUrl !== posterUrl) {
+          updates.posterUrl = localImages.posterUrl;
+          console.log(`[syncMediaItem] Updating posterUrl: ${posterUrl} -> ${localImages.posterUrl}`);
+        }
+        if (localImages.backdropUrl && localImages.backdropUrl !== backdropUrl) {
+          updates.backdropUrl = localImages.backdropUrl;
+          console.log(`[syncMediaItem] Updating backdropUrl: ${backdropUrl} -> ${localImages.backdropUrl}`);
         }
       }
+    } catch (error) {
+      console.warn(`[syncMediaItem] Failed to download images for tmdbId ${tmdbId}:`, error);
     }
-  } catch (e) {
-    console.warn('Failed to persist posterUrl for media', tmdbId, e);
-  }
+
+    // 2. Backfill missing poster/metadata (skip if image download already set posterUrl)
+    const effectivePosterUrl = (updates.posterUrl as string | undefined) ?? capturedPosterUrl;
+    try {
+      if (!effectivePosterUrl) {
+        const incomingPoster = item?.posterUrl ?? item?.poster_url ?? item?.poster_path ?? null;
+        if (incomingPoster) {
+          updates.posterUrl = incomingPoster;
+        } else if (item?.title) {
+          try {
+            const candidates = await jellySearch(validTitle);
+            if (Array.isArray(candidates) && candidates.length > 0) {
+              const first = candidates.find(c => c.tmdb_id && Number(c.tmdb_id) === tmdbId) || candidates[0];
+              if (first.posterUrl) updates.posterUrl = first.posterUrl;
+              if (first.overview && !('overview' in updates)) updates.overview = first.overview;
+              if (first.backdropUrl && !('backdropUrl' in updates)) updates.backdropUrl = first.backdropUrl;
+              if (first.voteAverage != null && !('voteAverage' in updates)) updates.voteAverage = Number(first.voteAverage);
+              if (first.language && !('language' in updates)) updates.language = String(first.language);
+            }
+          } catch (inner) {
+            console.warn('Jellyseerr search failed during poster backfill for', validTitle, inner);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to persist posterUrl for media', tmdbId, e);
+    }
+
+    // Single consolidated write — replaces up to 4 separate update() calls per item
+    if (Object.keys(updates).length > 0) {
+      await prisma.media.update({ where: { id: mediaId }, data: updates });
+      console.log(`[syncMediaItem] Backfill update applied for tmdbId ${tmdbId} (${Object.keys(updates).join(', ')})`);
+    }
+  });
 
   return media;
 }

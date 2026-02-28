@@ -59,9 +59,16 @@ export interface ImportProgress {
 
 export class ImportService {
   private progressMap = new Map<string, ImportProgress>();
+  // Per-user lock: prevents concurrent imports for the same user from racing
+  // and silently overwriting each other's progress state.
+  private readonly activeImports = new Set<string>();
 
   getProgress(username: string): ImportProgress | null {
     return this.progressMap.get(username) || null;
+  }
+
+  isActive(username: string): boolean {
+    return this.activeImports.has(username);
   }
 
   private updateProgress(username: string, update: Partial<ImportProgress>) {
@@ -147,6 +154,9 @@ export class ImportService {
   // jsonData is parsed object (not raw string) representing legacy database.json
   async processImport(username: string, jsonData: ImportPayload, accessToken?: string) {
     if (!username) throw new Error('username required');
+    // Acquire per-user lock; cleared in finally so background imports release it too
+    this.activeImports.add(username);
+    try {
     const user = await prisma.user.upsert({ where: { username }, create: { username }, update: {} });
     // Unwrap if payloads are nested under `data` (legacy export format)
     const payload: ImportPayload = (jsonData && typeof jsonData === 'object' && jsonData.data) ? jsonData.data : jsonData;
@@ -253,6 +263,9 @@ export class ImportService {
     console.log(`[Import] Complete: ${imported} imported, ${skipped} skipped, ${errors.length} errors`);
     this.completeProgress(username);
     return { total, skipped, imported, errors };
+    } finally {
+      this.activeImports.delete(username);
+    }
   }
 }
 
