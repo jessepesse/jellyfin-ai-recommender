@@ -5,6 +5,37 @@ import { MediaItem, MediaUpdateData, MediaCreateData, MediaItemInput } from '../
 import prisma from '../db';
 import { enrichMedia } from './enrichment';
 
+// Bounded concurrency queue for background enrichment.
+// Prevents thousands of concurrent Jellyseerr requests and SQLite write conflicts
+// during large imports by limiting enrichment to CONCURRENCY tasks at once.
+class EnrichmentQueue {
+  private running = 0;
+  private readonly concurrency: number;
+  private readonly pending: Array<() => void> = [];
+
+  constructor(concurrency: number) {
+    this.concurrency = concurrency;
+  }
+
+  add(task: () => Promise<void>): void {
+    const run = () => {
+      this.running++;
+      task().finally(() => {
+        this.running--;
+        const next = this.pending.shift();
+        if (next) next();
+      });
+    };
+    if (this.running < this.concurrency) {
+      run();
+    } else {
+      this.pending.push(run);
+    }
+  }
+}
+
+const enrichmentQueue = new EnrichmentQueue(3);
+
 function parseTmdbId(item: MediaItemInput | null | undefined): number | null {
   const raw = item?.tmdbId ?? item?.tmdb_id ?? item?.media_id ?? item?.id ?? null;
   if (raw === undefined || raw === null) return null;
@@ -179,10 +210,12 @@ export async function updateMediaStatus(username: string, item: MediaItemInput, 
     update: { status: statusVal },
   });
 
-  // Async enrichment: fetch keywords, credits, similar, recommendations in background
-  // Don't await - let user action complete immediately
-  enrichMedia(media.id).catch((err) => {
-    console.warn(`[Enrichment] Background enrichment failed for media ${media.id}:`, err?.message || err);
+  // Schedule enrichment through bounded queue — max 3 concurrent enrichment tasks.
+  // Prevents SQLite lock contention and Jellyseerr request floods during imports.
+  enrichmentQueue.add(async () => {
+    await enrichMedia(media.id).catch((err) => {
+      console.warn(`[Enrichment] Background enrichment failed for media ${media.id}:`, err?.message || err);
+    });
   });
 
   return upserted;

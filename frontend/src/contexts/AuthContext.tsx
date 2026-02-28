@@ -1,6 +1,7 @@
-import { createContext, useState, useContext } from 'react';
+import { createContext, useState, useContext, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import axios from 'axios';
+import { getMe } from '../services/api';
 
 // Define the shape of the Jellyfin user returned by our backend
 interface User {
@@ -46,6 +47,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return !!(localStorage.getItem('jellyfin_token') && localStorage.getItem('jellyfin_user'));
   });
+
+  // On mount and whenever authentication state changes, refresh admin status from the
+  // server so that UI gating is based on a verified token, not a mutable localStorage value.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    getMe()
+      .then(me => {
+        setUser(prev => prev ? { ...prev, isAdmin: me.isAdmin } : prev);
+      })
+      .catch(() => {
+        // Network failure or invalid token — leave the localStorage-seeded value in place;
+        // the backend will still reject any admin-level API calls.
+      });
+  }, [isAuthenticated]);
 
   const logout = () => {
     setUser(null);

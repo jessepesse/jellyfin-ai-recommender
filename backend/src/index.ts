@@ -104,6 +104,8 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // GET /auth/me is a benign identity poll — skip strict login rate-limit for it
+  skip: (req) => req.method === 'GET' && req.path === '/me',
 });
 
 const recommendationLimiter = rateLimit({

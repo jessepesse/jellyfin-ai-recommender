@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ItemList from './ItemList';
 import type { JellyfinItem } from '../types';
 import { getRecommendations } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import WatchlistView from './WatchlistView';
 import ManualSearchView from './ManualSearchView';
 import SettingsView from './SettingsView';
@@ -36,6 +37,7 @@ interface Props {
 }
 
 const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
+  const { user } = useAuth();
   const [selectedType, setSelectedType] = useState<'movie' | 'tv'>('movie');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -169,7 +171,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
           {currentView === 'watchlist' && <WatchlistView />}
           {(currentView === 'search' || currentView === 'mark-watched') && <ManualSearchView />}
           {currentView === 'settings' && (
-            localStorage.getItem('jellyfin_isAdmin') === 'true' ? (
+            user?.isAdmin ? (
               <SettingsView />
             ) : (
               <div className="flex items-center justify-center min-h-[60vh]">

@@ -345,3 +345,8 @@ export const postChangePassword = async (payload: { newPassword: string; confirm
     const response = await apiClient.post('/user/change-password', payload, authHeaders());
     return response.data;
 };
+
+export const getMe = async (): Promise<{ id: number; username: string; isAdmin: boolean }> => {
+    const response = await apiClient.get('/auth/me', authHeaders());
+    return response.data;
+};

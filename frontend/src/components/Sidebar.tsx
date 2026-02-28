@@ -29,8 +29,8 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
   const { user, logout } = useAuth();
   const [showStats, setShowStats] = useState(false);
 
-  // Check if user is admin
-  const isAdmin = localStorage.getItem('jellyfin_isAdmin') === 'true';
+  // Admin status sourced from server-verified context, not mutable localStorage
+  const isAdmin = user?.isAdmin ?? false;
 
   // Filter nav items based on admin status
   const visibleNavItems = navItems.filter(item => {

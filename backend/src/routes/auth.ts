@@ -8,6 +8,7 @@ import prisma from '../db';
 import { verifyPassword, hashPassword } from '../utils/password';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
+import { authMiddleware } from '../middleware/auth';
 
 const authRouter = Router();
 const authService = new AuthService();
@@ -136,6 +137,20 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
         // Generic error message for other issues
         res.status(500).json({ success: false, message: 'An unexpected error occurred during authentication.' } as LoginResponse);
     }
+});
+
+/**
+ * GET /api/auth/me
+ * Returns server-verified identity and admin status for the authenticated caller.
+ * Used by the frontend to refresh admin state without relying on localStorage.
+ */
+authRouter.get('/me', authMiddleware, (req: Request, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    return res.json({
+        id: req.user.id,
+        username: req.user.username,
+        isAdmin: req.user.isSystemAdmin,
+    });
 });
 
 export default authRouter;

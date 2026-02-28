@@ -67,8 +67,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
             const tokenPayload = token.substring(6); // remove "local:"
             try {
                 const decoded = Buffer.from(tokenPayload, 'base64').toString('utf8');
-                const [payload, signature] = decoded.split(':'); // payload is "userId:timestamp"
-                const [userIdStr, timestampStr] = payload.split(':');
+                const parts = decoded.split(':');
+                const signature = parts.pop()!;          // last segment = hmac
+                const payload = parts.join(':');         // "userId:timestamp"
+                const [userIdStr, timestampStr] = parts;
 
                 const userId = parseInt(userIdStr);
                 const timestamp = parseInt(timestampStr);
@@ -126,14 +128,14 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
             // Check if local user still exists/valid
             const user = await prisma.user.findUnique({ where: { id: cached.userId } });
-            if (user) {
-                req.user = {
-                    id: user.id,
-                    username: user.username,
-                    isSystemAdmin: user.isSystemAdmin, // Refresh admin status from DB
-                    jellyfinUserId: cached.jellyfinUserId
-                };
-            }
+            // Guard: user deleted from DB while token is still cached (ghost-session bypass)
+            if (!user) return res.status(401).json({ error: 'Unauthorized' });
+            req.user = {
+                id: user.id,
+                username: user.username,
+                isSystemAdmin: user.isSystemAdmin, // Refresh admin status from DB
+                jellyfinUserId: cached.jellyfinUserId
+            };
             return next();
         }
 
