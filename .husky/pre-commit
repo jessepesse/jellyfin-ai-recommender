@@ -1,1 +1,2 @@
+npm --prefix frontend run lint
 npm test
