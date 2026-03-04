@@ -6,6 +6,26 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-03-04
+
+### 🐛 Bug Fixes
+
+- **Login broken after auth hardening (critical):** The 2.5.0 security fix removed `x-user-name`/`x-user-id` from `authHeaders()` to prevent client-supplied identity spoofing — but the backend routes still read those headers to identify the user. All protected routes now use `authMiddleware` + `req.user` exclusively. Affected routes: `blocked`, `actions`, `weekly-watchlist`, `trending`, `stats`, `sync`, `user`.
+- **Login error message hidden:** Login failures always showed "Login failed. Please check your credentials." regardless of the actual error. `AuthContext.login()` now throws with the real backend message; `Login.tsx` displays it directly.
+- **`/api/user/watchlist` returning 404:** Route was defined as `/watchlist` in `user.ts` but mounted at `/` in `api.ts`, making it accessible at `/api/watchlist` instead of `/api/user/watchlist`. Same issue affected `/user/change-password`.
+- **Empty `serverUrl` rejected by validator:** `express-validator`'s `.optional()` only skips `undefined`, not empty string. Changed to `.optional({ values: 'falsy' })` so the login form works when no custom server URL is entered.
+
+### 🤖 AI Models
+
+- Removed deprecated Gemini 2.5 preview models from all dropdowns.
+- Default model changed to `gemini-3.1-flash-lite-preview` (faster, cost-efficient, supports thinking).
+- Available models: Flash Lite (default), Flash, Pro.
+
+### 🔧 Infrastructure
+
+- Added unified `github-release.yml` workflow: runs tests → builds Docker images → creates GitHub Release on `v*` tag push.
+- Added CodeQL suppression comments for `api_key` query parameter (Jellyfin protocol compatibility) and HMAC token signing.
+
 ## [2.5.0] - 2026-02-28
 
 ### 🔒 Security (P0)

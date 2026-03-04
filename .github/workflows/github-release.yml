@@ -1,0 +1,196 @@
+# Unified release workflow
+# Triggered by a version tag push (e.g. v2.5.0, v2.5.0-beta)
+#
+# Jobs (sequential):
+#   1. test    – full lint + tsc + unit tests (same gates as test.yml)
+#   2. release – build + push Docker images to GHCR, create GitHub Release
+
+name: github-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ── 1. Gate: must pass before images are pushed ───────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        run: npm install --legacy-peer-deps
+        working-directory: ./backend
+
+      - name: Install frontend dependencies
+        run: npm install --legacy-peer-deps
+        working-directory: ./frontend
+
+      - name: Generate Prisma Client
+        run: DATABASE_URL="file:./prisma/dev.db" npx prisma generate
+        working-directory: ./backend
+
+      - name: TypeScript check (backend)
+        run: npx tsc --noEmit
+        working-directory: ./backend
+
+      - name: TypeScript check (frontend)
+        run: npx tsc --noEmit -p tsconfig.app.json
+        working-directory: ./frontend
+
+      - name: Backend unit tests
+        run: npm test
+        working-directory: ./backend
+
+      - name: Frontend unit tests
+        run: npm test
+        working-directory: ./frontend
+
+  # ── 2. Release: Docker push + GitHub Release ──────────────────────────────
+  release:
+    name: Release ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required to read annotated tag message
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          SEMVER="${TAG#v}"
+          # GHCR requires lowercase image names
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+
+          echo "tag=$TAG"           >> $GITHUB_OUTPUT
+          echo "semver=$SEMVER"     >> $GITHUB_OUTPUT
+          echo "repo_lc=$REPO_LC"  >> $GITHUB_OUTPUT
+
+          if [[ "$TAG" =~ -(alpha|beta|rc) ]]; then
+            echo "prerelease=true"  >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}-backend:latest
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}-backend:${{ steps.meta.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=Jellyfin AI Recommender – Backend
+            org.opencontainers.image.description=Backend API service (Node.js + Express + Prisma)
+            org.opencontainers.image.version=${{ steps.meta.outputs.semver }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}-frontend:latest
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}-frontend:${{ steps.meta.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=Jellyfin AI Recommender – Frontend
+            org.opencontainers.image.description=Frontend web application (React + Vite + Nginx)
+            org.opencontainers.image.version=${{ steps.meta.outputs.semver }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0
+
+      - name: Read annotated tag message
+        id: notes
+        run: |
+          MSG=$(git tag -l --format='%(contents)' "${{ steps.meta.outputs.tag }}")
+          [ -z "$MSG" ] && MSG="Release ${{ steps.meta.outputs.tag }}"
+          printf '%s' "$MSG" > /tmp/release_notes.md
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v8
+        env:
+          TAG:          ${{ steps.meta.outputs.tag }}
+          SEMVER:       ${{ steps.meta.outputs.semver }}
+          REPO_LC:      ${{ steps.meta.outputs.repo_lc }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs   = require('fs');
+            const tag  = process.env.TAG;
+            const repo = process.env.REPO_LC;
+            const isPrerelease = process.env.IS_PRERELEASE === 'true';
+
+            const tagNotes = fs.readFileSync('/tmp/release_notes.md', 'utf8').trim();
+
+            const body = [
+              tagNotes,
+              '',
+              '---',
+              '',
+              '### Docker images',
+              '```bash',
+              `docker pull ghcr.io/${repo}-backend:${tag}`,
+              `docker pull ghcr.io/${repo}-frontend:${tag}`,
+              '```',
+              '',
+              `**Commit:** ${context.sha}`,
+            ].join('\n');
+
+            try {
+              const { data } = await github.rest.repos.createRelease({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                tag_name:   tag,
+                name:       tag,
+                body,
+                draft:      false,
+                prerelease: isPrerelease,
+              });
+              core.info(`Release created: ${data.html_url}`);
+            } catch (err) {
+              if (err.status === 422) {
+                core.warning('Release already exists for this tag — skipping.');
+              } else {
+                throw err;
+              }
+            }

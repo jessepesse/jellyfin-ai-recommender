@@ -1,6 +1,6 @@
 {
   "name": "jellyfin-ai-recommender",
-  "version": "2.1.1",
+  "version": "2.5.1",
   "private": true,
   "description": "Monorepo scripts for frontend and backend development",
   "scripts": {
