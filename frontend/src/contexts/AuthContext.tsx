@@ -124,12 +124,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(response.data.message || 'Login failed. Please check your credentials.');
       }
     } catch (error: unknown) {
-      if (error instanceof Error && !(error as any).response) {
+      if (error instanceof Error && !('response' in error)) {
         throw error; // re-throw our own errors (already have clean messages)
       }
       const err = error as { response?: { data?: { message?: string } }; message?: string };
       const message = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
-      throw new Error(message);
+      throw new Error(message, { cause: error });
     }
   };
 
