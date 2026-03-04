@@ -105,6 +105,56 @@ return `${salt}:${hash}`;
 
 Code includes suppression comment: `lgtm[js/insufficient-password-hash]`
 
+---
+
+### Image Proxy SSRF Alert (#56)
+
+**Status:** False Positive — mitigated with three independent validation layers
+
+**Location:** `backend/src/routes/system.ts` (`proxyRouter.get('/image', ...)`)
+
+**CodeQL Alert:** "The URL of this request depends on a user-provided value" (Rule ID: `js/request-forgery`)
+
+**Why This Is A False Positive:**
+
+The `imagePath` query parameter passes through three independent guards before reaching `axios.get`:
+
+1. **Host equality check** — if the URL is absolute, its `URL.host` must exactly match the admin-configured Jellyseerr host extracted from `ConfigService`. A different host triggers layer 2.
+2. **`validateExternalUrl()`** — performs async DNS resolution on the destination hostname and rejects any address that resolves to RFC 1918 private ranges, link-local (`169.254.x.x`), or loopback addresses.
+3. **`validateSafeUrl()`** — final synchronous check: protocol allow-list (HTTP/HTTPS only) + blocklist of cloud metadata endpoints.
+
+Relative paths bypass layers 1–2 because they are concatenated onto the admin-configured base URL (never user-controlled), then pass through layer 3.
+
+CodeQL's static taint analysis cannot follow our custom sanitizer functions and therefore reports the final `axios.get` call as unsanitized.
+
+**Resolution:**
+
+Code includes suppression comment: `lgtm[js/request-forgery]`
+
+---
+
+### Sensitive GET Query Parameter Alert (#57)
+
+**Status:** False Positive — required for Jellyfin protocol compatibility
+
+**Location:** `backend/src/middleware/auth.ts` (token extraction)
+
+**CodeQL Alert:** "Route handler for GET requests uses query parameter as sensitive data" (Rule ID: `js/sensitive-get-query`)
+
+**Why This Is A False Positive:**
+
+The Jellyfin media server protocol requires clients to pass authentication tokens via `?api_key=` query parameter for certain request types (image requests, media stream URLs) where HTTP headers cannot be set by the client. This is a documented part of the Jellyfin API contract — removing it would break Jellyfin client compatibility.
+
+Mitigations applied to reduce the risk of token exposure:
+
+- The raw token is **never written to application logs** — only a SHA-256 HMAC of the token (keyed with a per-process secret) is stored in the token cache.
+- The token cache has a **5-minute TTL** (`NodeCache stdTTL: 300`).
+- Prefer headers (`X-Access-Token`, `X-Emby-Token`) over query params — the query param is the last fallback.
+
+**Resolution:**
+
+Code includes suppression comment: `lgtm[js/sensitive-get-query]`
+
 ## Security Measures Implemented
 
 ### Input Validation

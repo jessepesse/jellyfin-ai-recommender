@@ -51,9 +51,14 @@ declare global {
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     try {
         // 1. Get Token
+        // lgtm[js/sensitive-get-query] - api_key query parameter is required for Jellyfin protocol
+        // compatibility: Jellyfin clients pass the token via ?api_key= for image and media stream
+        // requests where headers cannot be set. The token is never written to application logs;
+        // it is HMAC-SHA256 hashed with a per-process secret before being stored in the token
+        // cache, and expires after 5 minutes (NodeCache stdTTL). See SECURITY.md.
         const token = req.headers['x-access-token'] as string ||
             req.headers['x-emby-token'] as string ||
-            req.query.api_key as string; // Jellyfin sometimes uses query param
+            req.query.api_key as string; // lgtm[js/sensitive-get-query]
 
         if (!token) {
             return res.status(401).json({ error: 'Unauthorized - No token provided' });
