@@ -114,15 +114,11 @@ router.get('/items', async (req, res) => {
 /**
  * GET /user/watchlist - Get user's watchlist
  */
-router.get('/watchlist', async (req, res) => {
+router.get('/watchlist', authMiddleware, async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-        const username = userName || userId;
-        const list = await getFullWatchlist(username);
+        const list = await getFullWatchlist(req.user.username);
 
         const mapped = (list || []).map(i => toFrontendItem(i)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
         res.json(mapped);

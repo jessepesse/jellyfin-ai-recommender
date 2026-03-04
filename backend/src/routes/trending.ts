@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { TrendingService } from '../services/trending';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
+router.use(authMiddleware);
 
 interface TrendingItem {
     id: number;
@@ -26,13 +28,10 @@ interface TrendingItem {
  */
 router.get('/', async (req: Request, res: Response) => {
     try {
-        const username = (req.query.username as string) || (req.headers['x-user-name'] as string);
-        if (!username) {
-            return res.status(401).json({ error: 'Unauthorized - username required' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
         // Delegate to TrendingService which handles caching and fetching
-        const result = await TrendingService.getTrending(username);
+        const result = await TrendingService.getTrending(req.user.username);
 
         return res.json(result);
     } catch (e: any) {

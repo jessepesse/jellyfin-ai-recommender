@@ -6,29 +6,28 @@ import { Router, Request, Response } from 'express';
 import { updateMediaStatus, removeFromWatchlist } from '../services/data';
 import { requestMediaByTmdb } from '../services/jellyseerr';
 import { validateUserAction, validateMediaRequest } from '../middleware/validators';
+import { authMiddleware } from '../middleware/auth';
 import { CacheService } from '../services/cache';
 import { TrendingService } from '../services/trending';
 
 const router = Router();
+router.use(authMiddleware);
 
 /**
  * POST /actions/watched - Mark item as watched
  */
 router.post('/watched', validateUserAction, async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
         const payload = req.body;
 
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!payload || !payload.item) return res.status(400).json({ error: 'Missing item in body' });
 
-        const username = userName || userId;
         const token = req.headers['x-access-token'] as string | undefined;
-        await updateMediaStatus(username, payload.item as any, 'WATCHED', token);
+        await updateMediaStatus(req.user.username, payload.item as any, 'WATCHED', token);
 
         // Invalidate trending cache so this item disappears
-        CacheService.del('api', `trending_${username}`);
+        CacheService.del('api', `trending_${req.user.username}`);
 
         res.json({ ok: true });
     } catch (e) {
@@ -42,19 +41,16 @@ router.post('/watched', validateUserAction, async (req: Request, res: Response) 
  */
 router.post('/watchlist', validateUserAction, async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
         const payload = req.body;
 
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!payload || !payload.item) return res.status(400).json({ error: 'Missing item in body' });
 
-        const username = userName || userId;
         const token = req.headers['x-access-token'] as string | undefined;
-        await updateMediaStatus(username, payload.item as any, 'WATCHLIST', token);
+        await updateMediaStatus(req.user.username, payload.item as any, 'WATCHLIST', token);
 
         // Invalidate trending cache
-        CacheService.del('api', `trending_${username}`);
+        CacheService.del('api', `trending_${req.user.username}`);
 
         res.json({ ok: true });
     } catch (e) {
@@ -68,22 +64,19 @@ router.post('/watchlist', validateUserAction, async (req: Request, res: Response
  */
 router.post('/watchlist/remove', async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
         const payload = req.body;
 
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!payload || !payload.item) return res.status(400).json({ error: 'Missing item in body' });
 
-        const username = userName || userId;
-        const ok = await removeFromWatchlist(username, payload.item as any);
+        const ok = await removeFromWatchlist(req.user.username, payload.item as any);
 
         // Invalidate trending cache (item might need to reappear if it was filtered out by watchlist status)
         if (ok) {
-            CacheService.del('api', `trending_${username}`);
+            CacheService.del('api', `trending_${req.user.username}`);
 
             // Background refresh
-            TrendingService.refreshCache(username).catch(err => console.error('Background refresh failed', err));
+            TrendingService.refreshCache(req.user.username).catch(err => console.error('Background refresh failed', err));
 
             return res.json({ ok: true });
         }
@@ -99,22 +92,19 @@ router.post('/watchlist/remove', async (req, res) => {
  */
 router.post('/block', validateUserAction, async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
-        const userName = req.headers['x-user-name'] as string;
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
         const payload = req.body;
 
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!payload || !payload.item) return res.status(400).json({ error: 'Missing item in body' });
 
-        const username = userName || userId;
         const token = req.headers['x-access-token'] as string | undefined;
-        await updateMediaStatus(username, payload.item as any, 'BLOCKED', token);
+        await updateMediaStatus(req.user.username, payload.item as any, 'BLOCKED', token);
 
         // Invalidate trending cache
-        CacheService.del('api', `trending_${username}`);
+        CacheService.del('api', `trending_${req.user.username}`);
 
         // Background refresh
-        TrendingService.refreshCache(username).catch(err => console.error('Background refresh failed', err));
+        TrendingService.refreshCache(req.user.username).catch(err => console.error('Background refresh failed', err));
 
         res.json({ ok: true });
     } catch (e) {
@@ -128,10 +118,8 @@ router.post('/block', validateUserAction, async (req: Request, res: Response) =>
  */
 router.post('/request', validateMediaRequest, async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string;
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
         const payload = req.body;
-
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const mediaId = payload?.mediaId ?? payload?.tmdbId;
         const mediaType = payload?.mediaType ?? 'movie';

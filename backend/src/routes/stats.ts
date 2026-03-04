@@ -3,9 +3,11 @@ import { Router } from 'express';
 import { JellyfinService, JellyfinAuthError } from '../jellyfin';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { GeminiService } from '../services/gemini';
+import { authMiddleware } from '../middleware/auth';
 import prisma from '../db';
 
 const router = Router();
+router.use(authMiddleware);
 const jellyfinService = new JellyfinService();
 
 /**
@@ -17,39 +19,29 @@ const jellyfinService = new JellyfinService();
  * - Genre Distribution
  */
 router.get('/', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
     const accessToken = req.headers['x-access-token'] as string;
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
     const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 
-    if (!accessToken || !userId) {
+    if (!accessToken) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
     try {
         // 1. Fetch blocked count from local DB
-        // User blocks are stored in UserMedia table linked to a local User record
-        // We need to resolve the local User ID from the Jellyfin username/ID
-        let blockedCount = 0;
-        const lookupName = userName || userId;
-
-        const localUser = await prisma.user.findUnique({
-            where: { username: lookupName }
+        const blockedCount = await prisma.userMedia.count({
+            where: {
+                userId: req.user.id,
+                status: 'BLOCKED'
+            }
         });
-
-        if (localUser) {
-            blockedCount = await prisma.userMedia.count({
-                where: {
-                    userId: localUser.id,
-                    status: 'BLOCKED'
-                }
-            });
-        }
 
         // 2. Fetch User History from Jellyfin
         // Request a high limit to get accurate stats
-        const history = await jellyfinService.getUserHistory(userId, accessToken, 2000, jellyfinServer);
+        const jellyfinUserId = req.user.jellyfinUserId || '';
+        const history = await jellyfinService.getUserHistory(jellyfinUserId, accessToken, 2000, jellyfinServer);
 
         // 3. Aggregate Stats
         let movieCount = 0;
@@ -121,21 +113,22 @@ router.get('/', async (req, res) => {
  * Query: type = 'movie' | 'tv'
  */
 router.get('/profile', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
     const accessToken = req.headers['x-access-token'] as string;
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
     const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
     const type = (req.query.type as string)?.toLowerCase() || 'movie';
 
-    if (!accessToken || !userId) {
+    if (!accessToken) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
     try {
         // Fetch User History (limit to recent 50 items for profile generation to save context)
         // We filter by specific type if possible, or just fetch all and filter locally
-        const history = await jellyfinService.getUserHistory(userId, accessToken, 100, jellyfinServer);
+        const jellyfinUserId = req.user.jellyfinUserId || '';
+        const history = await jellyfinService.getUserHistory(jellyfinUserId, accessToken, 100, jellyfinServer);
 
         // Filter and Map to MediaItemInput
         const validItems = history
@@ -157,7 +150,7 @@ router.get('/profile', async (req, res) => {
             return res.json({ profile: `No watched ${type} history found to analyze.` });
         }
 
-        const profile = await GeminiService.summarizeProfile(userName, uniqueItems, type === 'tv' ? 'tv' : 'movie');
+        const profile = await GeminiService.summarizeProfile(req.user.username, uniqueItems, type === 'tv' ? 'tv' : 'movie');
 
         res.json({ profile });
 

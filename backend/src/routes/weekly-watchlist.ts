@@ -5,9 +5,11 @@
 
 import { Router } from 'express';
 import { WeeklyWatchlistService } from '../services/weekly-watchlist';
+import { authMiddleware } from '../middleware/auth';
 import prisma from '../db';
 
 const router = Router();
+router.use(authMiddleware);
 
 /**
  * @swagger
@@ -16,13 +18,6 @@ const router = Router();
  *     summary: Get user's weekly watchlist
  *     description: Returns pre-generated movie and TV recommendations for the current week
  *     tags: [Weekly Watchlist]
- *     parameters:
- *       - in: query
- *         name: username
- *         required: true
- *         schema:
- *           type: string
- *         description: Username to get watchlist for
  *     responses:
  *       200:
  *         description: Weekly watchlist data
@@ -31,21 +26,9 @@ const router = Router();
  */
 router.get('/', async (req, res) => {
     try {
-        console.log('[WeeklyWatchlist] GET request. Query:', req.query, 'Headers[x-user-name]:', req.headers['x-user-name']);
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const username = (req.query.username as string) || (req.headers['x-user-name'] as string);
-        if (!username) {
-            console.error('[WeeklyWatchlist] Username missing');
-            return res.status(400).json({ error: 'Username required (query param or x-user-name header)' });
-        }
-
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            console.error(`[WeeklyWatchlist] User not found: ${username}`);
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const watchlist = await WeeklyWatchlistService.getForUser(user.id);
+        const watchlist = await WeeklyWatchlistService.getForUser(req.user.id);
 
         if (!watchlist) {
             return res.status(404).json({
@@ -56,7 +39,7 @@ router.get('/', async (req, res) => {
 
         // Filter out items the user has already interacted with (watched, watchlist, blocked)
         const userInteractions = await prisma.userMedia.findMany({
-            where: { userId: user.id },
+            where: { userId: req.user.id },
             include: { media: { select: { tmdbId: true } } }
         });
         const interactedTmdbIds = new Set(userInteractions.map(i => i.media.tmdbId));
@@ -92,37 +75,17 @@ router.get('/', async (req, res) => {
  *     summary: Refresh weekly watchlist
  *     description: Force regenerate the weekly watchlist for a user
  *     tags: [Weekly Watchlist]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               username:
- *                 type: string
- *                 description: Username to refresh watchlist for
  *     responses:
  *       200:
  *         description: Watchlist regenerated successfully
- *       400:
- *         description: Invalid request
  */
 router.post('/refresh', async (req, res) => {
     try {
-        const username = req.body.username || (req.headers['x-user-name'] as string);
-        if (!username) {
-            return res.status(400).json({ error: 'Username required' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        console.log(`[Weekly Watchlist API] Refreshing for user ${req.user.username}`);
 
-        console.log(`[Weekly Watchlist API] Refreshing for user ${username}`);
-
-        const result = await WeeklyWatchlistService.generateForUser(user.id);
+        const result = await WeeklyWatchlistService.generateForUser(req.user.id);
 
         return res.json({
             success: true,
@@ -149,29 +112,15 @@ router.post('/refresh', async (req, res) => {
  *     summary: Check watchlist status
  *     description: Check if a user has a current weekly watchlist
  *     tags: [Weekly Watchlist]
- *     parameters:
- *       - in: query
- *         name: username
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
  *         description: Status information
  */
 router.get('/status', async (req, res) => {
     try {
-        const username = (req.query.username as string) || (req.headers['x-user-name'] as string);
-        if (!username) {
-            return res.status(400).json({ error: 'Username required' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const watchlist = await WeeklyWatchlistService.getForUser(user.id);
+        const watchlist = await WeeklyWatchlistService.getForUser(req.user.id);
 
         return res.json({
             exists: !!watchlist,
