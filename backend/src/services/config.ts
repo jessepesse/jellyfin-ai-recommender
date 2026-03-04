@@ -80,7 +80,7 @@ class ConfigService {
         : (dbConfig?.openrouterApiKey || process.env.OPENROUTER_API_KEY || null),
       aiModel: isDbConfigured && dbConfig?.aiModel
         ? dbConfig.aiModel
-        : (dbConfig?.aiModel || process.env.AI_MODEL || 'gemini-3-flash-preview'),
+        : (dbConfig?.aiModel || process.env.AI_MODEL || 'gemini-3.1-flash-lite-preview'),
       // CRITICAL: only consider the system configured when the DB row explicitly
       // marks `isConfigured` true. Presence of environment variables should NOT
       // cause the application to treat the system as configured — the Setup

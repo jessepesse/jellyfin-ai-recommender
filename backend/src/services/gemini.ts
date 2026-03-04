@@ -6,7 +6,7 @@ import { MediaItemInput, UserData, RecommendationCandidate, RecommendationFilter
 
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
 // Thinking dynamically adjusts based on prompt complexity
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-3.1-flash-lite-preview';
 
 // Unified AI Client Bundle that works with both Google AI and OpenRouter
 export interface AIClientBundle {

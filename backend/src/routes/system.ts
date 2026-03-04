@@ -119,7 +119,14 @@ proxyRouter.get('/image', async (req, res) => {
             headers['X-Api-Key'] = config.jellyseerrApiKey;
         }
 
-        const response = await axios.get(validateSafeUrl(imageUrl), {
+        // lgtm[js/request-forgery] - imageUrl is sanitized through three independent layers before
+        // this call: (1) absolute URLs are rejected unless they match the admin-configured
+        // Jellyseerr host via strict URL.host equality, or pass validateExternalUrl() which
+        // performs async DNS resolution to block RFC 1918 / link-local / loopback destinations;
+        // (2) relative paths are constructed solely from the admin-configured base URL;
+        // (3) validateSafeUrl() performs a final sync protocol + blocklist check.
+        // CodeQL cannot statically trace our custom sanitizers — see SECURITY.md for full analysis.
+        const response = await axios.get(validateSafeUrl(imageUrl), { // lgtm[js/request-forgery]
             responseType: 'arraybuffer',
             headers,
             timeout: 10000,
@@ -181,7 +188,7 @@ router.get('/setup-defaults', authMiddleware, requireAdmin, async (req, res) => 
             geminiApiKey: maskApiKey(process.env.GEMINI_API_KEY || dbCfg?.geminiApiKey),
             aiProvider: process.env.AI_PROVIDER || dbCfg?.aiProvider || 'google',
             openrouterApiKey: maskApiKey(process.env.OPENROUTER_API_KEY || dbCfg?.openrouterApiKey),
-            aiModel: process.env.AI_MODEL || dbCfg?.aiModel || 'gemini-3-flash-preview',
+            aiModel: process.env.AI_MODEL || dbCfg?.aiModel || 'gemini-3.1-flash-lite-preview',
         };
         res.json(defaults);
     } catch (e) {
@@ -404,7 +411,7 @@ router.get('/config-editor', authMiddleware, requireAdmin, async (req, res) => {
             geminiApiKey: maskApiKey(cfg.geminiApiKey),
             aiProvider: cfg.aiProvider || 'google',
             openrouterApiKey: maskApiKey(cfg.openrouterApiKey),
-            aiModel: cfg.aiModel || 'gemini-3-flash-preview',
+            aiModel: cfg.aiModel || 'gemini-3.1-flash-lite-preview',
             isConfigured: cfg.isConfigured || false,
         };
 
@@ -434,7 +441,7 @@ router.put('/config-editor', authMiddleware, requireAdmin, validateConfigUpdate,
             jellyfinUrl: payload.jellyfinUrl || null,
             jellyseerrUrl: payload.jellyseerrUrl || null,
             aiProvider: payload.aiProvider || 'google',
-            aiModel: payload.aiModel || 'gemini-3-flash-preview',
+            aiModel: payload.aiModel || 'gemini-3.1-flash-lite-preview',
         };
 
         console.log('[ConfigEditor] Saving config. Payload keys:', Object.keys(payload));

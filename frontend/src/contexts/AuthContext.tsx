@@ -121,14 +121,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         return true;
       } else {
-        console.error('Login failed:', response.data.message);
-        return false;
+        throw new Error(response.data.message || 'Login failed. Please check your credentials.');
       }
     } catch (error: unknown) {
+      if (error instanceof Error && !(error as any).response) {
+        throw error; // re-throw our own errors (already have clean messages)
+      }
       const err = error as { response?: { data?: { message?: string } }; message?: string };
-      console.error('Login request error:', err.response?.data?.message || err.message);
-      // Optionally re-throw or handle error in UI
-      return false;
+      const message = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
+      throw new Error(message);
     }
   };
 

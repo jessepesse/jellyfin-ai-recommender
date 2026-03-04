@@ -12,7 +12,7 @@ const ConfigEditor: React.FC = () => {
     geminiApiKey: '',
     aiProvider: 'google' as 'google' | 'openrouter',
     openrouterApiKey: '',
-    aiModel: 'gemini-3-flash-preview',
+    aiModel: 'gemini-3.1-flash-lite-preview',
   });
 
   const [loading, setLoading] = useState(true);
@@ -43,7 +43,7 @@ const ConfigEditor: React.FC = () => {
           geminiApiKey: response.config.geminiApiKey || '',
           aiProvider: (response.config.aiProvider as 'google' | 'openrouter') || 'google',
           openrouterApiKey: response.config.openrouterApiKey || '',
-          aiModel: response.config.aiModel || 'gemini-3-flash-preview',
+          aiModel: response.config.aiModel || 'gemini-3.1-flash-lite-preview',
         });
       }
     } catch (error) {
@@ -312,10 +312,8 @@ const ConfigEditor: React.FC = () => {
             onChange={(e) => setConfig({ ...config, aiModel: e.target.value })}
             className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
-            <option value="gemini-3-flash-preview">Gemini 3 Flash (Recommended)</option>
-            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite (Default)</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
             <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
           </select>
         </div>

@@ -67,7 +67,7 @@ const defaultFormData: SetupFormData = {
   geminiApiKey: '',
   aiProvider: 'google',
   openrouterApiKey: '',
-  aiModel: 'gemini-3-flash-preview',
+  aiModel: 'gemini-3.1-flash-lite-preview',
 };
 
 export function useSetupWizard(): UseSetupWizardReturn {

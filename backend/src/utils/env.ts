@@ -23,7 +23,7 @@ const envSchema = z.object({
   // API keys (keys can be empty string from env interpolation, treat as undefined)
   JELLYSEERR_API_KEY: z.string().transform(v => v === '' ? undefined : v).optional(),
   GEMINI_API_KEY: z.string().transform(v => v === '' ? undefined : v).optional(),
-  GEMINI_MODEL: z.string().default('gemini-3-flash-preview'), // Legacy
+  GEMINI_MODEL: z.string().default('gemini-3.1-flash-lite-preview'), // Legacy
 
   // New AI Config
   AI_PROVIDER: z.string().transform(v => v === '' ? undefined : v).default('google'),

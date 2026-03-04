@@ -43,12 +43,10 @@ const Login: React.FC = () => {
     setError('');
     setIsSubmitting(true);
     try {
-      const success = await login(username, password, serverUrl);
-      if (!success) {
-        setError('Login failed. Please check your credentials.');
-      }
-    } catch {
-      setError('Login failed. Please check your credentials.');
+      await login(username, password, serverUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
+      setError(message);
     }
     setIsSubmitting(false);
   };

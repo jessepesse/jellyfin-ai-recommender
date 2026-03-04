@@ -64,7 +64,7 @@ describe('Login', () => {
     });
 
     it('shows error message on failed login', async () => {
-        mockLogin.mockResolvedValue(false);
+        mockLogin.mockRejectedValue(new Error('Invalid Jellyfin username or password.'));
         render(<Login />);
 
         await userEvent.type(screen.getByLabelText(/username/i), 'wronguser');
@@ -72,8 +72,7 @@ describe('Login', () => {
         await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
         await waitFor(() => {
-            // Check for the new error message
-            expect(screen.getByText(/login failed/i)).toBeInTheDocument();
+            expect(screen.getByText(/invalid jellyfin username/i)).toBeInTheDocument();
         });
     });
 

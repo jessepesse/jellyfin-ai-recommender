@@ -166,10 +166,8 @@ const SetupWizard: React.FC = () => {
             {/* AI Model Selection */}
             <label className="text-sm">AI Model</label>
             <select className="p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition" value={formData.aiModel} onChange={e => updateField('aiModel', e.target.value)}>
-              <option value="gemini-3-flash-preview">Gemini 3 Flash (Recommended)</option>
-              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite (Default)</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
             </select>
           </div>
