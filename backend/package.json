@@ -23,7 +23,7 @@
   "dependencies": {
     "@google/genai": "^1.41.0",
     "@jellyfin-ai/types": "file:../shared",
-    "@prisma/adapter-better-sqlite3": "7.4.0",
+    "@prisma/adapter-better-sqlite3": "7.4.2",
     "@prisma/client": "7.4.2",
     "axios": "^1.13.2",
     "better-sqlite3": "^12.6.2",
