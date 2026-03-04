@@ -106,6 +106,7 @@ const TrendingPage: React.FC = () => {
                 <div className="h-16 animate-pulse bg-slate-800/50 rounded-xl" />
                 <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
                     {Array.from({ length: 12 }).map((_, idx) => (
+                        // eslint-disable-next-line @eslint-react/no-array-index-key
                         <SkeletonCard key={`skeleton-${idx}`} />
                     ))}
                 </div>

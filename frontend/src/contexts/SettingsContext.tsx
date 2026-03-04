@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, use, useState } from "react";
 import type { ReactNode } from "react";
 import type { Settings } from "../types";
 
@@ -14,15 +14,15 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [apiKey, setApiKey] = useState<string>("");
 
   return (
-    <SettingsContext.Provider value={{ jellyfinUrl, setJellyfinUrl, apiKey, setApiKey }}>
+    <SettingsContext value={{ jellyfinUrl, setJellyfinUrl, apiKey, setApiKey }}>
       {children}
-    </SettingsContext.Provider>
+    </SettingsContext>
   );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useSettings = () => {
-  const context = useContext(SettingsContext);
+  const context = use(SettingsContext);
   if (context === undefined) {
     throw new Error("useSettings must be used within a SettingsProvider");
   }

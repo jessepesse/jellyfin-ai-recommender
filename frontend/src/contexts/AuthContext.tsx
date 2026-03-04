@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, use, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import axios from 'axios';
 import { getMe } from '../services/api';
@@ -142,13 +142,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     logout,
   };
 
-  return <AuthContext.Provider value={authContextValue}>{children}</AuthContext.Provider>;
+  return <AuthContext value={authContextValue}>{children}</AuthContext>;
 };
 
 // Custom hook to use the Auth Context
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context = use(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }

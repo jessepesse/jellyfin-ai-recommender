@@ -70,8 +70,11 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     useEffect(() => {
         if (!isOpen) {
             // Reset state on close
+            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
             setData(null);
+            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
             setMovieProfile(null);
+            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
             setSeriesProfile(null);
             return;
         }
@@ -112,6 +115,7 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
         if (isOpen && token) {
             fetchStats();
         } else if (isOpen && !token) {
+            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
             setError('Please log in to view statistics.');
         }
     }, [isOpen, token, user]);
@@ -230,8 +234,8 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                             itemStyle={{ color: '#67e8f9' }}
                                         />
                                         <Bar dataKey="value" fill="#06b6d4" radius={[0, 4, 4, 0]} barSize={20}>
-                                            {data.genres.map((_entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            {data.genres.map((entry, index) => (
+                                                <Cell key={`cell-${entry.name}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Bar>
                                     </BarChart>
@@ -262,6 +266,7 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                         {movieProfile ? (
                                             <ul className="list-disc list-inside space-y-1">
                                                 {movieProfile.split('\n').map((line, i) => (
+                                                    // eslint-disable-next-line @eslint-react/no-array-index-key
                                                     <li key={i} className="pl-1">{line.replace(/^[*•-]\s*/, '')}</li>
                                                 ))}
                                             </ul>
@@ -293,6 +298,7 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                         {seriesProfile ? (
                                             <ul className="list-disc list-inside space-y-1">
                                                 {seriesProfile.split('\n').map((line, i) => (
+                                                    // eslint-disable-next-line @eslint-react/no-array-index-key
                                                     <li key={i} className="pl-1">{line.replace(/^[*•-]\s*/, '')}</li>
                                                 ))}
                                             </ul>

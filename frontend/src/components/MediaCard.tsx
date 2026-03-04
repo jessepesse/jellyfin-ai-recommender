@@ -281,8 +281,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               <>
                 <span>•</span>
                 <div className="flex gap-1 overflow-hidden">
-                  {item.genres.slice(0, 2).map((g, i) => (
-                    <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] whitespace-nowrap">
+                  {item.genres.slice(0, 2).map((g) => (
+                    <span key={g} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] whitespace-nowrap">
                       {g}
                     </span>
                   ))}
@@ -325,8 +325,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
             {/* Full Genre List (Modal View) */}
             {item.genres && item.genres.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
-                {item.genres.map((g, i) => (
-                  <span key={i} className="px-2 py-1 rounded-md bg-white/10 text-slate-300 text-sm border border-white/5">
+                {item.genres.map((g) => (
+                  <span key={g} className="px-2 py-1 rounded-md bg-white/10 text-slate-300 text-sm border border-white/5">
                     {g}
                   </span>
                 ))}

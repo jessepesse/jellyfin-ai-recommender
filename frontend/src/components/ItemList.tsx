@@ -20,6 +20,7 @@ const ItemList: React.FC<Props> = ({ items, onSelectItem, isLoading = false, onR
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-6">
                 {isLoading ? (
                     Array.from({ length: skeletonCount }).map((_, idx) => (
+                        // eslint-disable-next-line @eslint-react/no-array-index-key
                         <SkeletonCard key={`skeleton-${idx}`} />
                     ))
                 ) : (

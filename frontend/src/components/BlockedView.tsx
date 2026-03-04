@@ -186,6 +186,7 @@ const BlockedView: React.FC = () => {
                         {loading ? (
                             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                                 {[...Array(10)].map((_, i) => (
+                                    // eslint-disable-next-line @eslint-react/no-array-index-key
                                     <SkeletonCard key={i} />
                                 ))}
                             </div>
@@ -218,6 +219,7 @@ const BlockedView: React.FC = () => {
                         {loading ? (
                             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                                 {[...Array(10)].map((_, i) => (
+                                    // eslint-disable-next-line @eslint-react/no-array-index-key
                                     <SkeletonCard key={i} />
                                 ))}
                             </div>
