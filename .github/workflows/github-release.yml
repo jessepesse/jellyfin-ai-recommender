@@ -26,6 +26,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify version consistency
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          SEMVER="${TAG#v}"
+
+          ROOT_VER=$(node -p "require('./package.json').version")
+          BACKEND_VER=$(node -p "require('./backend/package.json').version")
+          FRONTEND_VER=$(node -p "require('./frontend/package.json').version")
+
+          echo "Tag version:      $SEMVER"
+          echo "Root package:     $ROOT_VER"
+          echo "Backend package:  $BACKEND_VER"
+          echo "Frontend package: $FRONTEND_VER"
+
+          FAIL=0
+          [ "$ROOT_VER"     != "$SEMVER" ] && echo "❌ Root package.json ($ROOT_VER) != tag ($SEMVER)"     && FAIL=1
+          [ "$BACKEND_VER"  != "$SEMVER" ] && echo "❌ Backend package.json ($BACKEND_VER) != tag ($SEMVER)"  && FAIL=1
+          [ "$FRONTEND_VER" != "$SEMVER" ] && echo "❌ Frontend package.json ($FRONTEND_VER) != tag ($SEMVER)" && FAIL=1
+
+          if ! grep -qF "## [$SEMVER]" CHANGELOG.md; then
+            echo "❌ CHANGELOG.md has no entry for [$SEMVER]"
+            FAIL=1
+          fi
+
+          [ $FAIL -eq 1 ] && exit 1
+          echo "✅ All versions consistent with tag $TAG"
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
