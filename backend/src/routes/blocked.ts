@@ -6,8 +6,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db';
 import { AdvocateService } from '../services/advocate';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
+router.use(authMiddleware);
 
 /**
  * Helper function to convert relative image paths to absolute URLs
@@ -44,19 +46,11 @@ function toAbsoluteImageUrl(req: Request, path: string | null): string | null {
  */
 router.get('/', async (req: Request, res: Response) => {
     try {
-        const username = req.headers['x-user-name'] as string;
-        if (!username) {
-            return res.status(401).json({ error: 'Username required' });
-        }
-
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
         const blockedMedia = await prisma.userMedia.findMany({
             where: {
-                userId: user.id,
+                userId: req.user.id,
                 status: 'BLOCKED'
             },
             include: {
@@ -113,18 +107,10 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.get('/redemption-candidates', async (req: Request, res: Response) => {
     try {
-        const username = req.headers['x-user-name'] as string;
-        if (!username) {
-            return res.status(401).json({ error: 'Username required' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        console.log(`[Blocked API] Getting redemption candidates for ${username}`);
-        const candidates = await AdvocateService.getRedemptionCandidates(user.id);
+        console.log(`[Blocked API] Getting redemption candidates for ${req.user.username}`);
+        const candidates = await AdvocateService.getRedemptionCandidates(req.user.id);
 
         // Convert relative image paths to absolute URLs
         const candidatesWithAbsoluteUrls = candidates.map(candidate => ({
@@ -174,15 +160,7 @@ router.get('/redemption-candidates', async (req: Request, res: Response) => {
  */
 router.post('/:id/unblock', async (req: Request, res: Response) => {
     try {
-        const username = req.headers['x-user-name'] as string;
-        if (!username) {
-            return res.status(401).json({ error: 'Username required' });
-        }
-
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
         const tmdbId = parseInt(req.params.id);
         const { action } = req.body; // 'watchlist' | 'jellyseerr' | 'watched'
@@ -199,7 +177,7 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
         // Find the blocked item
         const userMedia = await prisma.userMedia.findFirst({
             where: {
-                userId: user.id,
+                userId: req.user.id,
                 mediaId: media.id,
                 status: 'BLOCKED'
             }
@@ -250,11 +228,11 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
             console.log(`[Blocked API] Removed UserMedia relation for ${tmdbId} (Action: ${action})`);
         }
 
-        console.log(`[Blocked API] Unblocked media ${tmdbId} for ${username}, action: ${action}`);
+        console.log(`[Blocked API] Unblocked media ${tmdbId} for ${req.user.username}, action: ${action}`);
 
         // Update redemption candidates cache by removing this item
         const existingCache = await prisma.redemptionCandidates.findFirst({
-            where: { userId: user.id },
+            where: { userId: req.user.id },
             orderBy: { generatedAt: 'desc' }
         });
 
@@ -309,15 +287,7 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
  */
 router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
     try {
-        const username = req.headers['x-user-name'] as string;
-        if (!username) {
-            return res.status(401).json({ error: 'Username required' });
-        }
-
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
         const tmdbId = parseInt(req.params.id);
         const { type } = req.body; // 'soft' | 'permanent'
@@ -333,7 +303,7 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
 
         const userMedia = await prisma.userMedia.findFirst({
             where: {
-                userId: user.id,
+                userId: req.user.id,
                 mediaId: media.id,
                 status: 'BLOCKED'
             }
@@ -362,11 +332,11 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
             data: updateData
         });
 
-        console.log(`[Blocked API] Kept media ${tmdbId} blocked (${type}) for ${username}`);
+        console.log(`[Blocked API] Kept media ${tmdbId} blocked (${type}) for ${req.user.username}`);
 
         // Update redemption candidates cache by removing this item
         const existingCache = await prisma.redemptionCandidates.findFirst({
-            where: { userId: user.id },
+            where: { userId: req.user.id },
             orderBy: { generatedAt: 'desc' }
         });
 
@@ -406,18 +376,10 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
  */
 router.post('/test-redemption', async (req: Request, res: Response) => {
     try {
-        const username = req.headers['x-user-name'] as string;
-        if (!username) {
-            return res.status(401).json({ error: 'Username required' });
-        }
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        console.log(`[Blocked API] TEST: Triggering redemption analysis for ${username}`);
-        const candidates = await AdvocateService.generateAndSaveRedemptionCandidates(user.id);
+        console.log(`[Blocked API] TEST: Triggering redemption analysis for ${req.user.username}`);
+        const candidates = await AdvocateService.generateAndSaveRedemptionCandidates(req.user.id);
 
         res.json({
             success: true,

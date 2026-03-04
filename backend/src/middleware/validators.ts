@@ -21,7 +21,7 @@ export const handleValidationErrors = (req: Request, res: Response, next: NextFu
 export const validateLogin = [
   body('username').isString().trim().notEmpty().withMessage('Username is required'),
   body('password').isString().notEmpty().withMessage('Password is required'),
-  body('serverUrl').optional().isURL().withMessage('Invalid server URL'),
+  body('serverUrl').optional({ values: 'falsy' }).isURL({ require_protocol: true }).withMessage('Invalid server URL'),
   handleValidationErrors,
 ];
 
