@@ -28,7 +28,7 @@ const ChangePasswordSchema = z.object({
  * POST /user/change-password
  * Updates local password hash for the logged in admin
  */
-router.post('/change-password', authMiddleware, requireAdmin, async (req: Request, res: Response) => {
+router.post('/user/change-password', authMiddleware, requireAdmin, async (req: Request, res: Response) => {
     try {
         const { newPassword } = ChangePasswordSchema.parse(req.body);
 
@@ -114,7 +114,7 @@ router.get('/items', async (req, res) => {
 /**
  * GET /user/watchlist - Get user's watchlist
  */
-router.get('/watchlist', authMiddleware, async (req, res) => {
+router.get('/user/watchlist', authMiddleware, async (req, res) => {
     try {
         if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
