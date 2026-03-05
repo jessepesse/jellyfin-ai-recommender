@@ -31,6 +31,12 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const showError = (msg: string) => {
+    setActionError(msg);
+    setTimeout(() => setActionError(null), 3000);
+  };
 
   // Normalize media type once for all handlers ('movie' | 'tv')
   const currentMediaType = ((item.mediaType || rawItem.media_type || 'movie') as string).toLowerCase().includes('tv') ? 'tv' : 'movie';
@@ -129,10 +135,9 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
 
               {/* Watchlist */}
               {variant !== 'watchlist' ? (
-                <button aria-label="Add to Watchlist" title="Add to Watchlist" onClick={(e) => {
+                <button aria-label="Add to Watchlist" title="Add to Watchlist" onClick={async (e) => {
                   e.stopPropagation();
                   const id = Number(item.tmdbId);
-                  if (typeof onRemove === 'function') onRemove(id as number);
                   // Build strict payload item to avoid missing fields
                   const payloadItem = {
                     tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
@@ -146,13 +151,14 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                     voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                     backdropUrl: item.backdropUrl ?? '',
                   };
-                  if (variant === 'blocked' && typeof onRemove === 'function') onRemove(id);
-                  const actionPromise = variant === 'blocked' ? unblockItem(id, 'watchlist') : postActionWatchlist(payloadItem);
-                  actionPromise
-                    .then(() => {
-                      try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
-                    })
-                    .catch(() => {/* TODO: handle rollback if needed */ });
+                  try {
+                    const actionPromise = variant === 'blocked' ? unblockItem(id, 'watchlist') : postActionWatchlist(payloadItem);
+                    await actionPromise;
+                    if (typeof onRemove === 'function') onRemove(id);
+                    try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
+                  } catch {
+                    showError('Failed to add to watchlist');
+                  }
                 }} className="p-3 md:p-2 rounded-md text-white hover:text-yellow-300 active:scale-95 transition-transform focus:outline-none">
                   <Bookmark className="w-6 h-6 md:w-5 md:h-5" />
                 </button>
@@ -187,10 +193,9 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               )}
 
               {/* Watched */}
-              <button aria-label="Mark Watched" title="Mark Watched" onClick={(e) => {
+              <button aria-label="Mark Watched" title="Mark Watched" onClick={async (e) => {
                 e.stopPropagation();
                 const id = Number(item.tmdbId);
-                if (typeof onRemove === 'function') onRemove(id as number);
                 const payloadItemWatched = {
                   tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
                   title: item.title ?? rawItem.name ?? 'Unknown Title',
@@ -203,11 +208,15 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                   backdropUrl: item.backdropUrl ?? '',
                 };
-                if (variant === 'blocked') {
+                try {
+                  if (variant === 'blocked') {
+                    await unblockItem(id, 'watched');
+                  } else {
+                    await postActionWatched(payloadItemWatched);
+                  }
                   if (typeof onRemove === 'function') onRemove(id);
-                  unblockItem(id, 'watched').catch(() => { });
-                } else {
-                  postActionWatched(payloadItemWatched).catch(() => {/* TODO: handle rollback if needed */ });
+                } catch {
+                  showError('Failed to mark as watched');
                 }
               }} className="p-3 md:p-2 rounded-md text-white hover:text-green-300 active:scale-95 transition-transform focus:outline-none">
                 <Eye className="w-6 h-6 md:w-5 md:h-5" />
@@ -225,10 +234,9 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                   <X className="w-6 h-6 md:w-5 md:h-5" />
                 </button>
               ) : (
-                <button aria-label="Block (Do not recommend)" title="Block (Do not recommend)" onClick={(e) => {
+                <button aria-label="Block (Do not recommend)" title="Block (Do not recommend)" onClick={async (e) => {
                   e.stopPropagation();
                   const id = Number(item.tmdbId);
-                  if (typeof onRemove === 'function') onRemove(id as number);
                   const payloadItemBlock = {
                     tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
                     title: item.title ?? rawItem.name ?? 'Unknown Title',
@@ -241,7 +249,12 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                     voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
                     backdropUrl: item.backdropUrl ?? '',
                   };
-                  postActionBlock(payloadItemBlock).catch(() => {/* TODO: handle rollback if needed */ });
+                  try {
+                    await postActionBlock(payloadItemBlock);
+                    if (typeof onRemove === 'function') onRemove(id);
+                  } catch {
+                    showError('Failed to block item');
+                  }
                 }} className="p-3 md:p-2 rounded-md text-white hover:text-red-500 active:scale-95 transition-transform focus:outline-none">
                   <Ban className="w-6 h-6 md:w-5 md:h-5" />
                 </button>
@@ -249,6 +262,13 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
             </div>
           </div>
         </div>
+
+        {/* Action error feedback */}
+        {actionError && (
+          <div className="px-3 py-1.5 bg-red-900/80 text-red-200 text-xs text-center">
+            {actionError}
+          </div>
+        )}
 
         {/* Title and metadata below card */}
         <div className="p-3 bg-slate-900/50">
