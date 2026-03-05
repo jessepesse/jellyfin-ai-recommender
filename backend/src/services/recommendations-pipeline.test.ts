@@ -1,6 +1,8 @@
 import {
+  extractYear,
   filterViewCacheByExclusions,
   hasMoodSignal,
+  isYearInRange,
   matchesSelectedGenres,
   shouldGenerateWhenViewCacheMiss,
   shouldIncludeTmdbId,
@@ -77,6 +79,30 @@ describe('recommendations pipeline helpers', () => {
       const excluded = new Set<number>([2]);
       const filtered = filterViewCacheByExclusions(cached, excluded);
       expect(filtered.map((x: any) => x.tmdbId)).toEqual([1]);
+    });
+  });
+
+  describe('year range filters', () => {
+    it('extracts year from full date strings', () => {
+      expect(extractYear('1997-07-03')).toBe(1997);
+    });
+
+    it('returns null when year is missing', () => {
+      expect(extractYear('unknown')).toBeNull();
+      expect(extractYear(undefined)).toBeNull();
+    });
+
+    it('matches when year falls inside selected range', () => {
+      expect(isYearInRange('1984-06-01', 1980, 2000)).toBe(true);
+    });
+
+    it('rejects when year falls outside selected range', () => {
+      expect(isYearInRange('1979-12-31', 1980, 2000)).toBe(false);
+      expect(isYearInRange('2001-01-01', 1980, 2000)).toBe(false);
+    });
+
+    it('rejects entries without year when range is active', () => {
+      expect(isYearInRange(undefined, 1980, 2000)).toBe(false);
     });
   });
 });

@@ -57,3 +57,28 @@ export function shouldGenerateWhenViewCacheMiss(forceRefresh: boolean, filteredV
   return filteredViewCacheCount > 0;
 }
 
+export function extractYear(value: string | number | undefined | null): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const year = Math.trunc(value);
+    return year >= 1800 && year <= 3000 ? year : null;
+  }
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return Number.isFinite(year) ? year : null;
+}
+
+export function isYearInRange(
+  value: string | number | undefined | null,
+  yearFrom?: number,
+  yearTo?: number
+): boolean {
+  if (!yearFrom && !yearTo) return true;
+  const year = extractYear(value);
+  if (!year) return false;
+  if (yearFrom && year < yearFrom) return false;
+  if (yearTo && year > yearTo) return false;
+  return true;
+}
