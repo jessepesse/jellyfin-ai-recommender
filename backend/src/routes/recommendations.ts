@@ -16,6 +16,7 @@ import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
 import { getAnchorItems, collectCandidateIds, buildAnchorContext, MOOD_KEYWORDS } from '../services/anchor-recommendations';
 import { authMiddleware } from '../middleware/auth';
+import pLimit from 'p-limit';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
@@ -274,8 +275,11 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
             const candidateIds = collectCandidateIds(anchors, excludedIds);
             console.debug(`[Anchor] Collected ${candidateIds.length} candidate IDs from anchors`);
 
-            // Fetch details for candidates (limit to 50 to allow for filtering)
+            // Fetch details for candidates with bounded concurrency
             const candidateType: 'movie' | 'tv' = filters.type === 'tv' ? 'tv' : 'movie';
+            const MAX_CANDIDATES_FOR_RANKING = 40;
+            const MAX_CANDIDATE_FETCH = 80;
+            const DETAIL_FETCH_CONCURRENCY = 8;
 
             // Phase 1: Collect all matching candidates with their details
             const candidatesForRanking: Array<{
@@ -286,74 +290,91 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                 voteAverage?: number;
             }> = [];
 
-            for (const tmdbId of candidateIds.slice(0, 80)) {
-                if (candidatesForRanking.length >= 40) break; // Collect enough for Gemini to have good selection
+            const candidateIdsToFetch = candidateIds.slice(0, MAX_CANDIDATE_FETCH);
+            const limit = pLimit(DETAIL_FETCH_CONCURRENCY);
 
-                // Check if already in any exclusion list BEFORE fetching details
-                if (excludedIds.has(tmdbId)) {
-                    console.debug(`[Anchor] SKIP: "${tmdbId}" - already in exclusion list`);
-                    continue;
-                }
-
-                try {
-                    // getFullDetails now returns all basic Enriched fields (title, overview,
-                    // voteAverage, posterUrl, etc.) from the same API call — no separate
-                    // getMediaDetails() needed, halving Jellyseerr requests per candidate.
-                    const fullDetails = await getFullDetails(tmdbId, candidateType);
-                    if (!fullDetails) continue;
-
-                    // Filter by genre if specified
-                    if (genreFilter && genreFilter.length > 0) {
-                        const hasMatchingGenre = genreFilter.some(selectedGenre => {
-                            const selectedLower = selectedGenre.toLowerCase();
-                            return fullDetails.genres.some((g: string) => {
-                                const genreLower = g.toLowerCase();
-                                return genreLower.includes(selectedLower) || selectedLower.includes(genreLower);
-                            });
-                        });
-                        if (!hasMatchingGenre) {
-                            console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match any of "${genreFilter.join(', ')}"`);
-                            continue;
+            const fetchedCandidates = await Promise.all(
+                candidateIdsToFetch.map(tmdbId =>
+                    limit(async () => {
+                        // Check if already in any exclusion list BEFORE fetching details
+                        if (excludedIds.has(tmdbId)) {
+                            console.debug(`[Anchor] SKIP: "${tmdbId}" - already in exclusion list`);
+                            return null;
                         }
-                    }
 
-                    // Filter by mood keywords if specified
-                    if (moodFilter && MOOD_KEYWORDS[moodFilter]) {
-                        const moodKeywords = MOOD_KEYWORDS[moodFilter];
-                        const candidateKeywords = fullDetails.keywords || [];
-                        const keywordsLower = candidateKeywords.map((k: string) => k.toLowerCase());
+                        try {
+                            // getFullDetails now returns all basic Enriched fields (title, overview,
+                            // voteAverage, posterUrl, etc.) from the same API call — no separate
+                            // getMediaDetails() needed, halving Jellyseerr requests per candidate.
+                            const fullDetails = await getFullDetails(tmdbId, candidateType);
+                            if (!fullDetails) return null;
 
-                        const hasMatchingKeyword = moodKeywords.some(mk =>
-                            keywordsLower.some((k: string) => k.includes(mk.toLowerCase()) || mk.toLowerCase().includes(k))
-                        );
-
-                        // Also check overview for mood match as fallback
-                        const overviewLower = (fullDetails.overview || '').toLowerCase();
-                        const hasOverviewMatch = moodKeywords.some(mk => overviewLower.includes(mk.toLowerCase()));
-
-                        if (!hasMatchingKeyword && !hasOverviewMatch) {
-                            // Only skip if we already have some candidates
-                            if (candidatesForRanking.length >= 10) {
-                                console.debug(`[Anchor] MOOD SKIP: "${fullDetails.title}" - no keywords match mood "${moodFilter}"`);
-                                continue;
+                            // Filter by genre if specified
+                            if (genreFilter && genreFilter.length > 0) {
+                                const hasMatchingGenre = genreFilter.some(selectedGenre => {
+                                    const selectedLower = selectedGenre.toLowerCase();
+                                    return fullDetails.genres.some((g: string) => {
+                                        const genreLower = g.toLowerCase();
+                                        return genreLower.includes(selectedLower) || selectedLower.includes(genreLower);
+                                    });
+                                });
+                                if (!hasMatchingGenre) {
+                                    console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match any of "${genreFilter.join(', ')}"`);
+                                    return null;
+                                }
                             }
-                        } else {
-                            console.debug(`[Anchor] MOOD MATCH: "${fullDetails.title}" matches mood "${moodFilter}"`);
-                        }
-                    }
 
-                    candidatesForRanking.push({
-                        tmdbId: fullDetails.tmdb_id,
-                        title: fullDetails.title,
-                        genres: fullDetails.genres,
-                        overview: fullDetails.overview,
-                        voteAverage: fullDetails.voteAverage,
-                    });
-                    console.debug(`[Anchor] CANDIDATE: "${fullDetails.title}" [${fullDetails.genres.slice(0, 2).join(', ')}] ⭐${fullDetails.voteAverage?.toFixed(1) || 'N/A'}`);
-                    await new Promise(resolve => setTimeout(resolve, 25));
-                } catch (e) {
-                    // Skip failed fetches
+                            let moodMatched: boolean | null = null;
+                            if (moodFilter && MOOD_KEYWORDS[moodFilter]) {
+                                const moodKeywords = MOOD_KEYWORDS[moodFilter];
+                                const candidateKeywords = fullDetails.keywords || [];
+                                const keywordsLower = candidateKeywords.map((k: string) => k.toLowerCase());
+                                const hasMatchingKeyword = moodKeywords.some(mk =>
+                                    keywordsLower.some((k: string) => k.includes(mk.toLowerCase()) || mk.toLowerCase().includes(k))
+                                );
+                                const overviewLower = (fullDetails.overview || '').toLowerCase();
+                                const hasOverviewMatch = moodKeywords.some(mk => overviewLower.includes(mk.toLowerCase()));
+                                moodMatched = hasMatchingKeyword || hasOverviewMatch;
+                            }
+
+                            return {
+                                tmdbId: fullDetails.tmdb_id,
+                                title: fullDetails.title,
+                                genres: fullDetails.genres,
+                                overview: fullDetails.overview,
+                                voteAverage: fullDetails.voteAverage,
+                                moodMatched,
+                            };
+                        } catch {
+                            // Skip failed fetches
+                            return null;
+                        }
+                    })
+                )
+            );
+
+            for (const candidate of fetchedCandidates) {
+                if (!candidate) continue;
+                if (candidatesForRanking.length >= MAX_CANDIDATES_FOR_RANKING) break;
+
+                if (moodFilter && MOOD_KEYWORDS[moodFilter]) {
+                    if (!candidate.moodMatched && candidatesForRanking.length >= 10) {
+                        console.debug(`[Anchor] MOOD SKIP: "${candidate.title}" - no keywords match mood "${moodFilter}"`);
+                        continue;
+                    }
+                    if (candidate.moodMatched) {
+                        console.debug(`[Anchor] MOOD MATCH: "${candidate.title}" matches mood "${moodFilter}"`);
+                    }
                 }
+
+                candidatesForRanking.push({
+                    tmdbId: candidate.tmdbId,
+                    title: candidate.title,
+                    genres: candidate.genres,
+                    overview: candidate.overview,
+                    voteAverage: candidate.voteAverage,
+                });
+                console.debug(`[Anchor] CANDIDATE: "${candidate.title}" [${candidate.genres.slice(0, 2).join(', ')}] ⭐${candidate.voteAverage?.toFixed(1) || 'N/A'}`);
             }
 
             console.debug(`[Anchor] Collected ${candidatesForRanking.length} candidates for Gemini ranking`);
