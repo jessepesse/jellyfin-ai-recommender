@@ -260,7 +260,11 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
         // --- ANCHOR-BASED CANDIDATE PRE-FETCH ---
         // Try to get candidates from user's enriched history first
         const mediaTypeFilter = filters.type === 'tv' ? 'tv' : filters.type === 'movie' ? 'movie' : undefined;
-        const genreFilter = filters.genre || undefined;
+        const genreFilters = (filters.genre || '')
+            .split(',')
+            .map(g => g.trim())
+            .filter(Boolean);
+        const genreFilter = genreFilters.length > 0 ? genreFilters : undefined;
         const moodFilter = filters.mood || undefined;
         const anchors = await getAnchorItems(userName || userId, mediaTypeFilter, genreFilter, moodFilter, 10);
 
@@ -299,13 +303,16 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                     if (!fullDetails) continue;
 
                     // Filter by genre if specified
-                    if (genreFilter) {
-                        const genreLower = genreFilter.toLowerCase();
-                        const hasMatchingGenre = fullDetails.genres.some((g: string) =>
-                            g.toLowerCase().includes(genreLower) || genreLower.includes(g.toLowerCase())
-                        );
+                    if (genreFilter && genreFilter.length > 0) {
+                        const hasMatchingGenre = genreFilter.some(selectedGenre => {
+                            const selectedLower = selectedGenre.toLowerCase();
+                            return fullDetails.genres.some((g: string) => {
+                                const genreLower = g.toLowerCase();
+                                return genreLower.includes(selectedLower) || selectedLower.includes(genreLower);
+                            });
+                        });
                         if (!hasMatchingGenre) {
-                            console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match "${genreFilter}"`);
+                            console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match any of "${genreFilter.join(', ')}"`);
                             continue;
                         }
                     }
@@ -361,13 +368,13 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                     {
                         tasteProfile: tasteProfile || undefined,
                         recentFavorites,
-                        requestedGenre: genreFilter,
+                        requestedGenre: genreFilter?.join(', '),
                         requestedMood: filters.mood,
                     },
                     TARGET_COUNT - buffer.length
                 );
 
-                console.debug(`[Gemini Ranking] Mood="${filters.mood || 'none'}" Genre="${genreFilter || 'none'}" - Approved ${rankedCandidates.length} items`);
+                console.debug(`[Gemini Ranking] Mood="${filters.mood || 'none'}" Genre="${genreFilter?.join(', ') || 'none'}" - Approved ${rankedCandidates.length} items`);
 
                 // Phase 3: Add Gemini-approved items to buffer
                 for (const ranked of rankedCandidates) {
