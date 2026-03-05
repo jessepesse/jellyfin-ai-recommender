@@ -1,4 +1,4 @@
-# 🎬 Jellyfin AI Recommender (v2.5.1)
+# 🎬 Jellyfin AI Recommender (v2.6.0)
 
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**
@@ -14,6 +14,7 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 📈 **Trending Page** — Discover what's popular right now with smart filtering that excludes content you've already watched or requested.
 - �📊 **User Statistics Dashboard** — Visualize your watching habits with beautiful charts, key metrics, and your detailed AI taste profile.
 - 🚫 **Smart Filtering** — Automatically hides content you already own, have watched, or explicitly blocked.
+- 📅 **Decade Range Filter** — Narrow recommendations by release year with an interactive dual-handle slider (1900–2026).
 - 📋 **Watchlist Management** — Organize your "To Watch" list with filtering (Movies vs. TV) and sorting.
 - 🔗 **Jellyseerr Integration** — Request recommended media directly with one click (Optimistic UI).
 - 💾 **Data Persistence** — Uses a local **SQLite** database (via Prisma) to store your history, ratings, and metadata safely.
@@ -388,7 +389,7 @@ See `frontend/nginx.conf` for a reference configuration.
 
         Select Movie or TV Series.
 
-        Optionally select a Genre.
+        Optionally select a Genre, Mood, or Decade Range.
 
         Click "Get Recommendations". The AI will analyze your history and suggest 10 new items.
 

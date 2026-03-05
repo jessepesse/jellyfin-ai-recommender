@@ -6,6 +6,47 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-03-05
+
+### ✨ New Features
+
+- **Decade Range Filter:** Added interactive dual-handle year-range slider (1900–2026) to the recommendations page.
+  - Filter recommendations by release year — e.g. only 2000s movies.
+  - Both handles independently draggable with distinct glow colors (cyan/violet).
+  - Tick labels positioned to match exact slider values.
+  - Year filter integrates with TMDB Discover API queries.
+  - Recommendations fetched only on button click, not on every slider drag.
+- **SQLite-Backed Persistent Cache:** Replaced in-memory `node-cache` with SQLite-backed cache layer.
+  - Recommendations, taste profiles, and enrichment data survive backend restarts.
+  - Automatic TTL expiration and namespace-based cache management.
+
+### 🚀 Improvements
+
+- **Candidate-First Ranking:** Refactored the recommendation fill stage to collect all candidates first, then send a single batch to Gemini for ranking instead of generating titles from scratch. Results in more relevant, higher-quality recommendations.
+- **Multi-Genre Filtering:** Anchor-based recommendations now correctly filter by multiple selected genres simultaneously (previously only matched the first genre).
+- **Parallel Detail Fetch:** Anchor candidate detail fetching now runs with bounded parallelism (p-limit), significantly speeding up recommendation generation.
+
+### 🐛 Bug Fixes
+
+- **Optimistic UI Rollback:** Watchlist, watched, and block actions now await the API response before removing the card. On failure, the card stays visible with a 3-second error toast instead of silently disappearing.
+- **ESLint Warnings:** Resolved all 20 ESLint warnings across the frontend (React 19 `use()` API, proper keys, suppressed legitimate patterns).
+
+### 🧪 Testing
+
+- **E2E Tests:** Added Playwright tests for login and recommendations flows (mocked, no real server needed).
+- **Pipeline Regression Tests:** Added unit tests for recommendation pipeline rules (year filtering, genre matching, exclusion logic).
+
+### 🔧 Infrastructure
+
+- **CI:** Added ESLint check to pre-commit hook and GitHub release workflow.
+- **CI:** Added version consistency check — release workflow fails fast if package.json or CHANGELOG versions don't match the tag.
+
+### 📦 Dependencies
+
+- **Backend:** Updated `@prisma/adapter-better-sqlite3` from 7.4.0 to 7.4.2.
+- **Frontend:** Updated `lucide-react` from 0.564.0 to 0.575.0.
+- **Frontend:** Updated `axios` from 1.13.5 to 1.13.6.
+
 ## [2.5.1] - 2026-03-04
 
 ### 🐛 Bug Fixes

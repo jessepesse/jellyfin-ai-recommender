@@ -56,6 +56,7 @@ Don't rely on CI to catch syntax errors.
 - [ ] Scan code for hardcoded secrets: `grep -r "api_key\|password\|secret" --include="*.ts" --include="*.tsx"`
 
 ## 2. Version Bump
+- [ ] Update version in root `package.json` ⚠️ CI checks this!
 - [ ] Update version in `backend/package.json`
 - [ ] Update version in `frontend/package.json`
 - [ ] Update version in `README.md` header
@@ -86,7 +87,7 @@ If `package-lock.json` files changed:
 ## 4. Commit and Tag
 ```bash
 # Commit version bump
-git add backend/package.json frontend/package.json README.md CHANGELOG.md .env.example
+git add package.json backend/package.json frontend/package.json README.md CHANGELOG.md .env.example
 git commit -m "chore: bump version to X.Y.Z"
 
 # Commit lock files if needed

@@ -116,13 +116,12 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
   }, [selectedType, selectedGenres, selectedMood, selectedYearFrom, selectedYearTo]);
 
   // Load cached recommendations once on mount / view change — NOT on every filter change
-  const initialLoadDone = React.useRef(false);
+  const initialLoadDoneRef = React.useRef(false);
   React.useEffect(() => {
-    if (currentView === 'recommendations' && !initialLoadDone.current) {
-      initialLoadDone.current = true;
+    if (currentView === 'recommendations' && !initialLoadDoneRef.current) {
+      initialLoadDoneRef.current = true;
       handleGetRecommendations(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView]);
 
   return (
