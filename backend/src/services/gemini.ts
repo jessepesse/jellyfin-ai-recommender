@@ -441,6 +441,7 @@ Constraints:
       recentFavorites?: string[];
       requestedGenre?: string;
       requestedMood?: string;
+      requestedYearRange?: string;
     },
     limit: number = 10
   ): Promise<Array<{ tmdbId: number; title: string; reason: string }>> {
@@ -465,6 +466,9 @@ Constraints:
       const genreContext = userContext.requestedGenre
         ? `Requested genre: ${userContext.requestedGenre}`
         : '';
+      const yearRangeContext = userContext.requestedYearRange
+        ? `Requested year range: ${userContext.requestedYearRange}`
+        : '';
 
       // Provide detailed mood descriptions for AI
       const moodDescriptions: Record<string, string> = {
@@ -485,6 +489,7 @@ Constraints:
 ${tasteContext}
 ${favoritesContext}
 ${genreContext}
+${yearRangeContext}
 ${moodContext}
 
 CANDIDATES:
@@ -847,4 +852,3 @@ IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
     }
   }
 }
-

@@ -20,8 +20,10 @@ import pLimit from 'p-limit';
 import { discoverMovies, discoverTV } from '../services/tmdb-discover';
 import { genreNamesToIds, getGenreName } from '../services/tmdb-genres';
 import {
+    extractYear,
     filterViewCacheByExclusions,
     hasMoodSignal,
+    isYearInRange,
     matchesSelectedGenres,
     shouldGenerateWhenViewCacheMiss,
     shouldIncludeTmdbId
@@ -29,6 +31,8 @@ import {
 
 const router = Router();
 const jellyfinService = new JellyfinService();
+const MIN_FILTER_YEAR = 1900;
+const MAX_FILTER_YEAR = 2026;
 
 /**
  * GET /search - Search for media via Jellyseerr
@@ -70,7 +74,7 @@ router.get('/search', authMiddleware, async (req, res) => {
  * Identity sourced exclusively from req.user (set by authMiddleware).
  */
 router.get('/recommendations', authMiddleware, async (req, res) => {
-    const { libraryId, type, genre, mood } = req.query;
+    const { libraryId, type, genre, mood, yearFrom, yearTo } = req.query;
     // x-access-token is still read for Jellyfin API calls (it IS the bearer credential).
     // Identity (username, Jellyfin user ID) comes from req.user — verified by authMiddleware.
     const accessToken = req.headers['x-access-token'] as string;
@@ -91,7 +95,17 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');
 
-        console.log(`[Recommendations] Request: type=${type} genre=${genre} mood=${mood} refresh=${req.query.refresh}`);
+        const rawYearFrom = Number(yearFrom);
+        const rawYearTo = Number(yearTo);
+        const hasYearFrom = Number.isFinite(rawYearFrom);
+        const hasYearTo = Number.isFinite(rawYearTo);
+        let selectedYearFrom = hasYearFrom ? Math.max(MIN_FILTER_YEAR, Math.min(MAX_FILTER_YEAR, rawYearFrom)) : undefined;
+        let selectedYearTo = hasYearTo ? Math.max(MIN_FILTER_YEAR, Math.min(MAX_FILTER_YEAR, rawYearTo)) : undefined;
+        if (selectedYearFrom !== undefined && selectedYearTo !== undefined && selectedYearFrom > selectedYearTo) {
+            [selectedYearFrom, selectedYearTo] = [selectedYearTo, selectedYearFrom];
+        }
+
+        console.log(`[Recommendations] Request: type=${type} genre=${genre} mood=${mood} yearFrom=${selectedYearFrom ?? 'any'} yearTo=${selectedYearTo ?? 'any'} refresh=${req.query.refresh}`);
 
         // Fetch items from library or all libraries
         // NOTE: These Jellyfin API calls are optional - recommendations can work without them
@@ -180,7 +194,13 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
             }
         }
 
-        const filters = { type: type as string | undefined, genre: genre as string | undefined, mood: req.query.mood as string | undefined };
+        const filters = {
+            type: type as string | undefined,
+            genre: genre as string | undefined,
+            mood: req.query.mood as string | undefined,
+            yearFrom: selectedYearFrom,
+            yearTo: selectedYearTo,
+        };
 
         // Buffer-based fetch
         const TARGET_COUNT = 10;
@@ -212,7 +232,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
             ? userData.blockedIds.map(id => ({ tmdbId: id } as MediaItemInput))
             : [];
 
-        const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}_${filters.mood || 'any'}`;
+        const cacheKey = `${userName || userId}_${filters.type || 'any'}_${filters.genre || 'any'}_${filters.mood || 'any'}_${filters.yearFrom || 'any'}_${filters.yearTo || 'any'}`;
         const viewCacheKey = `view_recs_${cacheKey}`;
         // Ensure strictly boolean check on string 'true'
         const forceRefresh = String(req.query.refresh).toLowerCase() === 'true';
@@ -317,6 +337,12 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                             // getMediaDetails() needed, halving Jellyseerr requests per candidate.
                             const fullDetails = await getFullDetails(tmdbId, candidateType);
                             if (!fullDetails) return null;
+
+                            if (!isYearInRange(fullDetails.releaseDate, filters.yearFrom, filters.yearTo)) {
+                                const releaseYear = extractYear(fullDetails.releaseDate);
+                                console.debug(`[Anchor] SKIP: "${tmdbId}" - year ${releaseYear ?? 'unknown'} outside range ${filters.yearFrom ?? 'any'}-${filters.yearTo ?? 'any'}`);
+                                return null;
+                            }
 
                     // Filter by genre if specified
                     if (genreFilter && genreFilter.length > 0) {
@@ -438,9 +464,11 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                 genres: string[];
                 overview?: string;
                 voteAverage?: number;
+                releaseDate?: string;
             }) => {
                 if (!candidate.tmdbId || !Number.isFinite(candidate.tmdbId)) return;
                 if (!candidate.title || !candidate.title.trim()) return;
+                if (!isYearInRange(candidate.releaseDate, filters.yearFrom, filters.yearTo)) return;
                 const existingIds = new Set<number>([
                     ...Array.from(candidatePool.keys()),
                     ...buffer.map(b => Number(b.tmdb_id)).filter(n => Number.isFinite(n)),
@@ -465,6 +493,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                                 genres: fullDetails.genres || [],
                                 overview: fullDetails.overview,
                                 voteAverage: fullDetails.voteAverage,
+                                releaseDate: fullDetails.releaseDate,
                             });
                         } catch {
                             // Ignore fetch failures here
@@ -487,6 +516,8 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                 if (candidateType === 'movie') {
                     const discovered = await discoverMovies({
                         with_genres: discoverGenreIds.length ? discoverGenreIds.join('|') : undefined,
+                        primary_release_date_gte: filters.yearFrom ? `${filters.yearFrom}-01-01` : undefined,
+                        primary_release_date_lte: filters.yearTo ? `${filters.yearTo}-12-31` : undefined,
                         vote_average_gte: discoverVoteMin,
                         vote_count_gte: discoverVoteCountMin,
                         sort_by: attempts === 1 ? 'vote_average.desc' : 'popularity.desc',
@@ -499,11 +530,14 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                             genres: (item.genre_ids || []).map(id => getGenreName(id, 'movie')).filter((g): g is string => !!g),
                             overview: item.overview || undefined,
                             voteAverage: item.vote_average,
+                            releaseDate: item.release_date,
                         });
                     }
                 } else {
                     const discovered = await discoverTV({
                         with_genres: discoverGenreIds.length ? discoverGenreIds.join('|') : undefined,
+                        first_air_date_gte: filters.yearFrom ? `${filters.yearFrom}-01-01` : undefined,
+                        first_air_date_lte: filters.yearTo ? `${filters.yearTo}-12-31` : undefined,
                         vote_average_gte: discoverVoteMin,
                         vote_count_gte: discoverVoteCountMin,
                         sort_by: attempts === 1 ? 'vote_average.desc' : 'popularity.desc',
@@ -516,6 +550,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                             genres: (item.genre_ids || []).map(id => getGenreName(id, 'tv')).filter((g): g is string => !!g),
                             overview: item.overview || undefined,
                             voteAverage: item.vote_average,
+                            releaseDate: item.first_air_date,
                         });
                     }
                 }
@@ -534,6 +569,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                     recentFavorites: likedItems.slice(0, 5).map(i => i.title || i.name || '').filter(Boolean),
                     requestedGenre: genreFilter?.join(', '),
                     requestedMood: filters.mood,
+                    requestedYearRange: (filters.yearFrom || filters.yearTo) ? `${filters.yearFrom ?? 'any'}-${filters.yearTo ?? 'any'}` : undefined,
                 },
                 TARGET_COUNT - buffer.length
             );
