@@ -36,6 +36,7 @@ const envSchema = z.object({
   // Storage paths
   IMAGE_DIR: z.string().default('/app/images'),
   DATABASE_URL: z.string().default('file:/app/data/dev.db'),
+  CACHE_DB_PATH: z.string().optional(),
   INITIAL_ADMIN_PASSWORD: z.string().default('admin123'),
 });
 
@@ -97,6 +98,7 @@ export function validateEnv(): Env {
     GEMINI_API_KEY: validatedEnv.GEMINI_API_KEY ? '(configured)' : '(not set)',
     GEMINI_MODEL: validatedEnv.GEMINI_MODEL,
     IMAGE_DIR: validatedEnv.IMAGE_DIR,
+    CACHE_DB_PATH: validatedEnv.CACHE_DB_PATH || '(auto)',
   }, '✅ Environment validated');
 
   return validatedEnv;

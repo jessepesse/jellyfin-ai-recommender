@@ -47,10 +47,14 @@ export const MOOD_KEYWORDS: Record<string, string[]> = {
 export async function getAnchorItems(
     username: string,
     mediaType?: string,
-    genre?: string,
+    genre?: string | string[],
     mood?: string,
     limit: number = 5
 ): Promise<AnchorItem[]> {
+    const genreFilters = (Array.isArray(genre) ? genre : (genre ? genre.split(',') : []))
+        .map(g => g.trim())
+        .filter(Boolean);
+
     // Find user's watched/watchlist items that are enriched
     const user = await prisma.user.findUnique({
         where: { username },
@@ -60,7 +64,7 @@ export async function getAnchorItems(
 
     // Query media items associated with user that have enrichment data
     // Fetch WATCHED and WATCHLIST separately for balanced selection
-    const hasFilters = genre || mood;
+    const hasFilters = genreFilters.length > 0 || mood;
     const fetchLimit = hasFilters ? limit * 3 : limit * 2;  // Per status
 
     // Fetch WATCHED items
@@ -137,11 +141,14 @@ export async function getAnchorItems(
             if (similarIds.length === 0 && recommendationIds.length === 0) continue;
 
             // Filter by genre if specified
-            if (genre) {
-                const genreLower = genre.toLowerCase();
-                const hasMatchingGenre = genres.some((g: string) =>
-                    g.toLowerCase().includes(genreLower) || genreLower.includes(g.toLowerCase())
-                );
+            if (genreFilters.length > 0) {
+                const hasMatchingGenre = genreFilters.some(selectedGenre => {
+                    const selectedLower = selectedGenre.toLowerCase();
+                    return genres.some((g: string) => {
+                        const genreLower = g.toLowerCase();
+                        return genreLower.includes(selectedLower) || selectedLower.includes(genreLower);
+                    });
+                });
                 if (!hasMatchingGenre) continue;
             }
 

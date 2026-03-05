@@ -4,12 +4,16 @@
  */
 
 import NodeCache from 'node-cache';
+import fs from 'fs';
+import path from 'path';
+import Database from 'better-sqlite3';
 
 // Cache configuration
 const DEFAULT_TTL_SECONDS = 60 * 60; // 1 hour default
 const RECOMMENDATION_TTL_SECONDS = 60 * 30; // 30 minutes for recommendations
 const CONFIG_TTL_SECONDS = 30; // 30 seconds for config (matches ConfigService)
 const JELLYSEERR_TTL_SECONDS = 60 * 60 * 12; // 12 hours for Jellyseerr data
+const PERSISTENT_CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Cache namespaces
 export type CacheNamespace =
@@ -21,6 +25,11 @@ export type CacheNamespace =
   | 'discover'
   | 'api'
   | 'general';
+
+type PersistentCacheResult<T> = {
+  value: T;
+  ttlSeconds: number;
+};
 
 // Internal cache instance
 const cache = new NodeCache({
@@ -35,6 +44,200 @@ const cache = new NodeCache({
 // eliminating the cache-stampede problem under high concurrency.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const inFlight = new Map<string, Promise<any>>();
+
+const PERSISTENT_NAMESPACES = new Set<CacheNamespace>([
+  'recommendations',
+  'jellyseerr',
+  'taste',
+  'tmdb',
+  'discover',
+  'api',
+  'general',
+]);
+
+function resolvePersistentCachePath(): string {
+  const explicit = (process.env.CACHE_DB_PATH || '').trim();
+  if (explicit) {
+    return path.isAbsolute(explicit) ? explicit : path.resolve(process.cwd(), explicit);
+  }
+
+  const databaseUrl = (process.env.DATABASE_URL || '').trim();
+  if (databaseUrl.startsWith('file:')) {
+    const dbPathRaw = databaseUrl.replace(/^file:/, '');
+    const dbPath = path.isAbsolute(dbPathRaw) ? dbPathRaw : path.resolve(process.cwd(), dbPathRaw);
+    return path.join(path.dirname(dbPath), 'cache.db');
+  }
+
+  return path.resolve(process.cwd(), 'data', 'cache.db');
+}
+
+class PersistentCacheStore {
+  private db: Database.Database | null = null;
+  private enabled = false;
+  private lastCleanupAt = 0;
+
+  constructor() {
+    try {
+      const cacheDbPath = resolvePersistentCachePath();
+      fs.mkdirSync(path.dirname(cacheDbPath), { recursive: true });
+      this.db = new Database(cacheDbPath);
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('synchronous = NORMAL');
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS persistent_cache (
+          namespace TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (namespace, key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_persistent_cache_expires_at
+          ON persistent_cache(expires_at);
+      `);
+      this.enabled = true;
+      console.info(`[Cache] Persistent cache enabled at ${cacheDbPath}`);
+    } catch (error) {
+      this.enabled = false;
+      this.db = null;
+      console.warn('[Cache] Persistent cache disabled (SQLite init failed):', error);
+    }
+  }
+
+  private supports(namespace: CacheNamespace): boolean {
+    return this.enabled && this.db !== null && PERSISTENT_NAMESPACES.has(namespace);
+  }
+
+  private cleanupExpiredIfNeeded(): void {
+    if (!this.db || !this.enabled) return;
+    const now = Date.now();
+    if (now - this.lastCleanupAt < PERSISTENT_CACHE_CLEANUP_INTERVAL_MS) return;
+
+    this.lastCleanupAt = now;
+    try {
+      this.db.prepare('DELETE FROM persistent_cache WHERE expires_at <= ?').run(now);
+    } catch (error) {
+      console.warn('[Cache] Failed to cleanup expired persistent entries:', error);
+    }
+  }
+
+  getWithTTL<T>(namespace: CacheNamespace, key: string): PersistentCacheResult<T> | undefined {
+    if (!this.supports(namespace)) return undefined;
+    this.cleanupExpiredIfNeeded();
+
+    try {
+      const now = Date.now();
+      const row = this.db!.prepare(
+        `SELECT value, expires_at
+         FROM persistent_cache
+         WHERE namespace = ? AND key = ?`
+      ).get(namespace, key) as { value: string; expires_at: number } | undefined;
+
+      if (!row) return undefined;
+      if (row.expires_at <= now) {
+        this.del(namespace, key);
+        return undefined;
+      }
+
+      const ttlSeconds = Math.max(1, Math.ceil((row.expires_at - now) / 1000));
+      return {
+        value: JSON.parse(row.value) as T,
+        ttlSeconds,
+      };
+    } catch (error) {
+      console.warn(`[Cache] Failed to read persistent entry (${namespace}:${key}):`, error);
+      return undefined;
+    }
+  }
+
+  set<T>(namespace: CacheNamespace, key: string, value: T, ttlSeconds: number): void {
+    if (!this.supports(namespace)) return;
+    this.cleanupExpiredIfNeeded();
+
+    try {
+      const now = Date.now();
+      const expiresAt = now + Math.max(1, ttlSeconds) * 1000;
+      const serialized = JSON.stringify(value);
+      this.db!.prepare(
+        `INSERT INTO persistent_cache(namespace, key, value, expires_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(namespace, key) DO UPDATE SET
+           value = excluded.value,
+           expires_at = excluded.expires_at,
+           updated_at = excluded.updated_at`
+      ).run(namespace, key, serialized, expiresAt, now);
+    } catch (error) {
+      console.warn(`[Cache] Failed to persist entry (${namespace}:${key}):`, error);
+    }
+  }
+
+  has(namespace: CacheNamespace, key: string): boolean {
+    if (!this.supports(namespace)) return false;
+    this.cleanupExpiredIfNeeded();
+    try {
+      const now = Date.now();
+      const row = this.db!.prepare(
+        `SELECT 1
+         FROM persistent_cache
+         WHERE namespace = ? AND key = ? AND expires_at > ?
+         LIMIT 1`
+      ).get(namespace, key, now);
+      return !!row;
+    } catch {
+      return false;
+    }
+  }
+
+  del(namespace: CacheNamespace, key: string): number {
+    if (!this.supports(namespace)) return 0;
+    try {
+      const info = this.db!.prepare(
+        `DELETE FROM persistent_cache
+         WHERE namespace = ? AND key = ?`
+      ).run(namespace, key);
+      return Number(info.changes || 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  clearNamespace(namespace: CacheNamespace): number {
+    if (!this.supports(namespace)) return 0;
+    try {
+      const info = this.db!.prepare(
+        `DELETE FROM persistent_cache
+         WHERE namespace = ?`
+      ).run(namespace);
+      return Number(info.changes || 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  clearAll(): number {
+    if (!this.enabled || !this.db) return 0;
+    try {
+      const info = this.db.prepare('DELETE FROM persistent_cache').run();
+      return Number(info.changes || 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  countActiveKeys(): number {
+    if (!this.enabled || !this.db) return 0;
+    this.cleanupExpiredIfNeeded();
+    try {
+      const now = Date.now();
+      const row = this.db.prepare('SELECT COUNT(*) AS count FROM persistent_cache WHERE expires_at > ?').get(now) as { count: number };
+      return Number(row?.count || 0);
+    } catch {
+      return 0;
+    }
+  }
+}
+
+const persistentCache = new PersistentCacheStore();
 
 /**
  * Get TTL for a specific namespace
@@ -73,7 +276,16 @@ export const CacheService = {
    */
   get<T>(namespace: CacheNamespace, key: string): T | undefined {
     const fullKey = buildKey(namespace, key);
-    return cache.get<T>(fullKey);
+    const memoryHit = cache.get<T>(fullKey);
+    if (memoryHit !== undefined) return memoryHit;
+
+    const persistentHit = persistentCache.getWithTTL<T>(namespace, key);
+    if (persistentHit !== undefined) {
+      cache.set(fullKey, persistentHit.value, persistentHit.ttlSeconds);
+      return persistentHit.value;
+    }
+
+    return undefined;
   },
 
   /**
@@ -82,7 +294,9 @@ export const CacheService = {
   set<T>(namespace: CacheNamespace, key: string, value: T, customTTL?: number): boolean {
     const fullKey = buildKey(namespace, key);
     const ttl = customTTL ?? getTTLForNamespace(namespace);
-    return cache.set(fullKey, value, ttl);
+    const memoryStored = cache.set(fullKey, value, ttl);
+    persistentCache.set(namespace, key, value, ttl);
+    return memoryStored;
   },
 
   /**
@@ -90,7 +304,7 @@ export const CacheService = {
    */
   has(namespace: CacheNamespace, key: string): boolean {
     const fullKey = buildKey(namespace, key);
-    return cache.has(fullKey);
+    return cache.has(fullKey) || persistentCache.has(namespace, key);
   },
 
   /**
@@ -98,7 +312,9 @@ export const CacheService = {
    */
   del(namespace: CacheNamespace, key: string): number {
     const fullKey = buildKey(namespace, key);
-    return cache.del(fullKey);
+    const deletedFromMemory = cache.del(fullKey);
+    const deletedFromPersistent = persistentCache.del(namespace, key);
+    return deletedFromMemory + deletedFromPersistent;
   },
 
   /**
@@ -108,10 +324,12 @@ export const CacheService = {
     const keys = cache.keys();
     const prefix = `${namespace}:`;
     const toDelete = keys.filter(k => k.startsWith(prefix));
+    let deletedMemory = 0;
     if (toDelete.length > 0) {
-      cache.del(toDelete);
-      console.debug(`[Cache] Cleared ${toDelete.length} entries from namespace '${namespace}'`);
+      deletedMemory = cache.del(toDelete);
     }
+    const deletedPersistent = persistentCache.clearNamespace(namespace);
+    console.debug(`[Cache] Cleared namespace '${namespace}' (memory=${deletedMemory}, persistent=${deletedPersistent})`);
   },
 
   /**
@@ -119,19 +337,21 @@ export const CacheService = {
    */
   clearAll(): void {
     cache.flushAll();
-    console.debug('[Cache] Flushed all cache entries');
+    const deletedPersistent = persistentCache.clearAll();
+    console.debug(`[Cache] Flushed all cache entries (persistent deleted=${deletedPersistent})`);
   },
 
   /**
    * Get cache statistics
    */
-  getStats(): { hits: number; misses: number; keys: number; size: number } {
+  getStats(): { hits: number; misses: number; keys: number; size: number; persistentKeys: number } {
     const stats = cache.getStats();
     return {
       hits: stats.hits,
       misses: stats.misses,
       keys: cache.keys().length,
       size: stats.ksize + stats.vsize,
+      persistentKeys: persistentCache.countActiveKeys(),
     };
   },
 
