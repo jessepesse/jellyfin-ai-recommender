@@ -58,7 +58,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         // cache, and expires after 5 minutes (NodeCache stdTTL). See SECURITY.md.
         const token = req.headers['x-access-token'] as string ||
             req.headers['x-emby-token'] as string ||
-            req.query.api_key as string; // lgtm[js/sensitive-get-query]
+            req.query.api_key as string; // lgtm[js/sensitive-get-query] codeql[js/sensitive-get-query]
 
         if (!token) {
             return res.status(401).json({ error: 'Unauthorized - No token provided' });

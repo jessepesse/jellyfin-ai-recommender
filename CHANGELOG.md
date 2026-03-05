@@ -31,6 +31,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Optimistic UI Rollback:** Watchlist, watched, and block actions now await the API response before removing the card. On failure, the card stays visible with a 3-second error toast instead of silently disappearing.
 - **ESLint Warnings:** Resolved all 20 ESLint warnings across the frontend (React 19 `use()` API, proper keys, suppressed legitimate patterns).
 
+### 🔒 Security
+
+- **CodeQL Format String:** Replaced template literal format strings in `cache.ts` with string concatenation to eliminate externally-controlled format string alerts.
+- **Dependency Overrides:** Patched `hono` (≥4.12.4), `@hono/node-server` (≥1.19.10), and `lodash` (≥4.17.23) via npm overrides to resolve transitive dependency CVEs without downgrading Prisma.
+- **SECURITY.md:** Documented all known CodeQL false positives (SSRF, GET sensitive data, clear text storage) with risk analysis and mitigation details.
+
 ### 🧪 Testing
 
 - **E2E Tests:** Added Playwright tests for login and recommendations flows (mocked, no real server needed).
@@ -44,6 +50,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### 📦 Dependencies
 
 - **Backend:** Updated `@prisma/adapter-better-sqlite3` from 7.4.0 to 7.4.2.
+- **Backend:** Overrode `hono` to 4.12.5 and `@hono/node-server` to 1.19.11 (CVE-2026-24398, CVE-2026-29045, GHSA-wc8c).
+- **Backend:** Overrode `lodash` to ≥4.17.23 (CVE-2025-13465 prototype pollution).
 - **Frontend:** Updated `lucide-react` from 0.564.0 to 0.575.0.
 - **Frontend:** Updated `axios` from 1.13.5 to 1.13.6.
 

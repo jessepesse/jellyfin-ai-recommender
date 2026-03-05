@@ -64,10 +64,12 @@
   "overrides": {
     "glob": "^10.4.0",
     "inflight": "npm:@pnpm/npm-lifecycle@1.1.0",
-    "lodash.get": "npm:lodash@^4.17.21",
-    "lodash.isequal": "npm:lodash@^4.17.21",
+    "lodash.get": "npm:lodash@^4.17.23",
+    "lodash.isequal": "npm:lodash@^4.17.23",
+    "lodash": ">=4.17.23",
     "minimatch": "^10.2.4",
-    "hono": "^4.11.10",
+    "hono": "^4.12.4",
+    "@hono/node-server": "^1.19.10",
     "rollup": "^4.59.0"
   }
 }

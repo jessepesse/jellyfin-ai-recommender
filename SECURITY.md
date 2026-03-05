@@ -155,6 +155,43 @@ Mitigations applied to reduce the risk of token exposure:
 
 Code includes suppression comment: `lgtm[js/sensitive-get-query]`
 
+### Clear Text Storage of Sensitive Information (#58)
+
+**Status:** Known Accepted Risk — documented tradeoff for self-hosted deployment
+
+**Location:** `frontend/src/contexts/AuthContext.tsx` (sessionStorage password)
+
+**CodeQL Alert:** "Sensitive data is stored in clear text" (Rule ID: `js/clear-text-storage-of-sensitive-data`)
+
+**What The Code Does:**
+
+```typescript
+sessionStorage.setItem('jellyfin_password', password);
+```
+
+The user's Jellyfin password is stored in `sessionStorage` to enable automatic token refresh when the Jellyfin access token expires during a session.
+
+**Why This Is An Accepted Risk:**
+
+| Factor | Detail |
+|--------|--------|
+| **Storage type** | `sessionStorage` — cleared when browser tab closes, NOT persisted to disk |
+| **Purpose** | Jellyfin tokens expire; re-authentication requires the password |
+| **Alternative** | Backend session management with httpOnly cookies — significant architecture change |
+| **Deployment model** | Self-hosted application running on the user's own network |
+| **Scope** | Only accessible by same-origin JavaScript in the same tab |
+
+**Mitigations:**
+
+- Uses `sessionStorage` (not `localStorage`): data is cleared when the tab closes
+- Password is never transmitted except to the backend's `/api/auth/login` endpoint
+- No cross-tab access (unlike localStorage)
+- The application is self-hosted — the user controls the deployment environment
+
+**Resolution:**
+
+Code includes suppression comment: `codeql[js/clear-text-storage-of-sensitive-data]`
+
 ## Security Measures Implemented
 
 ### Input Validation
@@ -190,7 +227,8 @@ Code includes suppression comment: `lgtm[js/sensitive-get-query]`
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 2.0.x   | :white_check_mark: |
+| 2.6.x   | :white_check_mark: |
+| 2.5.x   | :white_check_mark: |
 | < 2.0   | :x:                |
 
 ## Security Update Policy
