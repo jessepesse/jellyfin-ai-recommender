@@ -19,6 +19,13 @@ import { authMiddleware } from '../middleware/auth';
 import pLimit from 'p-limit';
 import { discoverMovies, discoverTV } from '../services/tmdb-discover';
 import { genreNamesToIds, getGenreName } from '../services/tmdb-genres';
+import {
+    filterViewCacheByExclusions,
+    hasMoodSignal,
+    matchesSelectedGenres,
+    shouldGenerateWhenViewCacheMiss,
+    shouldIncludeTmdbId
+} from '../services/recommendations-pipeline';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
@@ -218,30 +225,30 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
         // --- VIEW CACHE LOGIC ---
         // If not forcing refresh, try to load from view cache first
         if (!forceRefresh) {
-            let viewCached = CacheService.get<FrontendItem[]>('recommendations', viewCacheKey);
-            if (viewCached && viewCached.length > 0) {
-                // Filter out items the user has since interacted with (watched/blocked/watchlist)
-                const preFilterCount = viewCached.length;
-                viewCached = viewCached.filter(item => {
-                    const tmdbId = item.tmdbId;
-                    if (!tmdbId) return false;
-                    return !excludedIds.has(tmdbId);
-                });
-                console.log(`[ViewCache] Serving ${viewCached.length} items (filtered ${preFilterCount - viewCached.length} acted-upon items)`);
+            const viewCached = CacheService.get<FrontendItem[]>('recommendations', viewCacheKey);
+            const preFilterCount = Array.isArray(viewCached) ? viewCached.length : 0;
+            const filteredViewCache = filterViewCacheByExclusions(viewCached, excludedIds);
+            const shouldGenerate = shouldGenerateWhenViewCacheMiss(forceRefresh, filteredViewCache.length);
 
-                if (viewCached.length > 0) {
-                    // Update cache with clean list to keep it fresh
-                    CacheService.set('recommendations', viewCacheKey, viewCached, 60 * 60 * 24); // 24h retention for view
-                    return res.json(viewCached);
-                }
-                // Cache is empty after filtering - DO NOT auto-generate
-                // User must explicitly click "Get Recommendations" to fetch new items
-                console.log('[ViewCache] Cache empty after filtering - returning empty (user must click button to generate)');
-                return res.json([]);
+            if (preFilterCount > 0) {
+                console.log(`[ViewCache] Serving ${filteredViewCache.length} items (filtered ${preFilterCount - filteredViewCache.length} acted-upon items)`);
             } else {
                 // No cache exists - DO NOT auto-generate
                 // Return empty array; user must click "Get Recommendations" to start generation
                 console.log('[ViewCache] No view cache found - returning empty (user must click button to generate)');
+            }
+
+            if (!shouldGenerate) {
+                if (filteredViewCache.length > 0) {
+                    // Update cache with clean list to keep it fresh
+                    CacheService.set('recommendations', viewCacheKey, filteredViewCache, 60 * 60 * 24); // 24h retention for view
+                    return res.json(filteredViewCache);
+                }
+                // Cache is empty after filtering - DO NOT auto-generate
+                // User must explicitly click "Get Recommendations" to fetch new items
+                if (preFilterCount > 0) {
+                    console.log('[ViewCache] Cache empty after filtering - returning empty (user must click button to generate)');
+                }
                 return res.json([]);
             }
         } else {
@@ -311,32 +318,19 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                             const fullDetails = await getFullDetails(tmdbId, candidateType);
                             if (!fullDetails) return null;
 
-                            // Filter by genre if specified
-                            if (genreFilter && genreFilter.length > 0) {
-                                const hasMatchingGenre = genreFilter.some(selectedGenre => {
-                                    const selectedLower = selectedGenre.toLowerCase();
-                                    return fullDetails.genres.some((g: string) => {
-                                        const genreLower = g.toLowerCase();
-                                        return genreLower.includes(selectedLower) || selectedLower.includes(genreLower);
-                                    });
-                                });
-                                if (!hasMatchingGenre) {
-                                    console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match any of "${genreFilter.join(', ')}"`);
-                                    return null;
-                                }
-                            }
+                    // Filter by genre if specified
+                    if (genreFilter && genreFilter.length > 0) {
+                        const hasMatchingGenre = matchesSelectedGenres(fullDetails.genres, genreFilter);
+                        if (!hasMatchingGenre) {
+                            console.debug(`[Anchor] SKIP: "${tmdbId}" - genres [${fullDetails.genres.join(', ')}] don't match any of "${genreFilter.join(', ')}"`);
+                            return null;
+                        }
+                    }
 
                             let moodMatched: boolean | null = null;
                             if (moodFilter && MOOD_KEYWORDS[moodFilter]) {
                                 const moodKeywords = MOOD_KEYWORDS[moodFilter];
-                                const candidateKeywords = fullDetails.keywords || [];
-                                const keywordsLower = candidateKeywords.map((k: string) => k.toLowerCase());
-                                const hasMatchingKeyword = moodKeywords.some(mk =>
-                                    keywordsLower.some((k: string) => k.includes(mk.toLowerCase()) || mk.toLowerCase().includes(k))
-                                );
-                                const overviewLower = (fullDetails.overview || '').toLowerCase();
-                                const hasOverviewMatch = moodKeywords.some(mk => overviewLower.includes(mk.toLowerCase()));
-                                moodMatched = hasMatchingKeyword || hasOverviewMatch;
+                                moodMatched = hasMoodSignal(fullDetails.keywords || [], fullDetails.overview, moodKeywords);
                             }
 
                             return {
@@ -447,8 +441,11 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
             }) => {
                 if (!candidate.tmdbId || !Number.isFinite(candidate.tmdbId)) return;
                 if (!candidate.title || !candidate.title.trim()) return;
-                if (excludedIds.has(candidate.tmdbId)) return;
-                if (buffer.find(b => Number(b.tmdb_id) === candidate.tmdbId)) return;
+                const existingIds = new Set<number>([
+                    ...Array.from(candidatePool.keys()),
+                    ...buffer.map(b => Number(b.tmdb_id)).filter(n => Number.isFinite(n)),
+                ]);
+                if (!shouldIncludeTmdbId(candidate.tmdbId, excludedIds, existingIds)) return;
                 if (!candidatePool.has(candidate.tmdbId)) candidatePool.set(candidate.tmdbId, candidate);
             };
 
