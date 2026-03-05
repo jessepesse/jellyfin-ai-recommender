@@ -57,14 +57,14 @@ You can choose between two AI providers:
 - **Configuration:**
   - Set `AI_PROVIDER=openrouter`
   - Set `OPENROUTER_API_KEY`
-  - Set `AI_MODEL` (e.g., `google/gemini-2.0-flash-exp:free`) - **Note:** Prefix is required!
+  - Set `AI_MODEL` (e.g., `google/gemini-3.1-flash-lite-preview:free`) - **Note:** Prefix is required!
 
 **Docker Compose Example:**
 ```yaml
 environment:
   - AI_PROVIDER=openrouter
   - OPENROUTER_API_KEY=sk-or-v1-...
-  - AI_MODEL=google/gemini-2.0-flash-exp:free
+  - AI_MODEL=google/gemini-3.1-flash-lite-preview:free
 ```
 
 ### 1. Create `docker-compose.yml`
@@ -94,7 +94,7 @@ services:
       # - AI_PROVIDER=google                     # 'google' or 'openrouter'
       # - GEMINI_API_KEY=your-gemini-key         # Required if provider is google
       # - OPENROUTER_API_KEY=your-openrouter-key # Required if provider is openrouter
-      # - AI_MODEL=gemini-2.0-flash-exp          # Optional: Custom model
+      # - AI_MODEL=gemini-3.1-flash-lite-preview  # Optional: Custom model
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s
