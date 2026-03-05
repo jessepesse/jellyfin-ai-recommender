@@ -4,19 +4,21 @@
 
 import { Router, Request, Response } from 'express';
 import { JellyfinService, JellyfinAuthError } from '../jellyfin';
-import { JellyfinItem, FrontendItem, UserData, MediaItemInput, RecommendationCandidate } from '../types';
+import { JellyfinItem, FrontendItem, MediaItemInput } from '../types';
 import { getUserData, getFullWatchlist } from '../services/data';
 import prisma from '../services/data';
 import { GeminiService } from '../services/gemini';
 import { TasteService } from '../services/taste';
-import { search as jellySearch, Enriched, getFullDetails, searchAndEnrich } from '../services/jellyseerr';
+import { search as jellySearch, Enriched, getFullDetails } from '../services/jellyseerr';
 import { extractTmdbIds } from '../services/jellyfin-normalizer';
 import { CacheService } from '../services/cache';
 import { sanitizeUrl } from '../utils/ssrf-protection';
 import { toFrontendItem } from './route-utils';
-import { getAnchorItems, collectCandidateIds, buildAnchorContext, MOOD_KEYWORDS } from '../services/anchor-recommendations';
+import { getAnchorItems, collectCandidateIds, MOOD_KEYWORDS } from '../services/anchor-recommendations';
 import { authMiddleware } from '../middleware/auth';
 import pLimit from 'p-limit';
+import { discoverMovies, discoverTV } from '../services/tmdb-discover';
+import { genreNamesToIds, getGenreName } from '../services/tmdb-genres';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
@@ -422,65 +424,136 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
             attempts++;
             console.debug(`[Buffer] Attempt ${attempts}/${MAX_ATTEMPTS} — buffer has ${buffer.length}/${TARGET_COUNT}`);
 
-            let tasteProfile = await TasteService.getProfile(userName || userId, (filters.type === 'tv') ? 'tv' : 'movie');
+            const candidateType: 'movie' | 'tv' = filters.type === 'tv' ? 'tv' : 'movie';
+            let tasteProfile = await TasteService.getProfile(userName || userId, candidateType);
             if (!tasteProfile || tasteProfile.length < 10) {
-                TasteService.triggerUpdate(userName || userId, (filters.type === 'tv') ? 'tv' : 'movie', accessToken, userId);
+                TasteService.triggerUpdate(userName || userId, candidateType, accessToken, userId);
             }
 
-            const exclusionTable = allExclusionArray.map(t => {
-                const m = t.match(/\((\d{4})\)$/);
-                const year = m ? m[1] : '';
-                const title = m ? t.replace(/\s*\(\d{4}\)$/, '') : t;
-                return `| ${title.trim()} | ${year} |`;
-            }).join('\n');
+            const candidatePool = new Map<number, {
+                tmdbId: number;
+                title: string;
+                genres: string[];
+                overview?: string;
+                voteAverage?: number;
+            }>();
 
-            let rawRecs: RecommendationCandidate[] = [];
+            const addCandidate = (candidate: {
+                tmdbId: number;
+                title: string;
+                genres: string[];
+                overview?: string;
+                voteAverage?: number;
+            }) => {
+                if (!candidate.tmdbId || !Number.isFinite(candidate.tmdbId)) return;
+                if (!candidate.title || !candidate.title.trim()) return;
+                if (excludedIds.has(candidate.tmdbId)) return;
+                if (buffer.find(b => Number(b.tmdb_id) === candidate.tmdbId)) return;
+                if (!candidatePool.has(candidate.tmdbId)) candidatePool.set(candidate.tmdbId, candidate);
+            };
+
+            // Candidate source 1: Expanded anchor graph (candidate-first, no title generation)
             try {
-                rawRecs = await GeminiService.getRecommendations(
-                    userName || userId,
-                    { ...userData, jellyfin_history: history } as UserData,
-                    likedItems,
-                    dislikedItems,
-                    { type: filters.type, genre: filters.genre, mood: filters.mood },
-                    tasteProfile,
-                    exclusionTable
-                );
+                const fillAnchors = await getAnchorItems(userName || userId, candidateType, genreFilter, moodFilter, 15);
+                const fillAnchorIds = collectCandidateIds(fillAnchors, excludedIds).slice(0, 100);
+                const detailLimit = pLimit(8);
+                await Promise.all(fillAnchorIds.map(tmdbId =>
+                    detailLimit(async () => {
+                        try {
+                            const fullDetails = await getFullDetails(tmdbId, candidateType);
+                            if (!fullDetails || !fullDetails.tmdb_id || excludedIds.has(fullDetails.tmdb_id)) return;
+                            addCandidate({
+                                tmdbId: fullDetails.tmdb_id,
+                                title: fullDetails.title,
+                                genres: fullDetails.genres || [],
+                                overview: fullDetails.overview,
+                                voteAverage: fullDetails.voteAverage,
+                            });
+                        } catch {
+                            // Ignore fetch failures here
+                        }
+                    })
+                ));
             } catch (e) {
-                console.error('Gemini batch fetch failed', e);
-                rawRecs = [];
+                console.warn('[Fill] Anchor candidate pool collection failed:', e instanceof Error ? e.message : e);
             }
 
-            if (!Array.isArray(rawRecs)) rawRecs = [];
-            console.log(`[Gemini] Received ${rawRecs.length} raw candidates from AI.`);
+            // Candidate source 2: TMDB Discover pool
+            try {
+                const discoverGenreIds = genreFilter && genreFilter.length > 0
+                    ? genreNamesToIds(genreFilter, candidateType)
+                    : [];
+                const discoverVoteMin = attempts === 1 ? 7.0 : attempts === 2 ? 6.5 : 6.0;
+                const discoverVoteCountMin = attempts === 1 ? 250 : attempts === 2 ? 100 : 50;
+                const discoverPages = attempts === 1 ? 2 : attempts === 2 ? 3 : 4;
 
-            for (const rec of rawRecs) {
+                if (candidateType === 'movie') {
+                    const discovered = await discoverMovies({
+                        with_genres: discoverGenreIds.length ? discoverGenreIds.join('|') : undefined,
+                        vote_average_gte: discoverVoteMin,
+                        vote_count_gte: discoverVoteCountMin,
+                        sort_by: attempts === 1 ? 'vote_average.desc' : 'popularity.desc',
+                    }, discoverPages);
+
+                    for (const item of discovered) {
+                        addCandidate({
+                            tmdbId: item.id,
+                            title: item.title || item.original_title || '',
+                            genres: (item.genre_ids || []).map(id => getGenreName(id, 'movie')).filter((g): g is string => !!g),
+                            overview: item.overview || undefined,
+                            voteAverage: item.vote_average,
+                        });
+                    }
+                } else {
+                    const discovered = await discoverTV({
+                        with_genres: discoverGenreIds.length ? discoverGenreIds.join('|') : undefined,
+                        vote_average_gte: discoverVoteMin,
+                        vote_count_gte: discoverVoteCountMin,
+                        sort_by: attempts === 1 ? 'vote_average.desc' : 'popularity.desc',
+                    }, discoverPages);
+
+                    for (const item of discovered) {
+                        addCandidate({
+                            tmdbId: item.id,
+                            title: item.name || item.original_name || '',
+                            genres: (item.genre_ids || []).map(id => getGenreName(id, 'tv')).filter((g): g is string => !!g),
+                            overview: item.overview || undefined,
+                            voteAverage: item.vote_average,
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('[Fill] TMDB discover candidate pool collection failed:', e instanceof Error ? e.message : e);
+            }
+
+            const candidatesForRanking = Array.from(candidatePool.values());
+            console.debug(`[Fill] Candidate pool has ${candidatesForRanking.length} items before AI ranking`);
+            if (candidatesForRanking.length === 0) continue;
+
+            const rankedCandidates = await GeminiService.rankCandidates(
+                candidatesForRanking,
+                {
+                    tasteProfile: tasteProfile || undefined,
+                    recentFavorites: likedItems.slice(0, 5).map(i => i.title || i.name || '').filter(Boolean),
+                    requestedGenre: genreFilter?.join(', '),
+                    requestedMood: filters.mood,
+                },
+                TARGET_COUNT - buffer.length
+            );
+
+            for (const ranked of rankedCandidates) {
                 if (buffer.length >= TARGET_COUNT) break;
                 try {
-                    if (!rec || !rec.title) continue;
-                    const recTitle = String(rec.title).trim();
-                    if (!recTitle) continue;
+                    const details = await getFullDetails(ranked.tmdbId, candidateType);
+                    if (!details || !details.tmdb_id) continue;
+                    if (excludedIds.has(details.tmdb_id)) continue;
+                    if (buffer.find(b => Number(b.tmdb_id) === details.tmdb_id)) continue;
 
-                    const enriched = await searchAndEnrich(recTitle, rec.media_type, rec.release_year);
-                    if (!enriched) {
-                        console.log(`[Filter] DROP: "${recTitle}" (${rec.release_year}) - Verification Failed`);
-                        continue;
-                    }
-                    // Ensure genres are explicitly passed if available (Enriched type has them, but verifying)
-                    // enriched object is what gets pushed to buffer
-                    const tmdb = enriched.tmdb_id ? Number(enriched.tmdb_id) : null;
-                    if (!tmdb || !Number.isFinite(tmdb)) continue;
-
-                    if (excludedIds.has(tmdb)) {
-                        console.log(`[Filter] DROP: "${recTitle}" (TMDB:${tmdb}) - Already in Library/History`);
-                        continue;
-                    }
-                    if (buffer.find(b => Number(b.tmdb_id) === tmdb)) continue;
-
-                    console.log(`[Filter] ACCEPT: "${recTitle}" (TMDB:${tmdb}, ${rec.release_year})`);
-                    buffer.push(enriched);
-                    excludedIds.add(tmdb);
-                } catch (e) {
-                    console.error('Error processing candidate', rec, e);
+                    buffer.push(details);
+                    excludedIds.add(details.tmdb_id);
+                    console.log(`[Fill+Gemini] ACCEPT: "${ranked.title}" - ${ranked.reason || 'candidate-first rank'}`);
+                } catch {
+                    // Skip details failures
                 }
             }
         }
