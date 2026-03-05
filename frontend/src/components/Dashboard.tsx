@@ -33,8 +33,12 @@ const MOODS = [
 ];
 const YEAR_MIN = 1900;
 const YEAR_MAX = 2026;
-const YEAR_STEP = 10;
-const YEAR_TICKS = Array.from({ length: Math.floor((YEAR_MAX - YEAR_MIN) / YEAR_STEP) + 1 }, (_, i) => YEAR_MIN + i * YEAR_STEP);
+const YEAR_STEP = 1;
+const YEAR_TICKS = (() => {
+  const ticks = Array.from({ length: Math.floor((YEAR_MAX - YEAR_MIN) / 10) + 1 }, (_, i) => YEAR_MIN + i * 10);
+  if (!ticks.includes(YEAR_MAX)) ticks.push(YEAR_MAX);
+  return ticks;
+})();
 
 interface Props {
   currentView?: 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings' | 'blocked';
@@ -85,8 +89,9 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
       if (selectedType) params.type = selectedType;
       if (genreParam) params.genre = genreParam;
       if (selectedMood) params.mood = selectedMood;
-      params.yearFrom = selectedYearFrom;
-      params.yearTo = selectedYearTo;
+      // Only send year filters when they differ from defaults to maintain cache compatibility
+      if (selectedYearFrom > YEAR_MIN) params.yearFrom = selectedYearFrom;
+      if (selectedYearTo < YEAR_MAX) params.yearTo = selectedYearTo;
       params.refresh = refresh;
 
       // getRecommendations signature is (targetItemId, libraryId, options)
@@ -110,12 +115,15 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     }
   }, [selectedType, selectedGenres, selectedMood, selectedYearFrom, selectedYearTo]);
 
-  // Load cached recommendations on mount if viewing recommendations page
+  // Load cached recommendations once on mount / view change — NOT on every filter change
+  const initialLoadDone = React.useRef(false);
   React.useEffect(() => {
-    if (currentView === 'recommendations') {
+    if (currentView === 'recommendations' && !initialLoadDone.current) {
+      initialLoadDone.current = true;
       handleGetRecommendations(false);
     }
-  }, [currentView, handleGetRecommendations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView]);
 
   return (
     <div className="flex-1 p-4 md:p-8 overflow-y-auto flex flex-col h-full pb-30">
@@ -173,7 +181,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
                         step={YEAR_STEP}
                         value={selectedYearFrom}
                         onChange={(e) => handleYearFromChange(Number(e.target.value))}
-                        className="absolute inset-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-300 [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(34,211,238,0.9)]"
+                        className="range-slider range-slider-min absolute inset-0 z-20 w-full"
                         aria-label="Select minimum release year"
                       />
                       <input
@@ -183,13 +191,19 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
                         step={YEAR_STEP}
                         value={selectedYearTo}
                         onChange={(e) => handleYearToChange(Number(e.target.value))}
-                        className="absolute inset-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-violet-300 [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(139,92,246,0.9)]"
+                        className="range-slider range-slider-max absolute inset-0 z-30 w-full"
                         aria-label="Select maximum release year"
                       />
                     </div>
-                    <div className="mt-3 flex justify-between text-xs text-slate-500">
+                    <div className="mt-3 relative h-4 text-xs text-slate-500">
                       {YEAR_TICKS.map(year => (
-                        <span key={year}>{year}</span>
+                        <span
+                          key={year}
+                          className="absolute -translate-x-1/2"
+                          style={{ left: `${((year - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100}%` }}
+                        >
+                          {year}
+                        </span>
                       ))}
                     </div>
                   </div>
