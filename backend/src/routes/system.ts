@@ -126,7 +126,7 @@ proxyRouter.get('/image', async (req, res) => {
         // (2) relative paths are constructed solely from the admin-configured base URL;
         // (3) validateSafeUrl() performs a final sync protocol + blocklist check.
         // CodeQL cannot statically trace our custom sanitizers — see SECURITY.md for full analysis.
-        const response = await axios.get(validateSafeUrl(imageUrl), { // lgtm[js/request-forgery] codeql[js/server-side-request-forgery]
+        const response = await axios.get(validateSafeUrl(imageUrl), { // lgtm[js/request-forgery] codeql[js/request-forgery]
             responseType: 'arraybuffer',
             headers,
             timeout: 10000,

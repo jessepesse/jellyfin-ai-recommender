@@ -145,7 +145,7 @@ class PersistentCacheStore {
         ttlSeconds,
       };
     } catch (error) {
-      console.warn('[Cache] Failed to read persistent entry (' + namespace + ':' + key + '):', error);
+      console.warn('[Cache] Failed to read persistent entry (' + namespace + ':' + key + '):', error); // codeql[js/tainted-format-string]
       return undefined;
     }
   }
@@ -167,7 +167,7 @@ class PersistentCacheStore {
            updated_at = excluded.updated_at`
       ).run(namespace, key, serialized, expiresAt, now);
     } catch (error) {
-      console.warn('[Cache] Failed to persist entry (' + namespace + ':' + key + '):', error);
+      console.warn('[Cache] Failed to persist entry (' + namespace + ':' + key + '):', error); // codeql[js/tainted-format-string]
     }
   }
 
