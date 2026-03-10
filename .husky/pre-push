@@ -1,0 +1,21 @@
+#!/bin/sh
+# Check version consistency when pushing a version tag (v*)
+while read local_ref local_sha remote_ref remote_sha; do
+  if echo "$local_ref" | grep -qE '^refs/tags/v[0-9]'; then
+    TAG=$(echo "$local_ref" | sed 's|refs/tags/v||')
+    ROOT_VER=$(node -p "require('./package.json').version")
+    BACKEND_VER=$(node -p "require('./backend/package.json').version")
+    FRONTEND_VER=$(node -p "require('./frontend/package.json').version")
+
+    FAIL=0
+    [ "$ROOT_VER"     != "$TAG" ] && echo "❌ package.json ($ROOT_VER) != tag ($TAG)"          && FAIL=1
+    [ "$BACKEND_VER"  != "$TAG" ] && echo "❌ backend/package.json ($BACKEND_VER) != tag ($TAG)"  && FAIL=1
+    [ "$FRONTEND_VER" != "$TAG" ] && echo "❌ frontend/package.json ($FRONTEND_VER) != tag ($TAG)" && FAIL=1
+
+    if [ $FAIL -eq 1 ]; then
+      echo "Fix version numbers before pushing tag v$TAG"
+      exit 1
+    fi
+    echo "✅ All versions match tag v$TAG"
+  fi
+done
