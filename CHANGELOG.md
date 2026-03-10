@@ -6,6 +6,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-03-10
+
+### 🔐 Security
+
+- **Backend Session Management:** Replaced client-side credential storage with server-side encrypted sessions.
+  - Jellyfin tokens and credentials stored AES-256-GCM encrypted in the database — never in the browser.
+  - Session tokens are opaque 64-hex strings; the raw token is never stored (only HMAC-SHA256 hash).
+  - Sliding window expiry (30 days default), configurable via `SESSION_TTL_DAYS`.
+  - `SESSION_SECRET` auto-generated on first run and persisted to `/app/data/.session_secret` — no user action required.
+  - Transparent Jellyfin token refresh: backend re-authenticates using encrypted credential when token expires.
+  - New `POST /api/auth/logout` endpoint invalidates session server-side.
+  - Daily cron purges expired sessions at 03:30.
+  - Fixes CodeQL alert #67 (clear-text password in sessionStorage).
+- **express-rate-limit** updated 8.2.1 → 8.3.1 (fixes IPv4-mapped IPv6 bypass vulnerability).
+
+### 🐛 Bug Fixes
+
+- **Mobile Decade Range Slider:** Replaced broken dual-stacked `<input type="range">` with `@radix-ui/react-slider`.
+  - Touch events now work correctly on iOS and Android.
+  - Responsive tick labels: 4 ticks on mobile (1900/1950/2000/2026), full 10-year grid on desktop.
+  - Larger thumbs (24px) for easier touch targeting.
+
+### 📦 Dependencies
+
+- Bumped multiple Dependabot dependencies (p-limit, recharts, zod, openai, nodemon, eslint, @types/node, commitlint, docker actions).
+
 ## [2.6.0] - 2026-03-05
 
 ### ✨ New Features

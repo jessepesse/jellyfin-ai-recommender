@@ -266,6 +266,9 @@ build/
 # TypeScript
 *.js.map
 
+# Session secret (auto-generated, never commit)
+.session_secret
+
 # Database artifacts (SQLite)
 *.db
 *.db-journal
