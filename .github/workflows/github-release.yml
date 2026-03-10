@@ -104,7 +104,7 @@ jobs:
           fetch-depth: 0   # required to read annotated tag message
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Extract version metadata
         id: meta
