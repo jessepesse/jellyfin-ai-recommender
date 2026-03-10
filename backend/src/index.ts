@@ -7,6 +7,11 @@ import dotenv from 'dotenv';
 // Load environment variables first
 dotenv.config();
 
+// Initialise session secret before anything else (reads/creates /app/data/.session_secret)
+import { getOrCreateSessionSecret } from './utils/secretManager';
+const dataDir = process.env.DATA_DIR || process.env.IMAGE_DIR?.replace('/images', '') || '/app/data';
+getOrCreateSessionSecret(dataDir);
+
 // Validate environment configuration
 import { validateEnv, getEnv } from './utils/env';
 validateEnv();
@@ -28,6 +33,7 @@ import swaggerUi from 'swagger-ui-express';
 import { specs } from './config/swagger';
 import { TrendingService } from './services/trending';
 import { prisma } from './db';
+import { purgeExpiredSessions } from './services/sessionService';
 
 const app = express();
 const env = getEnv();
@@ -222,6 +228,8 @@ app.listen(port, () => {
       // Bootstrap admin user
       logger.info('Checking/Bootstrapping admin user...');
       await bootstrapAdmin();
+      // Purge any expired sessions left from previous runs
+      await purgeExpiredSessions();
     } catch (e) {
       logger.error({ err: e }, 'Startup backfill failed');
     }
@@ -239,6 +247,15 @@ app.listen(port, () => {
       }
     });
     logger.info('Scheduled daily backfill at 03:00');
+
+    // Schedule daily expired session cleanup at 03:30
+    cron.schedule('30 3 * * *', async () => {
+      try {
+        await purgeExpiredSessions();
+      } catch (e) {
+        logger.error({ err: e }, 'Scheduled session purge failed');
+      }
+    });
 
     // Schedule trending cache refresh every 2 hours
     cron.schedule('0 */2 * * *', async () => {

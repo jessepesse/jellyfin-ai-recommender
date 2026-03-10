@@ -50,7 +50,9 @@ export interface JellyfinAuthResponse {
 export interface LoginResponse {
     success: boolean;
     message?: string;
-    jellyfinAuth?: JellyfinAuthResponse;
+    jellyfinAuth?: JellyfinAuthResponse; // Legacy — kept for backward compat
+    sessionToken?: string;               // Session-based auth (new)
+    user?: { id: string; name: string };
     serverUrl?: string;
     isAdmin?: boolean;
 }

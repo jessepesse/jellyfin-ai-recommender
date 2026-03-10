@@ -5,6 +5,7 @@ import prisma from '../db';
 import { logger } from '../utils/logger';
 import { JellyfinService } from '../jellyfin';
 import NodeCache from 'node-cache';
+import { validateSession, updateSessionJellyfinToken } from '../services/sessionService';
 
 const jellyfinService = new JellyfinService();
 
@@ -37,6 +38,8 @@ declare global {
                 username: string;
                 isSystemAdmin: boolean;
                 jellyfinUserId?: string;
+                jellyfinToken?: string;  // Dekryptattu session-tokenista Jellyfin API -kutsuja varten
+                sessionId?: number;       // Session ID tokenin päivitystä varten
             };
         }
     }
@@ -64,7 +67,68 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
             return res.status(401).json({ error: 'Unauthorized - No token provided' });
         }
 
-        // 2. Check for Local Token
+        // 2. Check for Session Token (64 hex chars = 32 random bytes)
+        if (/^[0-9a-f]{64}$/i.test(token)) {
+            const session = await validateSession(token);
+
+            if (!session) {
+                return res.status(401).json({ error: 'Unauthorized - Session expired or invalid' });
+            }
+
+            // If we have a Jellyfin token, validate it (use cache to avoid hammering Jellyfin)
+            let resolvedJellyfinToken = session.jellyfinToken;
+
+            if (resolvedJellyfinToken && !session.isLocalOnly) {
+                const jellyfinTokenHash = crypto.createHmac('sha256', CACHE_SECRET)
+                    .update(resolvedJellyfinToken).digest('hex');
+
+                if (!tokenCache.has(jellyfinTokenHash)) {
+                    try {
+                        const jellyfinUser = await jellyfinService.getMe(resolvedJellyfinToken);
+                        if (jellyfinUser) {
+                            tokenCache.set(jellyfinTokenHash, {
+                                userId: session.userId,
+                                jellyfinUserId: jellyfinUser.Id,
+                                isSystemAdmin: session.isSystemAdmin,
+                            });
+                        }
+                    } catch {
+                        // Jellyfin token expired — attempt transparent re-auth using stored credential
+                        if (session.credential) {
+                            try {
+                                const { AuthService } = await import('../authService');
+                                const authSvc = new AuthService();
+                                const refreshed = await authSvc.authenticateUser(
+                                    session.username,
+                                    session.credential,
+                                    session.jellyfinServerUrl ?? undefined
+                                );
+                                resolvedJellyfinToken = refreshed.AccessToken;
+                                await updateSessionJellyfinToken(session.sessionId, refreshed.AccessToken);
+                                logger.info(`[Auth] Transparently refreshed Jellyfin token for userId=${session.userId}`);
+                            } catch (reAuthErr) {
+                                logger.warn({ err: reAuthErr }, '[Auth] Jellyfin re-auth failed — continuing with session only');
+                                resolvedJellyfinToken = null;
+                            }
+                        } else {
+                            resolvedJellyfinToken = null;
+                        }
+                    }
+                }
+            }
+
+            req.user = {
+                id: session.userId,
+                username: session.username,
+                isSystemAdmin: session.isSystemAdmin,
+                jellyfinUserId: session.jellyfinUserId ?? `local-${session.userId}`,
+                jellyfinToken: resolvedJellyfinToken ?? undefined,
+                sessionId: session.sessionId,
+            };
+            return next();
+        }
+
+        // 3. Check for Local Token
         if (token.startsWith('local:')) {
             const tokenPayload = token.substring(6); // remove "local:"
             try {

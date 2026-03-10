@@ -9,6 +9,7 @@ import { verifyPassword, hashPassword } from '../utils/password';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { authMiddleware } from '../middleware/auth';
+import { createSession, deleteSession } from '../services/sessionService';
 
 const authRouter = Router();
 const authService = new AuthService();
@@ -113,12 +114,28 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
         // Extract admin status
         const isAdmin = jellyfinAuth.User.Policy?.IsAdministrator ?? false;
 
-        // Return the auth response + the working server URL + admin status for frontend storage
+        // Determine if this is a local-only session (no real Jellyfin token)
+        const isLocalOnly = jellyfinAuth.AccessToken.startsWith('local:');
+
+        // Create backend session — Jellyfin token and credential stored encrypted server-side
+        const sessionToken = await createSession({
+            userId: userId!,
+            jellyfinToken: isLocalOnly ? undefined : jellyfinAuth.AccessToken,
+            credential: isLocalOnly ? undefined : password,
+            jellyfinUserId: isLocalOnly ? undefined : jellyfinAuth.User.Id,
+            jellyfinServerUrl: workingUrl ?? undefined,
+            isLocalOnly,
+        });
+
         res.json({
             success: true,
-            jellyfinAuth,
+            sessionToken,
             serverUrl: workingUrl,
-            isAdmin
+            isAdmin,
+            user: {
+                id: jellyfinAuth.User.Id,
+                name: jellyfinAuth.User.Name,
+            },
         } as LoginResponse);
 
     } catch (error: unknown) {
@@ -136,6 +153,23 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
 
         // Generic error message for other issues
         res.status(500).json({ success: false, message: 'An unexpected error occurred during authentication.' } as LoginResponse);
+    }
+});
+
+/**
+ * POST /api/auth/logout
+ * Invalidates the current session token server-side.
+ */
+authRouter.post('/logout', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const token = req.headers['x-access-token'] as string;
+        if (token && /^[0-9a-f]{64}$/i.test(token)) {
+            await deleteSession(token);
+        }
+        return res.json({ success: true });
+    } catch (err) {
+        logger.error({ err }, '[Auth] Logout error');
+        return res.status(500).json({ error: 'Logout failed' });
     }
 });
 

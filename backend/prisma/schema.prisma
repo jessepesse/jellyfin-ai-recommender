@@ -22,8 +22,27 @@ model User {
   
   // Relations
   userMedia            UserMedia[]
-  weeklyWatchlist WeeklyWatchlist[]
+  weeklyWatchlist      WeeklyWatchlist[]
   redemptionCandidates RedemptionCandidates[]
+  sessions             Session[]
+}
+
+model Session {
+  id                Int      @id @default(autoincrement())
+  tokenHash         String   @unique           // HMAC-SHA256(rawToken) — raw token never stored
+  userId            Int
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jellyfinTokenEnc  String?  // AES-256-GCM salattu Jellyfin-token
+  credentialEnc     String?  // AES-256-GCM salattu salasana (Jellyfin re-auth varten)
+  jellyfinUserId    String?
+  jellyfinServerUrl String?
+  isLocalOnly       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
+  lastUsedAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Media {

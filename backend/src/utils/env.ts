@@ -38,6 +38,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().default('file:/app/data/dev.db'),
   CACHE_DB_PATH: z.string().optional(),
   INITIAL_ADMIN_PASSWORD: z.string().default('admin123'),
+
+  // Session management
+  SESSION_SECRET: z.string().min(32).optional(), // Valinnainen — fallback lukee tiedostosta automaattisesti
+  SESSION_TTL_DAYS: z.string().regex(/^\d+$/).transform(Number).default(30),
 });
 
 // Type inference from schema

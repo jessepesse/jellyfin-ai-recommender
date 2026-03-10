@@ -17,7 +17,7 @@ interface AuthContextType {
   token: string | null;
   serverUrl: string | null;
   login: (username: string, password: string, serverUrl?: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 // Create the Auth Context
@@ -62,7 +62,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
   }, [isAuthenticated]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      const storedToken = localStorage.getItem('jellyfin_token');
+      if (storedToken) {
+        const baseUrl = import.meta.env.VITE_BACKEND_URL
+          ? import.meta.env.VITE_BACKEND_URL + '/api'
+          : '/api';
+        await axios.post(`${baseUrl}/auth/logout`, {}, {
+          headers: { 'x-access-token': storedToken },
+        });
+      }
+    } catch {
+      // Best-effort — local cleanup proceeds regardless
+    }
     setUser(null);
     setToken(null);
     setIsAuthenticated(false);
@@ -87,37 +100,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         serverUrl,
       });
 
-      if (response.data.success && response.data.jellyfinAuth) {
-        const jellyfinAuth = response.data.jellyfinAuth;
-        const isAdmin = response.data.isAdmin ?? false;
+      if (response.data.success && response.data.sessionToken) {
+        const { sessionToken, user: responseUser, isAdmin: respIsAdmin, serverUrl: respServerUrl } = response.data;
+        const isAdmin = respIsAdmin ?? false;
         const newUser: User = {
-          id: jellyfinAuth.User.Id,
-          name: jellyfinAuth.User.Name,
+          id: responseUser.id,
+          name: responseUser.name,
           isAdmin,
         };
-        const newToken = jellyfinAuth.AccessToken;
-        // Priority: backend-verified URL > user-provided > env var
-        // Backend returns the working URL after testing candidates
-        const newServer = response.data.serverUrl || serverUrl || import.meta.env.VITE_JELLYFIN_URL || null;
+        const newServer = respServerUrl || serverUrl || import.meta.env.VITE_JELLYFIN_URL || null;
 
         setUser(newUser);
-        setToken(newToken);
+        setToken(sessionToken);
         setIsAuthenticated(true);
         setServerUrl(newServer);
 
-        // Store in local storage for persistence
-        localStorage.setItem('jellyfin_token', newToken);
+        localStorage.setItem('jellyfin_token', sessionToken);
         localStorage.setItem('jellyfin_user', JSON.stringify(newUser));
         localStorage.setItem('jellyfin_isAdmin', String(isAdmin));
-        // Always store server URL (backend ensures we have a working one)
         if (newServer) {
           localStorage.setItem('jellyfin_server', newServer);
         }
-
-        // sessionStorage (NOT localStorage) — cleared when browser tab closes.
-        // Required for automatic Jellyfin token refresh without backend session management.
-        // Accepted tradeoff for self-hosted deployment. See SECURITY.md.
-        sessionStorage.setItem('jellyfin_password', password); // codeql[js/clear-text-storage-of-sensitive-data]
+        // Remove legacy password storage if present from a previous session
+        sessionStorage.removeItem('jellyfin_password');
 
         return true;
       } else {

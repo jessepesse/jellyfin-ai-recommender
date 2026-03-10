@@ -9,102 +9,19 @@ const apiClient = axios.create({
     baseURL: BASE_URL,
 });
 
-// Track if we're currently refreshing to avoid multiple simultaneous refresh attempts
-let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
-
-function onTokenRefreshed(token: string) {
-    refreshSubscribers.forEach(callback => callback(token));
-    refreshSubscribers = [];
-}
-
-function addRefreshSubscriber(callback: (token: string) => void) {
-    refreshSubscribers.push(callback);
-}
-
-// Response interceptor to handle 401 errors and token refresh
+// Response interceptor: session expiry is handled server-side.
+// A 401 here means the session is genuinely expired or invalid — redirect to login.
 apiClient.interceptors.response.use(
     (response) => response,
-    async (error) => {
-        const originalRequest = error.config;
-
-        // If error is 401 and we haven't tried refreshing yet
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            if (isRefreshing) {
-                // Wait for the ongoing refresh to complete
-                return new Promise((resolve) => {
-                    addRefreshSubscriber((token: string) => {
-                        originalRequest.headers['x-access-token'] = token;
-                        resolve(apiClient(originalRequest));
-                    });
-                });
-            }
-
-            originalRequest._retry = true;
-            isRefreshing = true;
-
-            try {
-                // Attempt to refresh the token by re-authenticating
-                const storedUser = localStorage.getItem('jellyfin_user');
-                const storedServer = localStorage.getItem('jellyfin_server');
-                const jellyfinPassword = sessionStorage.getItem('jellyfin_password');
-
-                if (storedUser && storedServer && jellyfinPassword) {
-                    const user = JSON.parse(storedUser);
-                    const response = await axios.post(`${BASE_URL}/auth/login`, {
-                        username: user.name,
-                        password: jellyfinPassword,
-                        serverUrl: storedServer,
-                    });
-
-                    if (response.data.success && response.data.jellyfinAuth) {
-                        const newToken = response.data.jellyfinAuth.AccessToken;
-                        localStorage.setItem('jellyfin_token', newToken);
-
-                        // Update original request with new token
-                        originalRequest.headers['x-access-token'] = newToken;
-
-                        // Notify all waiting requests
-                        onTokenRefreshed(newToken);
-                        isRefreshing = false;
-
-                        // Retry the original request
-                        return apiClient(originalRequest);
-                    }
-                }
-
-                // If refresh failed, force logout
-                isRefreshing = false;
-
-                // Clear all auth data
-                localStorage.removeItem('jellyfin_token');
-                localStorage.removeItem('jellyfin_user');
-                localStorage.removeItem('jellyfin_server');
-                localStorage.removeItem('jellyfin_isAdmin');
-                sessionStorage.removeItem('jellyfin_password');
-
-                // Redirect to login by reloading the page
-                // This will trigger AuthContext to show login screen
-                window.location.reload();
-
-                return Promise.reject(error);
-            } catch (refreshError) {
-                isRefreshing = false;
-
-                // Clear all auth data
-                localStorage.removeItem('jellyfin_token');
-                localStorage.removeItem('jellyfin_user');
-                localStorage.removeItem('jellyfin_server');
-                localStorage.removeItem('jellyfin_isAdmin');
-                sessionStorage.removeItem('jellyfin_password');
-
-                // Redirect to login by reloading the page
-                window.location.reload();
-
-                return Promise.reject(refreshError);
-            }
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('jellyfin_token');
+            localStorage.removeItem('jellyfin_user');
+            localStorage.removeItem('jellyfin_server');
+            localStorage.removeItem('jellyfin_isAdmin');
+            sessionStorage.removeItem('jellyfin_password'); // legacy cleanup
+            window.location.reload();
         }
-
         return Promise.reject(error);
     }
 );
