@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@jellyfin-ai/types": "file:../shared",
+    "@radix-ui/react-slider": "^1.3.6",
     "@tailwindcss/vite": "^4.2.0",
     "axios": "^1.13.6",
     "date-fns": "^4.1.0",

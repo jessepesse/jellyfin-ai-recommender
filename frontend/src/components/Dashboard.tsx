@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as Slider from '@radix-ui/react-slider';
 import ItemList from './ItemList';
 import type { JellyfinItem } from '../types';
 import { getRecommendations } from '../services/api';
@@ -34,11 +35,8 @@ const MOODS = [
 const YEAR_MIN = 1900;
 const YEAR_MAX = 2026;
 const YEAR_STEP = 1;
-const YEAR_TICKS = (() => {
-  const ticks = Array.from({ length: Math.floor((YEAR_MAX - YEAR_MIN) / 10) + 1 }, (_, i) => YEAR_MIN + i * 10);
-  if (!ticks.includes(YEAR_MAX)) ticks.push(YEAR_MAX);
-  return ticks;
-})();
+const YEAR_TICKS_MOBILE = [1900, 1950, 2000, YEAR_MAX];
+const YEAR_TICKS_DESKTOP = Array.from({ length: Math.floor((YEAR_MAX - YEAR_MIN) / 10) + 1 }, (_, i) => YEAR_MIN + i * 10).concat(YEAR_MAX).filter((v, i, a) => a.indexOf(v) === i);
 
 interface Props {
   currentView?: 'recommendations' | 'weekly-picks' | 'trending' | 'watchlist' | 'search' | 'mark-watched' | 'settings' | 'blocked';
@@ -63,21 +61,6 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
     setSelectedMood(prev => prev === m ? null : m);
   };
 
-  const handleYearFromChange = (value: number) => {
-    const normalized = Math.max(YEAR_MIN, Math.min(YEAR_MAX, value));
-    setSelectedYearFrom(normalized);
-    if (normalized > selectedYearTo) {
-      setSelectedYearTo(normalized);
-    }
-  };
-
-  const handleYearToChange = (value: number) => {
-    const normalized = Math.max(YEAR_MIN, Math.min(YEAR_MAX, value));
-    setSelectedYearTo(normalized);
-    if (normalized < selectedYearFrom) {
-      setSelectedYearFrom(normalized);
-    }
-  };
 
   const handleGetRecommendations = React.useCallback(async (refresh: boolean = true) => {
     setError(null);
@@ -163,42 +146,30 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
                     <label className="text-sm text-slate-400 block">Decade Range</label>
                     <span className="text-xs text-slate-300">{selectedYearFrom} - {selectedYearTo}</span>
                   </div>
-                  <div className="relative rounded-2xl border border-white/5 bg-slate-900/30 p-4">
-                    <div className="relative h-8">
-                      <div className="absolute top-1/2 left-0 right-0 h-1 rounded-full bg-slate-700/60 -translate-y-1/2" />
-                      <div
-                        className="absolute top-1/2 h-1 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 -translate-y-1/2"
-                        style={{
-                          left: `${((selectedYearFrom - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100}%`,
-                          right: `${100 - ((selectedYearTo - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100}%`,
-                        }}
-                      />
-                      <input
-                        type="range"
-                        min={YEAR_MIN}
-                        max={YEAR_MAX}
-                        step={YEAR_STEP}
-                        value={selectedYearFrom}
-                        onChange={(e) => handleYearFromChange(Number(e.target.value))}
-                        className="range-slider range-slider-min absolute inset-0 z-20 w-full"
-                        aria-label="Select minimum release year"
-                      />
-                      <input
-                        type="range"
-                        min={YEAR_MIN}
-                        max={YEAR_MAX}
-                        step={YEAR_STEP}
-                        value={selectedYearTo}
-                        onChange={(e) => handleYearToChange(Number(e.target.value))}
-                        className="range-slider range-slider-max absolute inset-0 z-30 w-full"
-                        aria-label="Select maximum release year"
-                      />
-                    </div>
+                  <div className="rounded-2xl border border-white/5 bg-slate-900/30 p-4">
+                    <Slider.Root
+                      className="relative flex items-center w-full h-8 touch-none select-none"
+                      min={YEAR_MIN}
+                      max={YEAR_MAX}
+                      step={YEAR_STEP}
+                      value={[selectedYearFrom, selectedYearTo]}
+                      onValueChange={([from, to]) => {
+                        setSelectedYearFrom(from);
+                        setSelectedYearTo(to);
+                      }}
+                      aria-label="Decade range"
+                    >
+                      <Slider.Track className="relative h-1 flex-1 rounded-full bg-slate-700/60">
+                        <Slider.Range className="absolute h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" />
+                      </Slider.Track>
+                      <Slider.Thumb className="block w-6 h-6 rounded-full border-2 border-white/85 bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)] focus:outline-none focus:ring-2 focus:ring-cyan-400/50 cursor-grab active:cursor-grabbing touch-none" aria-label="Minimum year" />
+                      <Slider.Thumb className="block w-6 h-6 rounded-full border-2 border-white/85 bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.9)] focus:outline-none focus:ring-2 focus:ring-violet-400/50 cursor-grab active:cursor-grabbing touch-none" aria-label="Maximum year" />
+                    </Slider.Root>
                     <div className="mt-3 relative h-4 text-xs text-slate-500">
-                      {YEAR_TICKS.map(year => (
+                      {YEAR_TICKS_DESKTOP.map(year => (
                         <span
                           key={year}
-                          className="absolute -translate-x-1/2"
+                          className={`absolute -translate-x-1/2 ${YEAR_TICKS_MOBILE.includes(year) ? '' : 'hidden sm:block'}`}
                           style={{ left: `${((year - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100}%` }}
                         >
                           {year}
