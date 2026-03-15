@@ -213,12 +213,16 @@ export class WeeklyWatchlistService {
 
         console.log(`[Weekly Watchlist] Jellyseerr filter: ${movieCandidatesBeforeJellyseerr} → ${movieCandidates.length} movies, ${tvCandidatesBeforeJellyseerr} → ${tvCandidates.length} TV`);
 
-        // Get blocklist for Critic agent
+        // Get blocklist with metadata for Critic agent
         const blockedMedia = await prisma.userMedia.findMany({
             where: { userId, status: 'BLOCKED' },
-            include: { media: { select: { tmdbId: true } } }
+            include: { media: { select: { tmdbId: true, title: true, genres: true } } }
         });
         const blocklist = blockedMedia.map(bm => bm.media.tmdbId);
+        const blocklistItems = blockedMedia.map(bm => ({
+            title: bm.media.title,
+            genres: bm.media.genres ? JSON.parse(bm.media.genres) as string[] : [],
+        }));
         console.log(`[Weekly Watchlist] Blocklist size: ${blocklist.length}`);
 
         // ==========================================
@@ -261,10 +265,10 @@ export class WeeklyWatchlistService {
 
         // 4c. CRITIC: Quality guardian selects TOP 10
         console.log(`[Weekly Watchlist] 🎯 Critic reviewing movies...`);
-        const rankedMovies = await GeminiService.criticSelect(curatorMovies, blocklist, 10);
+        const rankedMovies = await GeminiService.criticSelect(curatorMovies, blocklist, 10, movieTaste.tasteProfile, blocklistItems);
 
         console.log(`[Weekly Watchlist] 🎯 Critic reviewing TV shows...`);
-        const rankedTV = await GeminiService.criticSelect(curatorTV, blocklist, 10);
+        const rankedTV = await GeminiService.criticSelect(curatorTV, blocklist, 10, tvTaste.tasteProfile, blocklistItems);
 
         console.log(`[Weekly Watchlist] Critic approved: ${rankedMovies.length} movies, ${rankedTV.length} TV shows`);
 

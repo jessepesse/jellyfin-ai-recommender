@@ -1,7 +1,7 @@
 import { GoogleGenAI, type GenerateContentConfig } from '@google/genai';
 import OpenAI from 'openai';
 import ConfigService from './config';
-import { MediaItemInput, UserData, RecommendationFilters } from '../types';
+import { MediaItemInput } from '../types';
 
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
 // Thinking dynamically adjusts based on prompt complexity
@@ -127,178 +127,39 @@ export async function generateAIContent(
 
 
 export class GeminiService {
-  // Build prompt similar to legacy implementation
-  /**
-   * Formats a list of items into a compact table:
-   * | Title | Year |
-   */
-  private static formatTable(list: (MediaItemInput | string)[]): string {
-    if (!list || list.length === 0) return '(none)';
-
-    const uniqueEntries = new Set<string>();
-    const rows: string[] = [];
-
-    list.forEach(item => {
-      let title = '';
-      let year = '';
-
-      if (typeof item === 'string') {
-        title = item;
-      } else {
-        title = item.title || item.name || item.originalTitle || item.Title || '';
-        const rawYear = item.release_year || item.releaseYear || item.releaseDate || item.release_date || item.year || '';
-        year = typeof rawYear !== 'string' ? String(rawYear || '') : rawYear;
-      }
-
-      title = String(title).replace(/\|/g, '').trim();
-      year = (year || '').toString().substring(0, 4);
-
-      if (title) {
-        const entryKey = `${title.toLowerCase()}:${year}`;
-        if (!uniqueEntries.has(entryKey)) {
-          uniqueEntries.add(entryKey);
-          rows.push(`| ${title} | ${year} |`);
-        }
-      }
-    });
-
-    return rows.join('\n');
-  }
-
-  private static buildPromptWithProfile(
-    username: string,
-    userData: UserData,
-    likedItems: MediaItemInput[],
-    dislikedItems: MediaItemInput[],
-    filters?: RecommendationFilters,
-    tasteProfile?: string,
-    exclusionTable?: string
-  ): string {
-    const mediaType = filters?.type ? String(filters.type).toUpperCase() : 'MOVIE OR TV SERIES';
-    const genreNote = filters?.genre ? `Focus strictly on the genre: "${filters.genre}".` : 'Recommend diverse genres that match the user\'s taste.';
-
-    let moodNote = '';
-    if (filters?.mood) {
-      const moodMap: Record<string, string> = {
-        'chill': 'Chill / Comfort / Brain Off. Recommend familiar, safe, comforting, or lighthearted content that is easy to watch.',
-        'mind-bending': 'Mind Bending / Intellectual. Recommend complex, thought-provoking, philosophical, or mystery-heavy content that requires active attention.',
-        'dark': 'Dark & Gritty. Recommend serious, realistic, intense, or visually dark content. Avoid light comedies.',
-        'adrenaline': 'Adrenaline / Action. Recommend high-octane, fast-paced, edge-of-seat thrillers or action movies.',
-        'feel-good': 'Feel Good. Recommend uplifting, happy, optimistic content that leaves the viewer in a good mood.',
-        'tearjerker': 'Tearjerker / Emotional. Recommend highly emotional dramas or romances that might make the viewer cry.',
-        'visual': 'Visually Stunning / Epic. Recommend movies/series known for their cinematography, scale, and visual beauty.'
-      };
-      const key = filters.mood.toLowerCase();
-      const desc = moodMap[key] || filters.mood;
-      moodNote = `\n- MOOD: ${desc}`;
-    }
-
-    // Filter context by media type to send ONLY relevant history
-    // This improves recommendation relevance and saves tokens
-    let contextLiked = likedItems;
-    let contextDisliked = dislikedItems;
-
-    if (filters?.type) {
-      const targetType = filters.type.toLowerCase();
-
-      // Filter liked items to match requested type
-      contextLiked = likedItems.filter(item => {
-        const itemType = (item.mediaType || item.media_type || item.type || '').toLowerCase();
-        return itemType === targetType;
-      });
-
-      // Filter disliked items to match requested type
-      contextDisliked = dislikedItems.filter(item => {
-        const itemType = (item.mediaType || item.media_type || item.type || '').toLowerCase();
-        return itemType === targetType;
-      });
-    }
-
-    const hasProfile = !!tasteProfile && String(tasteProfile).trim().length > 10;
-    const fallbackProfile = `No explicit taste profile is available for this user.\nFor the purposes of recommendation, assume a broadly-curated, mainstream taste that prefers well-rated, accessible titles across popular genres (drama, action, comedy, thriller, family).\nProvide diverse suggestions (mix of recent and classic titles) that would suit a general audience.\nEven if user history is empty, you MUST provide recommendations immediately. Do not ask clarifying questions.`;
-    const profileSection = hasProfile ? tasteProfile as string : `${fallbackProfile}\n\nSeed Titles:\n${this.formatTable(Array.isArray(contextLiked) ? contextLiked.slice(0, 100) : [])}`;
-
-    // Send FULL exclusion table - Gemini 2.5+ has 1M+ token context, so we can send everything
-    // This is the user's complete watch history, watchlist, and blocked items
-    const exclusionSection = exclusionTable && exclusionTable.length > 0
-      ? exclusionTable
-      : this.formatTable(Array.isArray(contextDisliked) ? contextDisliked : []);
-
-    // Count exclusion items for transparency
-    const exclusionCount = exclusionSection.split('\n').filter(line => line.startsWith('|')).length;
-
-    // Prompt structure optimized for Gemini implicit caching:
-    // Stable sections first (ROLE, RULES, OUTPUT FORMAT) then variable (TASTE, CONTEXT, EXCLUSION)
-    // This ensures the prompt prefix is identical across users/requests, maximizing cache hits.
-    return `
-### ROLE
-Act as a senior film critic and expert database curator (TMDb specialist).
-Your goal is to recommend **exactly 40** distinct items that perfectly match the user's taste profile but are NOT in their current library.
-
----
-
-### SELECTION RULES
-1. **Discovery First:** Focus on hidden gems, highly-rated non-mainstream hits, or classics the user might have missed.
-2. **No Franchise Stacking:** Do NOT recommend more than 1 item from the same franchise (e.g., if you suggest "Alien", do not suggest "Aliens").
-3. **Accuracy:** Use the EXACT theatrical release year from TMDb. If unsure, skip the item.
-4. **Variety:** Mix genres slightly. If the user likes Sci-Fi, include some Sci-Fi Horror or Sci-Fi Thriller, not just Space Operas.
-5. **No Poison:** NEVER suggest anything from the POISON LIST below. Double-check every recommendation.
-
----
-
-### OUTPUT FORMAT
-Return **ONLY** a raw JSON array (no markdown, no backticks).
-Each object must strictly follow this schema:
-[
-  {
-    "title": "Exact TMDb Title",
-    "media_type": "${mediaType === 'MOVIE OR TV SERIES' ? 'movie' : mediaType.toLowerCase()}",
-    "release_year": "YYYY",
-    "reason": "A short, punchy sentence why this fits the vibe."
-  }
-]
-
----
-
-### CONTEXT & TASTE PROFILE
-- **Media Type:** ${mediaType}
-- **Vibe/Genre:** ${genreNote}${moodNote}
-
-${hasProfile ? `**Taste Analysis:**\n${profileSection}` : profileSection}
-
----
-
-### EXCLUSION DATA (POISON LIST) - ${exclusionCount} items
-The user has ALREADY watched/collected the following items.
-**CRITICAL RULE:** Do NOT recommend anything from this list. Treat these titles as "poison".
-If you are about to suggest a sequel/prequel to a movie in this list, SKIP IT unless it is significantly better rated.
-
-| Title | Year |
-|-------|------|
-${exclusionSection}
-`;
-  }
-
-  // Summarize a user's taste profile using Gemini (compact text)
   // Summarize a user's taste profile using AI (compact text)
   // Works with both Google AI and OpenRouter
   public static async summarizeProfile(username: string, seedItems: MediaItemInput[], type: 'movie' | 'tv'): Promise<string> {
     try {
       const client = await buildClientAndModel();
-      const titles = (seedItems || []).slice(0, 80).map((s: MediaItemInput) => s.title || s.name || s.Title || '').filter(Boolean).slice(0, 80);
-      const prompt = `
-Analyze the user's ${type} taste based on these titles:
-${titles.join('\n')}
+      const items = (seedItems || []).slice(0, 80).map((s: MediaItemInput) => {
+        const title = s.title || s.name || s.Title || '';
+        if (!title) return '';
 
-Task:
-Generate 3 short, insightful but casual bullet points describing their specific taste (themes, moods, genres).
+        const rawYear = s.release_year || s.releaseYear || s.releaseDate || s.release_date || s.year || '';
+        const year = String(rawYear || '').substring(0, 4);
 
-Constraints:
-- Do NOT use markdown formatting (no **bold**, no *italics*).
-- Do NOT use headers.
-- Return ONLY the bullet points as plain text.
-- Keep each point under 20 words if possible.
-`;
+        // Extract genres from various possible field names via any-cast
+        const sAny = s as Record<string, unknown>;
+        const genres = sAny.genres || sAny.Genres || sAny.genre_names;
+        const genreStr = Array.isArray(genres) ? genres.join(', ') : '';
+
+        const rating = s.voteAverage || s.vote_average;
+        const ratingStr = typeof rating === 'number' ? ` ★${rating.toFixed(1)}` : '';
+
+        let line = `- "${title}"`;
+        if (year) line += ` (${year})`;
+        if (genreStr) line += ` [${genreStr}]`;
+        line += ratingStr;
+        return line;
+      }).filter(Boolean);
+
+      const prompt = `WATCH HISTORY (${type === 'movie' ? 'movies' : 'TV shows'}):
+${items.join('\n')}
+
+Analyze this ${type} watch history. Generate 3 short, insightful but casual bullet points describing their specific taste (themes, moods, genres). Use the genre and rating data above for accuracy.
+
+Return ONLY plain text bullet points, no markdown formatting, no headers. Keep each point under 20 words.`;
 
       const text = await generateAIContent(client, prompt);
       return (text || '').trim().substring(0, 2000);
@@ -344,51 +205,41 @@ Constraints:
 
       // Format candidates for prompt
       const candidateList = candidates.slice(0, 30).map((c, i) =>
-        `${i + 1}. [ID:${c.tmdbId}] "${c.title}" [${c.genres.join(', ')}] - Rating: ${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || 'No description').substring(0, 100)}...`
+        `${i + 1}. [ID:${c.tmdbId}] "${c.title}" [${c.genres.join(', ')}] ★${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || 'No description').substring(0, 150)}`
       ).join('\n');
 
-      // Build context
-      const tasteContext = userContext.tasteProfile
-        ? `User's taste profile: ${userContext.tasteProfile}`
-        : '';
-      const favoritesContext = userContext.recentFavorites?.length
-        ? `Recent favorites: ${userContext.recentFavorites.slice(0, 5).join(', ')}`
-        : '';
-      const genreContext = userContext.requestedGenre
-        ? `Requested genre: ${userContext.requestedGenre}`
-        : '';
-      const yearRangeContext = userContext.requestedYearRange
-        ? `Requested year range: ${userContext.requestedYearRange}`
-        : '';
+      // Build context lines, filtering out empty ones
+      const contextLines: string[] = [];
+      if (userContext.tasteProfile) contextLines.push(`Taste profile: ${userContext.tasteProfile}`);
+      if (userContext.recentFavorites?.length) contextLines.push(`Recent favorites: ${userContext.recentFavorites.slice(0, 5).join(', ')}`);
+      if (userContext.requestedGenre) contextLines.push(`Requested genre: ${userContext.requestedGenre}`);
+      if (userContext.requestedYearRange) contextLines.push(`Requested year range: ${userContext.requestedYearRange}`);
 
-      // Provide detailed mood descriptions for AI
+      // Detailed mood descriptions
       const moodDescriptions: Record<string, string> = {
-        'mind-bending': 'MIND-BENDING: Complex plots, twist endings, psychological themes, surreal, nonlinear timelines, makes you think',
-        'dark': 'DARK & GRITTY: Noir, dystopian, crime, violence, morally ambiguous, intense, serious themes',
-        'adrenaline': 'ADRENALINE: Action-packed, thrilling, car chases, explosions, heists, high stakes, intense',
-        'chill': 'CHILL & COMFORT: Relaxing, heartwarming, slice of life, feel-good, cozy, low-stakes, peaceful',
-        'feel-good': 'FEEL-GOOD: Uplifting, happy endings, comedy, romance, family-friendly, optimistic, warm',
-        'tearjerker': 'TEARJERKER: Emotional, tragic, loss, grief, moving, will make you cry, bittersweet',
-        'visual': 'VISUAL/EPIC: Stunning visuals, epic scope, fantasy worlds, sci-fi, cinematographic masterpiece',
+        'mind-bending': 'MIND-BENDING: Complex plots, twist endings, psychological themes, surreal, nonlinear timelines',
+        'dark': 'DARK & GRITTY: Noir, dystopian, crime, violence, morally ambiguous, intense',
+        'adrenaline': 'ADRENALINE: Action-packed, thrilling, car chases, explosions, heists, high stakes',
+        'chill': 'CHILL & COMFORT: Relaxing, heartwarming, slice of life, feel-good, cozy, low-stakes',
+        'feel-good': 'FEEL-GOOD: Uplifting, happy endings, comedy, romance, optimistic, warm',
+        'tearjerker': 'TEARJERKER: Emotional, tragic, loss, grief, moving, bittersweet',
+        'visual': 'VISUAL/EPIC: Stunning visuals, epic scope, fantasy worlds, cinematographic masterpiece',
       };
-      const moodContext = userContext.requestedMood && moodDescriptions[userContext.requestedMood]
-        ? `CRITICAL - User wants this mood: ${moodDescriptions[userContext.requestedMood]}. PRIORITIZE titles matching this mood!`
-        : '';
+      if (userContext.requestedMood && moodDescriptions[userContext.requestedMood]) {
+        contextLines.push(`Requested mood: ${moodDescriptions[userContext.requestedMood]}`);
+      }
 
-      const prompt = `You have a list of real candidates here. Select ${limit} that will **blow this user's mind**.
+      // Gemini 3 optimized: data first, task middle, constraints last
+      const prompt = `USER CONTEXT:
+${contextLines.length > 0 ? contextLines.join('\n') : 'No specific preferences provided.'}
 
-${tasteContext}
-${favoritesContext}
-${genreContext}
-${yearRangeContext}
-${moodContext}
-
-CANDIDATES:
+CANDIDATES (${candidates.length} titles):
 ${candidateList}
 
-Return JSON array of ${limit} best picks: [{"tmdbId": 123, "title": "Name"}, ...]
+Select the ${limit} best matches for this user from the candidates above. For each pick, provide a short reason why it fits.
 
-ONLY JSON. NO TEXT.`;
+Return ONLY a JSON array: [{"tmdbId": 123, "title": "Name", "reason": "Why it fits"}, ...]
+Do NOT include titles not in the candidate list. Output must be valid JSON, no markdown.`;
 
       // Debug: log prompt size and first candidate
       console.debug(`[AI Ranking] Prompt length: ${prompt.length} chars, first candidate: ${candidates[0]?.title}`);
@@ -470,28 +321,19 @@ ONLY JSON. NO TEXT.`;
         `- "${item.title}" (${item.year || 'N/A'}) [${item.genres.join(', ')}] ${item.rating ? `★${item.rating.toFixed(1)}` : ''}`
       ).join('\n');
 
-      const prompt = `Analyze this user's ${mediaType === 'movie' ? 'movie' : 'TV show'} watch history and identify their preferences.
-
-WATCH HISTORY:
+      // Gemini 3 optimized: data first, task middle, constraints last
+      const prompt = `WATCH HISTORY (${mediaType === 'movie' ? 'movies' : 'TV shows'}, ${watchHistory.length} items):
 ${historyList}
 
-Based on this history, provide a JSON analysis with:
-1. tasteProfile: One engaging sentence describing their taste (e.g., "You love dark psychological thrillers with complex characters")
-2. genres: Array of 2-4 genre names they prefer (use standard genre names like: Action, Comedy, Drama, Thriller, Horror, Romance, Sci-Fi, Fantasy, Documentary, Crime, Mystery, Animation)
-3. keywords: Array of EXACTLY 6 thematic keywords for TMDB search. Use SIMPLE words that TMDB recognizes:
-   - GOOD: "heist", "dystopia", "noir", "revenge", "conspiracy", "time travel", "serial killer", "robot"
-   - BAD: "prestige drama", "found family", "character study" (too complex, won't match)
-4. yearRange: [startYear, endYear] if they have a specific era preference, or null if no preference
-5. minRating: Recommended minimum rating threshold (6.0-8.0)
+Analyze this watch history and identify preferences. Return a JSON object with these fields:
+- tasteProfile: One engaging sentence describing their taste
+- genres: 2-4 standard genre names (Action, Comedy, Drama, Thriller, Horror, Romance, Sci-Fi, Fantasy, Documentary, Crime, Mystery, Animation)
+- keywords: 4-8 simple thematic keywords for TMDB search
+- yearRange: [startYear, endYear] if era preference exists, otherwise null
+- minRating: Minimum rating threshold (6.0-8.0)
 
-Return ONLY valid JSON:
-{
-  "tasteProfile": "...",
-  "genres": ["Drama", "Thriller"],
-  "keywords": ["heist", "noir", "conspiracy", "revenge", "thriller", "crime"],
-  "yearRange": null,
-  "minRating": 7.0
-}`;
+Use ONLY simple TMDB-compatible keywords like "heist", "dystopia", "noir", "revenge", "time travel", "serial killer". Do NOT use complex phrases like "prestige drama" or "character study".
+Return ONLY valid JSON, no markdown.`;
 
       console.debug(`[AI Taste] Analyzing ${watchHistory.length} ${mediaType} items`);
 
@@ -599,9 +441,8 @@ Return ONLY valid JSON:
         `${i + 1}. [ID:${c.tmdbId}] "${c.title}" [${c.genres.join(', ')}] ★${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || '').substring(0, 80)}...`
       ).join('\n');
 
-      const prompt = `You are a CURATOR - a film recommendation expert.
-
-USER TASTE PROFILE:
+      // Gemini 3 optimized: data first, task middle, constraints last
+      const prompt = `USER TASTE:
 "${userTaste.tasteProfile}"
 Preferred genres: ${userTaste.genres.join(', ')}
 Thematic interests: ${userTaste.keywords.join(', ')}
@@ -609,19 +450,10 @@ Thematic interests: ${userTaste.keywords.join(', ')}
 CANDIDATE POOL (${candidates.length} titles):
 ${candidateList}
 
-YOUR TASK:
-Select the ${limit} BEST matches for this user. For each, provide a 1-sentence reason why it fits their taste.
+Select the ${limit} best matches for this user. For each, provide a 1-sentence reason why it fits their taste. Prioritize quality (★7.0+), genre match, and a mix of classics and newer releases.
 
-Focus on:
-- HIGH QUALITY titles with good ratings (★7.0+)
-- Excellent matches for their genre preferences
-- Mix of acclaimed classics AND newer releases
-- Titles they will genuinely enjoy
-
-Return ONLY a valid JSON array (no markdown, no explanation):
-[{"tmdbId": 123, "title": "Example", "reason": "Compelling drama matching your taste"}, ...]
-
-IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
+Return ONLY a valid JSON array: [{"tmdbId": 123, "title": "Example", "reason": "Why it fits"}, ...]
+Do NOT include titles not in the candidate pool. Output must be valid JSON, no markdown.`;
 
       const responseText = await generateAIContent(client, prompt, { json: true });
       console.debug(`[Curator] Response length: ${responseText.length} chars`);
@@ -664,7 +496,9 @@ IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
   static async criticSelect(
     curatorPicks: Array<{ tmdbId: number; title: string; reason: string }>,
     blocklist: number[],
-    limit: number = 10
+    limit: number = 10,
+    tasteProfile?: string,
+    blocklistItems?: Array<{ title: string; genres: string[] }>
   ): Promise<Array<{ tmdbId: number; title: string }>> {
     if (curatorPicks.length === 0) {
       return [];
@@ -687,27 +521,25 @@ IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
         `${i + 1}. [ID:${p.tmdbId}] "${p.title}"\n   Curator's reason: ${p.reason}`
       ).join('\n');
 
-      const prompt = `You are a CRITIC - a quality guardian who ensures great recommendations.
+      // Build blocklist context with metadata when available
+      let blocklistContext = '(none)';
+      if (blocklistItems && blocklistItems.length > 0) {
+        blocklistContext = blocklistItems.slice(0, 30).map(b =>
+          `- "${b.title}" [${b.genres.join(', ')}]`
+        ).join('\n');
+      }
 
-BLOCKLIST IDs (user rejected these, avoid similar content):
-${blocklist.slice(0, 50).join(', ') || '(none)'}
+      // Gemini 3 optimized: data first, task middle, constraints last
+      const prompt = `${tasteProfile ? `USER TASTE PROFILE:\n${tasteProfile}\n\n` : ''}BLOCKED ITEMS (user rejected these):
+${blocklistContext}
 
-CURATOR'S PICKS (with reasons):
+CURATOR'S PICKS (${filtered.length} candidates):
 ${picksList}
 
-YOUR TASK:
-From these ${filtered.length} options, select the TOP ${limit} that best match the user's taste.
+From these candidates, select the TOP ${limit} that best match the user's taste profile. Prefer picks with compelling curator reasoning and high quality.
 
-SELECTION CRITERIA:
-- Strong match to user's preferences
-- High quality, well-rated content
-- NOT similar to blocklist content
-- Curator's reason is compelling
-
-Return ONLY a valid JSON array (no markdown, no explanation):
-[{"tmdbId": 123, "title": "Example"}, ...]
-
-IMPORTANT: Output MUST be valid JSON starting with [ and ending with ]`;
+Return ONLY a valid JSON array: [{"tmdbId": 123, "title": "Example"}, ...]
+Do NOT select titles similar in theme/genre to the blocked items above. Output must be valid JSON, no markdown.`;
 
       const responseText = await generateAIContent(client, prompt, { json: true });
       console.debug(`[Critic] Response length: ${responseText.length} chars`);
