@@ -43,7 +43,27 @@ const cache = new NodeCache({
 // key will join the existing promise instead of launching duplicate fetchers,
 // eliminating the cache-stampede problem under high concurrency.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const inFlight = new Map<string, Promise<any>>();
+const inFlight = new Map<string, { promise: Promise<any>; startedAt: number }>();
+
+// Safety net: remove in-flight entries older than 5 minutes to prevent memory leaks
+// from promises that never settle (e.g. hung network requests).
+const IN_FLIGHT_MAX_AGE_MS = 5 * 60 * 1000;
+const IN_FLIGHT_CLEANUP_INTERVAL_MS = 60 * 1000;
+
+setInterval(() => {
+  if (inFlight.size === 0) return;
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [key, entry] of inFlight) {
+    if (now - entry.startedAt > IN_FLIGHT_MAX_AGE_MS) {
+      inFlight.delete(key);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.warn(`[Cache] Cleaned ${cleaned} stale in-flight entries (hung >5min)`);
+  }
+}, IN_FLIGHT_CLEANUP_INTERVAL_MS).unref();
 
 const PERSISTENT_NAMESPACES = new Set<CacheNamespace>([
   'recommendations',
@@ -378,7 +398,7 @@ export const CacheService = {
     // Join an existing in-flight fetch for this key rather than duplicating it
     const existing = inFlight.get(fullKey);
     if (existing) {
-      return existing as Promise<T>;
+      return existing.promise as Promise<T>;
     }
 
     const promise = fetcher()
@@ -392,7 +412,7 @@ export const CacheService = {
         throw err;
       });
 
-    inFlight.set(fullKey, promise);
+    inFlight.set(fullKey, { promise, startedAt: Date.now() });
     return promise;
   },
 };
