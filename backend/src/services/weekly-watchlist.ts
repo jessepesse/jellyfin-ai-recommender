@@ -315,7 +315,6 @@ export class WeeklyWatchlistService {
         console.log(`[Weekly Watchlist] Critic approved: ${rankedMovies.length} movies, ${rankedTV.length} TV shows`);
 
         // 5. Build final lists with full details
-        // 5. Build final lists with full details
         const movies: WatchlistItem[] = rankedMovies.slice(0, 10).map((r: { tmdbId: number; title: string }) => {
             let candidate = (movieCandidates as TMDBMovie[]).find((c: TMDBMovie) => c.id === Number(r.tmdbId));
 
@@ -503,6 +502,49 @@ export class WeeklyWatchlistService {
             }
             filtered = Array.from(allCandidates.values());
             console.log(`[Weekly Watchlist] After fallback: ${filtered.length} unique ${mediaType} candidates`);
+        }
+
+        // FRESHNESS MIX: Always include trending/recent releases so weekly picks
+        // don't consist solely of established classics from vote_average.desc searches.
+        // Target: ~30% of the candidate pool comes from fresh sources.
+        const freshTarget = Math.ceil(filtered.length * 0.3);
+        const now = new Date();
+        const twoYearsAgo = `${now.getFullYear() - 2}-01-01`;
+        const freshParams: Parameters<typeof discoverMovies>[0] = {
+            with_genres: genreIds.join('|'),
+            sort_by: 'popularity.desc',
+            vote_average_gte: 6.0,
+            vote_count_gte: 50,
+        };
+
+        if (mediaType === 'movie') {
+            freshParams.primary_release_date_gte = twoYearsAgo;
+        } else {
+            freshParams.first_air_date_gte = twoYearsAgo;
+        }
+
+        try {
+            let freshResults: TMDBMovie[] | TMDBTV[];
+            if (mediaType === 'movie') {
+                freshResults = await discoverMovies(freshParams, 2);
+            } else {
+                freshResults = await discoverTV(freshParams, 2);
+            }
+
+            let freshAdded = 0;
+            for (const r of freshResults) {
+                if (!excludeIds.has(r.id) && !allCandidates.has(r.id)) {
+                    allCandidates.set(r.id, r);
+                    freshAdded++;
+                }
+            }
+
+            if (freshAdded > 0) {
+                filtered = Array.from(allCandidates.values());
+                console.log(`[Weekly Watchlist] Freshness mix: added ${freshAdded} trending/recent ${mediaType} (target ${freshTarget}, pool now ${filtered.length})`);
+            }
+        } catch (e) {
+            console.warn(`[Weekly Watchlist] Freshness mix failed for ${mediaType}:`, e instanceof Error ? e.message : e);
         }
 
         // ANIMATION LIMITER: Limit anime/animation to max 30% of results

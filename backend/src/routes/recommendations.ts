@@ -31,6 +31,48 @@ import {
     MAX_FILTER_YEAR,
 } from '../services/recommendations-pipeline';
 
+/**
+ * Interleave items so that the same primary genre doesn't appear consecutively.
+ * Unlike the weekly-picks hard cap, this keeps ALL items — it just reorders them
+ * for visual variety when no genre filter is active.
+ */
+function interleaveByGenre(items: FrontendItem[]): FrontendItem[] {
+    if (items.length <= 2) return items;
+
+    // Group items by primary genre
+    const buckets = new Map<string, FrontendItem[]>();
+    for (const item of items) {
+        const primary = (item.genres && item.genres[0]) || 'Unknown';
+        if (!buckets.has(primary)) buckets.set(primary, []);
+        buckets.get(primary)!.push(item);
+    }
+
+    // Round-robin from largest bucket first
+    const sorted = [...buckets.entries()].sort((a, b) => b[1].length - a[1].length);
+    const result: FrontendItem[] = [];
+    let lastGenre = '';
+
+    while (result.length < items.length) {
+        let placed = false;
+        for (const [genre, bucket] of sorted) {
+            if (bucket.length === 0) continue;
+            if (genre === lastGenre && sorted.some(([g, b]) => g !== lastGenre && b.length > 0)) continue;
+            result.push(bucket.shift()!);
+            lastGenre = genre;
+            placed = true;
+            break;
+        }
+        // If only one genre remains, just drain it
+        if (!placed) {
+            for (const [, bucket] of sorted) {
+                while (bucket.length > 0) result.push(bucket.shift()!);
+            }
+        }
+    }
+
+    return result;
+}
+
 const router = Router();
 const jellyfinService = new JellyfinService();
 
@@ -611,7 +653,12 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
 
         TasteService.triggerUpdate(userName || userId, (filters.type === 'tv') ? 'tv' : 'movie', accessToken, userId);
 
-        const validItems = responseItems.map(d => toFrontendItem(d)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
+        let validItems = responseItems.map(d => toFrontendItem(d)).filter((x): x is FrontendItem => x !== null && x.tmdbId !== null);
+
+        // When no genre filter is active, interleave results by genre for visual variety
+        if (!genreFilter) {
+            validItems = interleaveByGenre(validItems);
+        }
 
         // Store the result in the VIEW cache
         console.log(`[ViewCache] Storing ${validItems.length} new items`);
