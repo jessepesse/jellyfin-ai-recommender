@@ -1,5 +1,8 @@
 import type { FrontendItem } from '../types';
 
+export const MIN_FILTER_YEAR = 1900;
+export const MAX_FILTER_YEAR = 2026;
+
 export function matchesSelectedGenres(candidateGenres: string[], selectedGenres?: string[]): boolean {
   if (!selectedGenres || selectedGenres.length === 0) return true;
   return selectedGenres.some(selectedGenre => {
@@ -61,13 +64,14 @@ export function extractYear(value: string | number | undefined | null): number |
   if (value === undefined || value === null) return null;
   if (typeof value === 'number' && Number.isFinite(value)) {
     const year = Math.trunc(value);
-    return year >= 1800 && year <= 3000 ? year : null;
+    return year >= MIN_FILTER_YEAR && year <= MAX_FILTER_YEAR ? year : null;
   }
   const str = String(value).trim();
   const match = str.match(/^(\d{4})/);
   if (!match) return null;
   const year = Number(match[1]);
-  return Number.isFinite(year) ? year : null;
+  if (!Number.isFinite(year)) return null;
+  return year >= MIN_FILTER_YEAR && year <= MAX_FILTER_YEAR ? year : null;
 }
 
 export function isYearInRange(

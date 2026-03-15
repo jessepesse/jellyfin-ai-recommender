@@ -26,13 +26,13 @@ import {
     isYearInRange,
     matchesSelectedGenres,
     shouldGenerateWhenViewCacheMiss,
-    shouldIncludeTmdbId
+    shouldIncludeTmdbId,
+    MIN_FILTER_YEAR,
+    MAX_FILTER_YEAR,
 } from '../services/recommendations-pipeline';
 
 const router = Router();
 const jellyfinService = new JellyfinService();
-const MIN_FILTER_YEAR = 1900;
-const MAX_FILTER_YEAR = 2026;
 
 /**
  * GET /search - Search for media via Jellyseerr
