@@ -463,7 +463,7 @@ ${candidateList}
 Select the ${limit} best matches for this user. For each, provide a 1-sentence reason why it fits their taste. Prioritize quality (★7.0+), genre match, and a mix of classics and newer releases.
 
 Return ONLY a valid JSON array: [{"tmdbId": 123, "title": "Example", "reason": "Why it fits"}, ...]
-Do NOT include titles not in the candidate pool. Output must be valid JSON, no markdown.`;
+Do NOT include titles not in the candidate pool. IMPORTANT: Ensure genre diversity — no single genre should dominate more than 30% of your picks. Output must be valid JSON, no markdown.`;
 
       const responseText = await generateAIContent(client, prompt, { json: true });
       console.debug(`[Curator] Response length: ${responseText.length} chars`);

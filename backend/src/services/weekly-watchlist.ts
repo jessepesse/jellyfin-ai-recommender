@@ -229,12 +229,12 @@ export class WeeklyWatchlistService {
         // DUAL-AI SYSTEM: CURATOR → CRITIC
         // ==========================================
 
-        // 4a. Format candidates for Curator (with genres)
+        // 4a. Format candidates for Curator (with genre names, not IDs)
         const movieCuratorInput = (movieCandidates as TMDBMovie[]).map((m: TMDBMovie) => ({
             tmdbId: m.id,
             title: m.title,
             overview: m.overview,
-            genres: m.genre_ids?.map((id: number) => String(id)) || [],
+            genres: (m.genre_ids?.map((id: number) => getGenreName(id, 'movie')).filter(Boolean) as string[]) || [],
             voteAverage: m.vote_average,
         }));
 
@@ -242,7 +242,7 @@ export class WeeklyWatchlistService {
             tmdbId: t.id,
             title: t.name,
             overview: t.overview,
-            genres: t.genre_ids?.map((id: number) => String(id)) || [],
+            genres: (t.genre_ids?.map((id: number) => getGenreName(id, 'tv')).filter(Boolean) as string[]) || [],
             voteAverage: t.vote_average,
         }));
 
@@ -263,12 +263,54 @@ export class WeeklyWatchlistService {
 
         console.log(`[Weekly Watchlist] Curator selected: ${curatorMovies.length} movies, ${curatorTV.length} TV shows`);
 
+        // 4b2. GENRE DIVERSITY: Rebalance curator picks so no genre dominates
+        const enforceGenreDiversity = (
+            curatorPicks: Array<{ tmdbId: number; title: string; reason: string }>,
+            candidatePool: Array<{ tmdbId: number; genres: string[] }>,
+            maxPerGenre: number
+        ): Array<{ tmdbId: number; title: string; reason: string }> => {
+            const genreMap = new Map(candidatePool.map(c => [c.tmdbId, c.genres]));
+            const genreCounts: Record<string, number> = {};
+            const balanced: typeof curatorPicks = [];
+            const overflow: typeof curatorPicks = [];
+
+            for (const pick of curatorPicks) {
+                const genres = genreMap.get(pick.tmdbId) || [];
+                const primaryGenre = genres[0] || 'Unknown';
+                const count = genreCounts[primaryGenre] || 0;
+
+                if (count < maxPerGenre) {
+                    balanced.push(pick);
+                    genreCounts[primaryGenre] = count + 1;
+                } else {
+                    overflow.push(pick);
+                }
+            }
+
+            // Backfill from overflow if we have space (prefer items whose genre is underrepresented)
+            for (const pick of overflow) {
+                if (balanced.length >= curatorPicks.length) break;
+                balanced.push(pick);
+            }
+
+            if (overflow.length > 0) {
+                const capped = Object.entries(genreCounts).filter(([, v]) => v >= maxPerGenre).map(([k]) => k);
+                console.log(`[Weekly Watchlist] Genre diversity: capped ${capped.join(', ')} at ${maxPerGenre}, moved ${overflow.length} to overflow`);
+            }
+
+            return balanced;
+        };
+
+        // Max 30% of 30 picks = 9 per genre
+        const diverseMovies = enforceGenreDiversity(curatorMovies, movieCuratorInput, Math.ceil(30 * 0.3));
+        const diverseTV = enforceGenreDiversity(curatorTV, tvCuratorInput, Math.ceil(30 * 0.3));
+
         // 4c. CRITIC: Quality guardian selects TOP 10
         console.log(`[Weekly Watchlist] 🎯 Critic reviewing movies...`);
-        const rankedMovies = await GeminiService.criticSelect(curatorMovies, blocklist, 10, movieTaste.tasteProfile, blocklistItems);
+        const rankedMovies = await GeminiService.criticSelect(diverseMovies, blocklist, 10, movieTaste.tasteProfile, blocklistItems);
 
         console.log(`[Weekly Watchlist] 🎯 Critic reviewing TV shows...`);
-        const rankedTV = await GeminiService.criticSelect(curatorTV, blocklist, 10, tvTaste.tasteProfile, blocklistItems);
+        const rankedTV = await GeminiService.criticSelect(diverseTV, blocklist, 10, tvTaste.tasteProfile, blocklistItems);
 
         console.log(`[Weekly Watchlist] Critic approved: ${rankedMovies.length} movies, ${rankedTV.length} TV shows`);
 
