@@ -1,8 +1,7 @@
 import { GoogleGenAI, type GenerateContentConfig } from '@google/genai';
 import OpenAI from 'openai';
-import { z } from 'zod';
 import ConfigService from './config';
-import { MediaItemInput, UserData, RecommendationCandidate, RecommendationFilters } from '../types';
+import { MediaItemInput, UserData, RecommendationFilters } from '../types';
 
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
 // Thinking dynamically adjusts based on prompt complexity
@@ -126,15 +125,6 @@ export async function generateAIContent(
   throw new Error('No AI client configured');
 }
 
-// Zod schema for validated AI output
-// NOTE: Gemini must NOT return any IDs. We only accept title, media_type, release_year and reason.
-const RecommendationSchema = z.array(z.object({
-  title: z.string(),
-  media_type: z.union([z.literal('movie'), z.literal('tv'), z.string()]).optional(),
-  // release_year may be number or string (some models produce strings)
-  release_year: z.union([z.string(), z.number()]),
-  reason: z.string().optional(),
-}));
 
 export class GeminiService {
   // Build prompt similar to legacy implementation
@@ -175,12 +165,6 @@ export class GeminiService {
     return rows.join('\n');
   }
 
-  private static buildPrompt(username: string, userData: UserData, likedItems: MediaItemInput[], dislikedItems: MediaItemInput[], filters?: RecommendationFilters): string {
-    // Backwards-compatible buildPrompt that can accept a precomputed tasteProfile and an exclusionTable
-    return (username && userData) ? this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters) : '';
-  }
-
-  // New prompt builder that prefers a provided taste profile and an explicit exclusion table
   private static buildPromptWithProfile(
     username: string,
     userData: UserData,
@@ -324,99 +308,6 @@ Constraints:
     }
   }
 
-  public static async getRecommendations(
-    username: string,
-    userData: UserData,
-    likedItems: MediaItemInput[],
-    dislikedItems: MediaItemInput[],
-    filters?: RecommendationFilters,
-    tasteProfile?: string,
-    exclusionTable?: string
-  ): Promise<RecommendationCandidate[]> {
-    const prompt = this.buildPromptWithProfile(username, userData, likedItems, dislikedItems, filters, tasteProfile, exclusionTable);
-
-    try {
-      const client = await buildClientAndModel();
-      console.debug(`[AI] Attempting to call ${client.provider} with model: ${client.modelName}`);
-
-      // Ensure prompt is a string
-      const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-
-      // Get JSON schema for structured output if available
-      let schema: object | undefined;
-      try {
-        const { zodToJsonSchema } = await import('zod-to-json-schema');
-        // Cast to any to avoid TypeScript incompatibilities between zod versions/types.
-        schema = (zodToJsonSchema as any)(RecommendationSchema as any);
-      } catch (e) {
-        // zod-to-json-schema not available, proceed without schema
-      }
-
-      // Use unified content generation
-      const text = await generateAIContent(client, promptText, { json: true, jsonSchema: schema });
-      console.debug(`[AI] Response text received: ${text?.substring(0, 100)}... (Total: ${text?.length} chars)`);
-
-      if (!text) {
-        console.warn('AI returned no text; using heuristic fallback');
-        throw new Error('Empty AI response');
-      }
-
-      // Extract JSON array from text. Only attempt JSON.parse when a JSON array is found.
-      const first = text.indexOf('[');
-      const last = text.lastIndexOf(']');
-      if (first === -1 || last === -1 || last <= first) {
-        console.warn('No JSON array found in AI output; skipping parse. Raw output:', text.substring(0, 200));
-      } else {
-        const jsonText = text.substring(first, last + 1);
-        try {
-          const parsed = JSON.parse(jsonText);
-          const validated = RecommendationSchema.safeParse(parsed);
-          if (validated.success) {
-            // Return parsed items but importantly DO NOT include any TMDB id from AI.
-            // We include release_year and reason so downstream enrichment can use year matching.
-            return validated.data.map((p): RecommendationCandidate => ({
-              title: p.title,
-              media_type: p.media_type || 'movie',
-              release_year: p.release_year,
-              reason: p.reason,
-            }));
-          } else {
-            console.warn('AI output failed Zod validation:', validated.error);
-          }
-        } catch (e) {
-          console.error('Failed to parse AI JSON output:', e);
-        }
-      }
-    } catch (e: any) {
-      try { console.error('AI SDK Error:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); } catch { console.error('AI SDK Error (string):', String(e)); }
-      console.warn('AI SDK failed; using heuristic fallback');
-    }
-
-    // Fallback heuristic
-    console.log('[AI] Triggering heuristic fallback due to AI failure or empty result.');
-    try {
-      if (!likedItems || likedItems.length === 0) {
-        console.warn('[AI] No liked items to use for fallback!');
-        return [];
-      }
-
-      const scored = (likedItems || []).slice().sort((a: MediaItemInput, b: MediaItemInput) => {
-        const ratingA = a.voteAverage ?? a.vote_average ?? a.rating ?? 0;
-        const ratingB = b.voteAverage ?? b.vote_average ?? b.rating ?? 0;
-        return Number(ratingB) - Number(ratingA);
-      });
-      console.log(`[AI] Fallback found ${scored.length} items to use as base.`);
-      return scored.slice(0, 10).map((s: MediaItemInput): RecommendationCandidate => ({
-        title: s.name || s.title || s.Title || 'Unknown',
-        media_type: s.mediaType || s.media_type || s.type || 'movie',
-        release_year: s.releaseYear || s.release_year || s.year || '',
-      }));
-    } catch (e) {
-      console.error('Fallback recommender error:', e);
-    }
-
-    return [];
-  }
 
   /**
    * Rank and filter anchor-based candidates using Gemini
