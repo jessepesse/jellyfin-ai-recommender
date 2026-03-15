@@ -6,6 +6,35 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-03-15
+
+### ✨ New Features
+
+- **Genre Diversity for Weekly Picks:** Dual-layer genre diversity enforcement in the Curator→Critic pipeline.
+  - Prompt-level instruction: Curator AI is told no single genre should dominate more than 30%.
+  - Post-processing cap: hard 30% per-genre limit applied between Curator and Critic stages.
+- **Genre Interleaving for On-Demand Recommendations:** When no genre filter is active, results are reordered so the same genre doesn't appear consecutively — visual variety without removing any items.
+- **Freshness Mix for Weekly Picks:** Candidate pool now always includes trending/recent releases (last 2 years, sorted by popularity) alongside quality-sorted classics. Ensures weekly picks feel fresh, not static.
+- **Negative Signals from Blocked Items:** Blocked items' titles and genres are now passed to AI ranking prompts (both on-demand and weekly), helping the AI avoid recommending similar content.
+
+### 🚀 Improvements
+
+- **Gemini 3 Prompt Optimization:** All 5 AI prompts restructured per the Gemini 3 prompting guide — data/context first, constraints last, flexible keyword counts, no blanket negatives.
+- **Dead Code Removal:** Removed ~150 lines of unreachable code (`buildPromptWithProfile`, `formatTable`, unused `GeminiService.getRecommendations`).
+- **Enriched Taste Summaries:** `summarizeProfile` now includes genre, year, rating, and vote average metadata for richer AI context.
+
+### 🐛 Bug Fixes
+
+- **Settings Page Logout:** Fixed admin users being logged out when navigating to Settings — `getSystemConfigEditor` and `putSystemConfigEditor` API calls were missing auth headers, causing 401 → automatic logout.
+- **Genre ID Display Bug:** Fixed Curator receiving raw TMDB genre IDs (`28`, `35`) instead of human-readable names (`Action`, `Comedy`) in weekly picks pipeline.
+- **Shared Types Build:** Rebuilt `@jellyfin-ai/types` dist to include the `genres` field added to `SharedMediaItem`.
+
+### 🔒 Security
+
+- **In-flight Cache Cleanup:** Added 5-minute timeout safety net for hung in-flight cache entries to prevent memory leaks.
+- **Year Filter Validation:** Aligned `extractYear` validation with `MIN_FILTER_YEAR`/`MAX_FILTER_YEAR` constants.
+- **Dependency Updates:** Upgraded jsdom to 29.0.0 (undici/flatted vulnerabilities), bumped hono to ≥4.12.7 (prototype pollution fix).
+
 ## [2.7.0] - 2026-03-10
 
 ### 🔐 Security

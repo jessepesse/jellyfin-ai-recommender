@@ -136,12 +136,12 @@ export const getSystemSetupDefaults = async (): Promise<{ jellyfinUrl?: string |
 };
 
 export const getSystemConfigEditor = async (): Promise<{ ok: boolean; config: { jellyfinUrl: string; jellyseerrUrl: string; jellyseerrApiKey: string; tmdbApiKey: string; geminiApiKey: string; aiProvider: string; openrouterApiKey: string; aiModel: string; isConfigured: boolean } }> => {
-    const response = await apiClient.get('/system/config-editor');
+    const response = await apiClient.get('/system/config-editor', authHeaders());
     return response.data;
 };
 
 export const putSystemConfigEditor = async (payload: { jellyfinUrl?: string; jellyseerrUrl?: string; jellyseerrApiKey?: string; tmdbApiKey?: string; geminiApiKey?: string; aiProvider?: string; openrouterApiKey?: string; aiModel?: string }) => {
-    const response = await apiClient.put('/system/config-editor', payload);
+    const response = await apiClient.put('/system/config-editor', payload, authHeaders());
     return response.data;
 };
 
