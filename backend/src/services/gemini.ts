@@ -194,6 +194,7 @@ Return ONLY plain text bullet points, no markdown formatting, no headers. Keep e
       requestedGenre?: string;
       requestedMood?: string;
       requestedYearRange?: string;
+      blockedItems?: Array<{ title: string; genres: string[] }>;
     },
     limit: number = 10
   ): Promise<Array<{ tmdbId: number; title: string; reason: string }>> {
@@ -229,17 +230,26 @@ Return ONLY plain text bullet points, no markdown formatting, no headers. Keep e
         contextLines.push(`Requested mood: ${moodDescriptions[userContext.requestedMood]}`);
       }
 
+      // Build blocked items context for negative signals
+      let blockedContext = '';
+      if (userContext.blockedItems && userContext.blockedItems.length > 0) {
+        const blockedList = userContext.blockedItems.slice(0, 20).map(b =>
+          `- "${b.title}" [${b.genres.join(', ')}]`
+        ).join('\n');
+        blockedContext = `\nBLOCKED ITEMS (user rejected these):\n${blockedList}\n`;
+      }
+
       // Gemini 3 optimized: data first, task middle, constraints last
       const prompt = `USER CONTEXT:
 ${contextLines.length > 0 ? contextLines.join('\n') : 'No specific preferences provided.'}
-
+${blockedContext}
 CANDIDATES (${candidates.length} titles):
 ${candidateList}
 
 Select the ${limit} best matches for this user from the candidates above. For each pick, provide a short reason why it fits.
 
 Return ONLY a JSON array: [{"tmdbId": 123, "title": "Name", "reason": "Why it fits"}, ...]
-Do NOT include titles not in the candidate list. Output must be valid JSON, no markdown.`;
+Do NOT include titles not in the candidate list.${blockedContext ? ' Avoid titles similar in theme/genre to the blocked items.' : ''} Output must be valid JSON, no markdown.`;
 
       // Debug: log prompt size and first candidate
       console.debug(`[AI Ranking] Prompt length: ${prompt.length} chars, first candidate: ${candidates[0]?.title}`);

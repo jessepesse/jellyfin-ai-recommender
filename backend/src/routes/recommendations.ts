@@ -168,10 +168,18 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
         const watchlistTitles = (watchlistEntries || []).map((w: any) => (w.title || '').trim()).filter(Boolean);
 
         let blockedTitles: string[] = [];
+        let blockedItems: Array<{ title: string; genres: string[] }> = [];
         if (Array.isArray(userData.blockedIds) && userData.blockedIds.length) {
             try {
-                const blockedMedia = await prisma.media.findMany({ where: { tmdbId: { in: userData.blockedIds.map((i: any) => Number(i)).filter(Boolean) } } });
+                const blockedMedia = await prisma.media.findMany({
+                    where: { tmdbId: { in: userData.blockedIds.map((i: any) => Number(i)).filter(Boolean) } },
+                    select: { title: true, genres: true },
+                });
                 blockedTitles = blockedMedia.map(m => (m.title || '').trim()).filter(Boolean);
+                blockedItems = blockedMedia.map(m => ({
+                    title: (m.title || '').trim(),
+                    genres: m.genres ? JSON.parse(m.genres) as string[] : [],
+                })).filter(b => b.title);
             } catch (e) {
                 console.warn('Failed to resolve blockedIds to titles', e);
             }
@@ -413,6 +421,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                         recentFavorites,
                         requestedGenre: genreFilter?.join(', '),
                         requestedMood: filters.mood,
+                        blockedItems: blockedItems.length > 0 ? blockedItems : undefined,
                     },
                     TARGET_COUNT - buffer.length
                 );
@@ -570,6 +579,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
                     requestedGenre: genreFilter?.join(', '),
                     requestedMood: filters.mood,
                     requestedYearRange: (filters.yearFrom || filters.yearTo) ? `${filters.yearFrom ?? 'any'}-${filters.yearTo ?? 'any'}` : undefined,
+                    blockedItems: blockedItems.length > 0 ? blockedItems : undefined,
                 },
                 TARGET_COUNT - buffer.length
             );
