@@ -1,10 +1,13 @@
 FROM node:25-alpine AS build
 WORKDIR /app/frontend
 
+# Copy .npmrc for consistent dependency resolution
+COPY .npmrc /app/.npmrc
+
 # Install dependencies
 COPY frontend/package*.json ./
 COPY shared ../shared
-RUN npm install
+RUN npm ci
 
 # Copy sources and build
 COPY frontend .

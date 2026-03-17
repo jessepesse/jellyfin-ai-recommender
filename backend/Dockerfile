@@ -5,6 +5,9 @@ WORKDIR /app/backend
 # Install OpenSSL for Prisma, curl, sqlite3 for migration checks, and build tools for better-sqlite3 native compilation
 RUN apt-get update && apt-get install -y openssl curl sqlite3 python3 make g++ && rm -rf /var/lib/apt/lists/*
 
+# Copy .npmrc for consistent dependency resolution
+COPY .npmrc /app/.npmrc
+
 # Copy package files
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma/
@@ -14,7 +17,7 @@ COPY backend/prisma.config.ts ./
 COPY shared ../shared
 
 # Install all dependencies (including devDependencies) so build tools like TypeScript and Prisma are available
-RUN npm install
+RUN npm ci
 
 # Copy source
 COPY backend .

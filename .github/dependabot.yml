@@ -11,12 +11,33 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      commitlint:
+        patterns:
+          - "@commitlint/*"
+      playwright:
+        patterns:
+          - "@playwright/*"
+          - "playwright*"
 
   # Maintain dependencies for Backend
   - package-ecosystem: "npm"
     directory: "/backend"
     schedule:
       interval: "weekly"
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
 
   # Maintain dependencies for Backend Docker
   - package-ecosystem: "docker"
@@ -29,6 +50,17 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      eslint:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "@eslint-react/*"
+          - "typescript-eslint"
 
   # Maintain dependencies for Frontend Docker
   - package-ecosystem: "docker"

@@ -254,7 +254,7 @@ google-credentials.json
 !.ssh/*.pub
 
 # Other credential/config files
-.npmrc
+# Note: .npmrc is tracked (contains only legacy-peer-deps setting, no tokens)
 .netrc
 credentials
 
