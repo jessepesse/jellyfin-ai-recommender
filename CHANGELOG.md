@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-03-17
+
+### 🚀 Improvements
+
+- **E2E Test Reliability:** Replaced fragile CSS class assertions with semantic `aria-pressed` checks, fixed strict mode violations, improved console error detection, and switched to `domcontentloaded` wait strategy.
+- **Accessibility:** `SegmentedControl` and `FilterGroup` toggle buttons now expose pressed state via `aria-pressed` attribute.
+- **CI:** Upgraded Node.js from 20 to 22 in GitHub Actions workflow.
+
+### 🔧 Maintenance
+
+- Upgraded `@eslint-react/eslint-plugin` from 2.13.0 to 3.0.0 (updated rule names).
+- Removed `playwright-report` from git tracking.
+- Dependency updates: `@google/genai` 1.45.0, `better-sqlite3` 12.8.0, `prisma` 7.5.0, `@prisma/adapter-better-sqlite3` 7.5.0, `vitest` 4.1.0, `@vitest/coverage-v8` 4.1.0, `typescript-eslint` 8.57.0, `@types/node` 25.5.0, `@commitlint/cli` 20.5.0, `@commitlint/config-conventional` 20.5.0.
+
 ## [2.8.0] - 2026-03-15
 
 ### ✨ New Features
