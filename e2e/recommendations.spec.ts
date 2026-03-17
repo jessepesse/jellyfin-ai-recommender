@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const MOCK_USER = { id: 'user-1', name: 'testuser', isAdmin: false };
 const MOCK_TOKEN = 'test-token-e2e-abc';
@@ -52,10 +52,9 @@ test.describe('Recommendations', () => {
             route.fulfill({ json: [] })
         );
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-        await expect(page.getByText('Jellyfin AI Recommender')).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Jellyfin AI Recommender' })).toBeVisible();
         await expect(page.getByText('Content Type')).toBeVisible();
         await expect(page.getByText('Genres')).toBeVisible();
         await expect(page.getByText('Mood')).toBeVisible();
@@ -67,20 +66,19 @@ test.describe('Recommendations', () => {
             route.fulfill({ json: [] })
         );
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-        // Movies is selected by default — has the active gradient class
         const moviesBtn = page.getByRole('button', { name: 'Movies' });
         const tvBtn = page.getByRole('button', { name: 'TV Series' });
 
-        await expect(moviesBtn).toHaveClass(/from-violet-600/);
-        await expect(tvBtn).not.toHaveClass(/from-violet-600/);
+        // Movies is selected by default
+        await expect(moviesBtn).toHaveAttribute('aria-pressed', 'true');
+        await expect(tvBtn).toHaveAttribute('aria-pressed', 'false');
 
         // Switch to TV Series
         await tvBtn.click();
-        await expect(tvBtn).toHaveClass(/from-violet-600/);
-        await expect(moviesBtn).not.toHaveClass(/from-violet-600/);
+        await expect(tvBtn).toHaveAttribute('aria-pressed', 'true');
+        await expect(moviesBtn).toHaveAttribute('aria-pressed', 'false');
     });
 
     test('can toggle genre filter on and off', async ({ page }) => {
@@ -88,21 +86,20 @@ test.describe('Recommendations', () => {
             route.fulfill({ json: [] })
         );
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         const actionChip = page.getByRole('button', { name: 'Action' });
 
         // Not active initially
-        await expect(actionChip).not.toHaveClass(/from-violet-600/);
+        await expect(actionChip).toHaveAttribute('aria-pressed', 'false');
 
         // Click to activate
         await actionChip.click();
-        await expect(actionChip).toHaveClass(/from-violet-600/);
+        await expect(actionChip).toHaveAttribute('aria-pressed', 'true');
 
         // Click again to deactivate
         await actionChip.click();
-        await expect(actionChip).not.toHaveClass(/from-violet-600/);
+        await expect(actionChip).toHaveAttribute('aria-pressed', 'false');
     });
 
     test('shows loading state while fetching recommendations', async ({ page }) => {
@@ -112,8 +109,7 @@ test.describe('Recommendations', () => {
             await route.fulfill({ json: [] });
         });
 
-        await page.goto('/');
-        await page.waitForLoadState('domcontentloaded');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         // Wait for initial silent load to finish, then trigger a refresh
         await page.waitForSelector('button:has-text("Get Recommendations")');
@@ -131,13 +127,12 @@ test.describe('Recommendations', () => {
             return route.fulfill({ json: callCount === 1 ? [] : MOCK_ITEMS });
         });
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.getByRole('button', { name: /Get Recommendations/i }).click();
 
-        await expect(page.getByText('Inception')).toBeVisible({ timeout: 5000 });
-        await expect(page.getByText('Interstellar')).toBeVisible({ timeout: 5000 });
+        await expect(page.getByRole('heading', { name: 'Inception' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.getByRole('heading', { name: 'Interstellar' }).first()).toBeVisible({ timeout: 5000 });
     });
 
     test('shows error message when recommendations API fails', async ({ page }) => {
@@ -151,8 +146,7 @@ test.describe('Recommendations', () => {
             });
         });
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.getByRole('button', { name: /Get Recommendations/i }).click();
 
@@ -168,8 +162,7 @@ test.describe('Recommendations', () => {
             return route.fulfill({ json: [] });
         });
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         // Switch to TV and get recommendations
         await page.getByRole('button', { name: 'TV Series' }).click();

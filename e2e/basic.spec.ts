@@ -1,10 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Basic Navigation', () => {
-    test('page loads without errors', async ({ page }) => {
-        await page.goto('/');
-
-        // Page should load without console errors
+    test('page loads without console errors', async ({ page }) => {
         const consoleErrors: string[] = [];
         page.on('console', msg => {
             if (msg.type() === 'error') {
@@ -12,23 +9,21 @@ test.describe('Basic Navigation', () => {
             }
         });
 
-        // Wait for the page to be fully loaded
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-        // Should see either Setup Wizard, Login, or Dashboard
         const body = await page.locator('body');
         await expect(body).toBeVisible();
+
+        expect(consoleErrors).toEqual([]);
     });
 
     test('shows setup wizard or login on fresh visit', async ({ page }) => {
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-        // Should show either:
-        // - Setup wizard (if not configured)
-        // - Login form (if configured but not authenticated)
-        // - Dashboard (if authenticated)
-        const setupOrLogin = page.getByRole('button').first();
-        await expect(setupOrLogin).toBeVisible({ timeout: 10000 });
+        // Should show either the setup wizard or the login form
+        const setupHeading = page.getByRole('heading', { name: /setup/i });
+        const signInButton = page.getByRole('button', { name: /sign in/i });
+
+        await expect(setupHeading.or(signInButton)).toBeVisible({ timeout: 10000 });
     });
 });

@@ -19,6 +19,7 @@ const SegmentedControl: React.FC<Props> = ({ options, value, onChange, ariaLabel
         <button
           key={option.id}
           onClick={() => onChange(option.id)}
+          aria-pressed={value === option.id}
           className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
             value === option.id
               ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-cyan-500/20 scale-105'

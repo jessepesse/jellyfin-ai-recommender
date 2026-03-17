@@ -19,6 +19,7 @@ const FilterGroup: React.FC<Props> = ({ chips, onToggle }) => {
           <button
             key={chip.id}
             onClick={() => onToggle(chip.id)}
+            aria-pressed={chip.active}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-300 ${chip.active
               ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-lg shadow-cyan-500/30 scale-105'
               : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-white hover:scale-105'

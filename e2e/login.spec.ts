@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Login', () => {
     test.beforeEach(async ({ page }) => {
@@ -13,8 +13,7 @@ test.describe('Login', () => {
     });
 
     test('shows login form with username, password and submit button', async ({ page }) => {
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await expect(page.locator('#username')).toBeVisible();
         await expect(page.locator('#password')).toBeVisible();
@@ -28,8 +27,7 @@ test.describe('Login', () => {
             await route.fulfill({ status: 401, json: { message: 'Invalid credentials' } });
         });
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.locator('#username').fill('testuser');
         await page.locator('#password').fill('wrongpassword');
@@ -46,8 +44,7 @@ test.describe('Login', () => {
             })
         );
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.locator('#username').fill('baduser');
         await page.locator('#password').fill('badpassword');
@@ -77,8 +74,7 @@ test.describe('Login', () => {
             route.fulfill({ json: [] })
         );
 
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.locator('#username').fill('testuser');
         await page.locator('#password').fill('correctpassword');
