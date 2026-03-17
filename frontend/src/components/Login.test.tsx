@@ -10,6 +10,7 @@ vi.mock('../contexts/AuthContext', async (importOriginal) => {
     const actual = await importOriginal() as object;
     return {
         ...actual,
+        // eslint-disable-next-line @eslint-react/component-hook-factories
         useAuth: () => ({
             login: mockLogin,
             user: null,

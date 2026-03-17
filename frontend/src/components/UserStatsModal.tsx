@@ -70,11 +70,11 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     useEffect(() => {
         if (!isOpen) {
             // Reset state on close
-            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+            // eslint-disable-next-line @eslint-react/set-state-in-effect
             setData(null);
-            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+            // eslint-disable-next-line @eslint-react/set-state-in-effect
             setMovieProfile(null);
-            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+            // eslint-disable-next-line @eslint-react/set-state-in-effect
             setSeriesProfile(null);
             return;
         }
@@ -115,7 +115,7 @@ const UserStatsModal: React.FC<Props> = ({ isOpen, onClose }) => {
         if (isOpen && token) {
             fetchStats();
         } else if (isOpen && !token) {
-            // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+            // eslint-disable-next-line @eslint-react/set-state-in-effect
             setError('Please log in to view statistics.');
         }
     }, [isOpen, token, user]);
