@@ -13,6 +13,22 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core — changes rarely, long cache TTL
+          'vendor-react': ['react', 'react-dom', 'react-is'],
+          // Recharts + its D3 internals — largest dependency
+          'vendor-charts': ['recharts'],
+          // Icon library
+          'vendor-icons': ['lucide-react'],
+          // Utility libs
+          'vendor-utils': ['axios', 'date-fns'],
+        },
+      },
+    },
+  },
   define: {
     // Inject version from package.json at build time
     'import.meta.env.PACKAGE_VERSION': JSON.stringify(packageJson.version)
