@@ -7,7 +7,7 @@ COPY .npmrc /app/.npmrc
 # Install dependencies
 COPY frontend/package*.json ./
 COPY shared ../shared
-RUN npm ci
+RUN npm install
 
 # Copy sources and build
 COPY frontend .

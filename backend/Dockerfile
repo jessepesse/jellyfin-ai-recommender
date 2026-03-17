@@ -17,7 +17,7 @@ COPY backend/prisma.config.ts ./
 COPY shared ../shared
 
 # Install all dependencies (including devDependencies) so build tools like TypeScript and Prisma are available
-RUN npm ci
+RUN npm install
 
 # Copy source
 COPY backend .
