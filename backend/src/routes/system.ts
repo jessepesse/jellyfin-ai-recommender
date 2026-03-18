@@ -343,14 +343,10 @@ router.post('/verify', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 /**
- * GET /system/config - Debug endpoint for full config (requires x-debug header)
+ * GET /system/config - Debug endpoint for full config (admin only)
  */
-router.get('/config', async (req, res) => {
+router.get('/config', authMiddleware, requireAdmin, async (req, res) => {
     try {
-        const debugHeader = req.headers['x-debug'];
-        if (!debugHeader || String(debugHeader) !== '1') {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
         const cfg = await ConfigService.getConfig();
         res.json({ ok: true, config: cfg });
     } catch (e) {

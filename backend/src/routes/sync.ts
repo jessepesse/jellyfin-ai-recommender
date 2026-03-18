@@ -18,7 +18,7 @@ router.post('/jellyfin', validateJellyfinSync, async (req: Request, res: Respons
     try {
         if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const accessToken = req.headers['x-access-token'] as string;
+        const accessToken = (req.user?.jellyfinToken ?? req.headers['x-access-token']) as string;
         const jellyfinUrlRaw = req.headers['x-jellyfin-url'] as string | undefined;
         const jellyfinUrl = jellyfinUrlRaw ? sanitizeUrl(jellyfinUrlRaw) : undefined;
 

@@ -5,6 +5,9 @@ FROM node:25-alpine
 
 WORKDIR /app/frontend
 
+# Copy .npmrc for consistent dependency resolution
+COPY .npmrc /app/.npmrc
+
 # Copy package files (host context is root)
 COPY frontend/package*.json ./
 

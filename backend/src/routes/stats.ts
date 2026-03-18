@@ -21,7 +21,7 @@ const jellyfinService = new JellyfinService();
 router.get('/', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const accessToken = req.headers['x-access-token'] as string;
+    const accessToken = (req.user?.jellyfinToken ?? req.headers['x-access-token']) as string;
     const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
     const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 

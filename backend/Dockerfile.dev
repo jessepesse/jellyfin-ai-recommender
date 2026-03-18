@@ -8,6 +8,9 @@ WORKDIR /app/backend
 # Install dependencies for Prisma, health check, and better-sqlite3 native compilation
 RUN apt-get update && apt-get install -y openssl curl python3 make g++ && rm -rf /var/lib/apt/lists/*
 
+# Copy .npmrc for consistent dependency resolution
+COPY .npmrc /app/.npmrc
+
 # Copy package files (host context is root)
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma/

@@ -67,7 +67,7 @@ router.get('/', async (req: Request, res: Response) => {
             .map(um => ({
                 ...um.media,
                 // Parse genres if string
-                genres: um.media.genres ? JSON.parse(um.media.genres) : [],
+                genres: (() => { try { return um.media.genres ? JSON.parse(um.media.genres) : []; } catch { return []; } })(),
                 // Convert relative image paths to absolute URLs
                 posterUrl: toAbsoluteImageUrl(req, um.media.posterUrl || um.media.posterSourceUrl),
                 backdropUrl: toAbsoluteImageUrl(req, um.media.backdropUrl || um.media.backdropSourceUrl)
@@ -78,7 +78,7 @@ router.get('/', async (req: Request, res: Response) => {
             .map(um => ({
                 ...um.media,
                 // Parse genres if string
-                genres: um.media.genres ? JSON.parse(um.media.genres) : [],
+                genres: (() => { try { return um.media.genres ? JSON.parse(um.media.genres) : []; } catch { return []; } })(),
                 // Convert relative image paths to absolute URLs
                 posterUrl: toAbsoluteImageUrl(req, um.media.posterUrl || um.media.posterSourceUrl),
                 backdropUrl: toAbsoluteImageUrl(req, um.media.backdropUrl || um.media.backdropSourceUrl)
@@ -237,7 +237,8 @@ router.post('/:id/unblock', async (req: Request, res: Response) => {
         });
 
         if (existingCache) {
-            const candidates = JSON.parse(existingCache.candidates);
+            let candidates: any[] = [];
+            try { candidates = JSON.parse(existingCache.candidates); } catch { /* corrupt cache — treat as empty */ }
             const updatedCandidates = candidates.filter((c: any) => c.media.tmdbId !== tmdbId);
 
             await prisma.redemptionCandidates.update({
@@ -341,7 +342,8 @@ router.post('/:id/keep-blocked', async (req: Request, res: Response) => {
         });
 
         if (existingCache) {
-            const candidates = JSON.parse(existingCache.candidates);
+            let candidates: any[] = [];
+            try { candidates = JSON.parse(existingCache.candidates); } catch { /* corrupt cache — treat as empty */ }
             const updatedCandidates = candidates.filter((c: any) => c.media.tmdbId !== tmdbId);
 
             await prisma.redemptionCandidates.update({

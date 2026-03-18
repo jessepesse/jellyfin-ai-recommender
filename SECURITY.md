@@ -204,16 +204,16 @@ The password is no longer stored in the browser at all. Backend session manageme
 - ✅ Format string injection prevention
 - ✅ No sensitive data logging
 - ✅ CORS configuration
-- ✅ Secure cookie settings
+- ✅ Session token stored in localStorage (never password or raw credentials)
 
 ## Supported Versions
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 2.8.x   | :white_check_mark: |
 | 2.7.x   | :white_check_mark: |
-| 2.6.x   | :white_check_mark: |
-| 2.5.x   | :x:                |
-| < 2.0   | :x:                |
+| 2.6.x   | :x:                |
+| < 2.6   | :x:                |
 
 ## Security Update Policy
 

@@ -117,9 +117,9 @@ router.get('/search', authMiddleware, async (req, res) => {
  */
 router.get('/recommendations', authMiddleware, async (req, res) => {
     const { libraryId, type, genre, mood, yearFrom, yearTo } = req.query;
-    // x-access-token is still read for Jellyfin API calls (it IS the bearer credential).
-    // Identity (username, Jellyfin user ID) comes from req.user — verified by authMiddleware.
-    const accessToken = req.headers['x-access-token'] as string;
+    // Use the Jellyfin token resolved by authMiddleware (from session), falling back to the
+    // raw header for legacy local: token flows where jellyfinToken is not set.
+    const accessToken = (req.user?.jellyfinToken ?? req.headers['x-access-token']) as string;
     const jellyfinServerRaw = req.headers['x-jellyfin-url'] as string | undefined;
     const jellyfinServer = jellyfinServerRaw ? sanitizeUrl(jellyfinServerRaw) : undefined;
 

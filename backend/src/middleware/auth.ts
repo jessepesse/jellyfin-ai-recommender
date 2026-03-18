@@ -83,17 +83,21 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
                     .update(resolvedJellyfinToken).digest('hex');
 
                 if (!tokenCache.has(jellyfinTokenHash)) {
+                    let jellyfinUser: { Id: string; Name: string; Policy: { IsAdministrator: boolean } } | null = null;
                     try {
-                        const jellyfinUser = await jellyfinService.getMe(resolvedJellyfinToken);
-                        if (jellyfinUser) {
-                            tokenCache.set(jellyfinTokenHash, {
-                                userId: session.userId,
-                                jellyfinUserId: jellyfinUser.Id,
-                                isSystemAdmin: session.isSystemAdmin,
-                            });
-                        }
+                        jellyfinUser = await jellyfinService.getMe(resolvedJellyfinToken);
                     } catch {
-                        // Jellyfin token expired — attempt transparent re-auth using stored credential
+                        // Network error or unexpected failure — treat as expired
+                    }
+
+                    if (jellyfinUser) {
+                        tokenCache.set(jellyfinTokenHash, {
+                            userId: session.userId,
+                            jellyfinUserId: jellyfinUser.Id,
+                            isSystemAdmin: session.isSystemAdmin,
+                        });
+                    } else {
+                        // Token invalid or expired — attempt transparent re-auth using stored credential
                         if (session.credential) {
                             try {
                                 const { AuthService } = await import('../authService');

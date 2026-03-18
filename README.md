@@ -1,4 +1,4 @@
-# 🎬 Jellyfin AI Recommender (v2.7.0)
+# 🎬 Jellyfin AI Recommender
 
 A modern, AI-powered recommendation engine for your Jellyfin media server.
 **Built with React (Vite), Node.js, TypeScript, and SQLite.**
@@ -24,7 +24,7 @@ A modern, AI-powered recommendation engine for your Jellyfin media server.
 - 🔄 **Legacy Import** — Non-destructive import tool to migrate data from the old v1 `database.json`.
 - 🔧 **Production-Ready Rate Limiting** — Smart rate limiting supports large imports (1000+ items) with separate limits per operation type.
 - 🌐 **Reverse Proxy Support** — Full support for Nginx, ZimaOS, and other reverse proxy environments with proper header forwarding.
-- 🔐 **Hybrid Authentication** — Offline login support with cached credentials and emergency local admin access (`bootstrapAdmin`).
+- 🔐 **Session-Based Authentication** — Secure server-side sessions with AES-256-GCM encrypted credentials and offline fallback support.
 
 ---
 
@@ -51,7 +51,7 @@ You can choose between two AI providers:
 - **Cost:** Free tier available (Google AI Studio).
 - **Configuration:** Set `AI_PROVIDER=google` (or leave default) and `GEMINI_API_KEY`.
 
-#### 2. OpenRouter (New in v2.4.0)
+#### 2. OpenRouter
 - **Unified access** to Gemini models via OpenRouter's API.
 - **Why use it?** If you prefer a centralized API for multiple models or need specific routing.
 - **Configuration:**
@@ -157,7 +157,7 @@ This project is a full-stack monorepo split into a separate Frontend and Backend
 
 ### 1. Prerequisites
 
-- **Node.js** (v18+) & npm
+- **Node.js** (v22+) & npm
 - **Jellyfin Server** (accessible URL)
 - **Jellyseerr Server** (for metadata enrichment & requests)
 - **AI Provider API Key** (Google Gemini OR OpenRouter)
@@ -167,12 +167,13 @@ This project is a full-stack monorepo split into a separate Frontend and Backend
 Clone the repo and install dependencies for both services:
 
 ```bash
-git clone [https://github.com/jessepesse/jellyfin-ai-recommender.git](https://github.com/jessepesse/jellyfin-ai-recommender.git)
+git clone https://github.com/jessepesse/jellyfin-ai-recommender.git
 cd jellyfin-ai-recommender
 
 # Install root tools (concurrently) and project dependencies
 npm install
 npm run install:all
+```
 
 ### 3. Configuration (Two Options)
 
@@ -180,36 +181,40 @@ npm run install:all
 
 **Option B: Environment Variables (Advanced)** Copy `backend/.env.example` to `backend/.env` and fill in your values:
 
+```bash
 cp backend/.env.example backend/.env
 # Then edit backend/.env with your actual values
+```
 
-4. Database Setup
+### 4. Database Setup
 
 Initialize the SQLite database and apply the schema:
 
+```bash
 cd backend
 npm run db:migrate
 npm run db:generate  # Generate Prisma client types
-# This uses dotenv-cli to load your .env (if present) and run prisma
+```
 
-
-5. Run the App (Development)
+### 5. Run the App (Development)
 
 Start both the Frontend and Backend with a single command from the root directory:
 
+```bash
 npm run dev
+```
 
-Frontend (UI): http://localhost:5173
-Backend (API): http://localhost:3001
+- Frontend (UI): http://localhost:5173
+- Backend (API): http://localhost:3001
 
 
-🐳 Production (Docker)
+## 🐳 Production (Docker)
 
 This repo includes a production-ready `docker-compose.prod.yml`. It sets up the Node.js backend and serves the frontend via Nginx.
 
 ```bash
 # Build and start containers
-docker-compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 **Access:** The app is available at `http://localhost:5173` (frontend) and the backend API at `http://localhost:3001`.
@@ -414,14 +419,14 @@ See `frontend/nginx.conf` for a reference configuration.
 ## 🛠️ Maintenance & Utilities
 
 ### Image Cache Migration
-If upgrading from v2.0.3 or earlier, run this to download all images locally:
+Run this to download all poster and backdrop images to local cache:
 ```bash
 # Development
 cd backend
 npm run db:migrate-images
 
 # Docker
-docker-compose -f docker-compose.prod.yml exec backend npm run db:migrate-images
+docker compose -f docker-compose.prod.yml exec backend npm run db:migrate-images
 ```
 
 ### Database Backup
@@ -432,7 +437,7 @@ cd backend
 npm run db:backup
 
 # Docker
-docker-compose -f docker-compose.prod.yml exec backend npm run db:backup
+docker compose -f docker-compose.prod.yml exec backend npm run db:backup
 ```
 
 Backups are saved to `./data/backup_latest.json` and timestamped files.
@@ -450,10 +455,11 @@ This project implements comprehensive security measures including:
 - Local image caching (eliminates external URL dependencies)
 
 **Authentication & Authorization:**
-- PBKDF2 password hashing for local admin
-- HMAC-signed tokens with 30-day expiry
+- Session-based authentication with AES-256-GCM encrypted credentials
+- HMAC-SHA256 session token hashing (raw token never stored in DB)
+- PBKDF2 password hashing for local admin account
 - Middleware-enforced route protection (`authMiddleware`, `requireAdmin`)
-- No legacy header-based authentication fallbacks
+- Automatic session expiry and purging
 
 **Privacy:**
 - No sensitive data logging (passwords never logged)

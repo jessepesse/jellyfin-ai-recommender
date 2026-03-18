@@ -28,11 +28,13 @@ services:
       # Source code for hot reload
       - ./backend/src:/app/backend/src
       - ./backend/prisma:/app/backend/prisma
+      # Shared types — live mount so changes hot-reload without rebuild
+      - ./shared:/app/shared:ro
       # Data persistence
       - ./data:/app/backend/data
       - ./images:/app/backend/images
-      # Exclude node_modules (use container's installed deps)
-      - /app/backend/node_modules
+      # Named volume for node_modules (preserve container-built native deps)
+      - backend_node_modules:/app/backend/node_modules
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3001/api/health" ]
       interval: 30s
@@ -59,8 +61,10 @@ services:
       - ./frontend/public:/app/frontend/public:ro
       - ./frontend/index.html:/app/frontend/index.html:ro
       - ./frontend/vite.config.ts:/app/frontend/vite.config.ts:ro
-      # Exclude node_modules
-      - /app/frontend/node_modules
+      # Shared types — live mount so changes hot-reload without rebuild
+      - ./shared:/app/shared:ro
+      # Named volume for node_modules (preserve container-built deps)
+      - frontend_node_modules:/app/frontend/node_modules
     depends_on:
       backend-dev:
         condition: service_healthy
@@ -70,3 +74,7 @@ services:
 networks:
   jair_dev_net:
     driver: bridge
+
+volumes:
+  backend_node_modules:
+  frontend_node_modules:

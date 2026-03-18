@@ -102,6 +102,8 @@ authRouter.post('/login', validateLogin, async (req: Request, res: Response) => 
                 logger.info(`[Auth] Synced credentials for ${username} (ID: ${userId})`);
             } catch (syncErr) {
                 logger.error({ err: syncErr }, '[Auth] Failed to sync local credentials');
+                // Cannot create a session without a valid local user record
+                return res.status(500).json({ error: 'Authentication failed: unable to create user record' });
             }
         }
 
