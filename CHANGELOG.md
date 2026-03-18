@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-03-18
+
+### 🔒 Security
+
+- **`GET /system/config` now requires admin authentication** — previously protected only by a trivially-faked `x-debug` header.
+- **Session token no longer forwarded to Jellyfin** — `sync`, `stats`, and `recommendations` routes now use the Jellyfin token resolved by `authMiddleware` (`req.user.jellyfinToken`) instead of the raw `x-access-token` header. Fixes session-based auth for all Jellyfin-proxying routes.
+
+### 🐛 Bug Fixes
+
+- **Token refresh was dead code** — `getMe()` returns `null` on 401 instead of throwing, so the `catch` block for transparent Jellyfin re-auth was never reached. Null return is now treated as an expired token, triggering re-auth correctly.
+- **`userId` could be `undefined` on login** — if `prisma.user.upsert` failed during Jellyfin auth, `createSession` was called with `userId!` which could be `undefined`. Login now returns 500 immediately on upsert failure.
+- **`JSON.parse` without try/catch in `blocked.ts`** — corrupt DB rows for genres or redemption candidates now return an empty array instead of crashing the endpoint with 500.
+
+### 🔧 Maintenance
+
+- Added `.npmrc` copy to dev Dockerfiles for consistent `legacy-peer-deps` behaviour.
+- `docker-compose.development.yml`: mount `shared` package as live volume (hot-reload without rebuild), switch `node_modules` to named volumes.
+- README and SECURITY.md documentation updates.
+
 ## [2.8.1] - 2026-03-17
 
 ### 🚀 Improvements
