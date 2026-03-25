@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.3] - 2026-03-25
+
+### 🔒 Security
+
+- **Pin `effect` 3.18.4 → 3.21.0** via npm override — fixes AsyncLocalStorage contamination vulnerability (Dependabot alert #60).
+- **Pin `flatted` → 3.4.2** via npm override — fixes prototype pollution vulnerability (Dependabot alert #61).
+
+### 🔧 Maintenance
+
+- Dependency updates: `@google/genai` 1.46.0, `@tailwindcss/vite` 4.2.2, `tailwindcss` 4.2.2.
+- Removed unused `tailwindcss` and `@tailwindcss/vite` from root `package.json`.
+
 ## [2.8.2] - 2026-03-18
 
 ### 🔒 Security
