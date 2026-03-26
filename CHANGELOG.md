@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.4] - 2026-03-26
+
+### 🔒 Security
+
+- **Pin `picomatch` to 4.0.4** (root, frontend, backend) via npm overrides — fixes Method Injection vulnerability (Dependabot alerts #65/#68/#70).
+- **Pin `picomatch` 2.x to 2.3.2** for the anymatch chain (backend: nodemon→chokidar→anymatch) — fixes alert #66 without breaking nodemon.
+- **Pin `brace-expansion` to 5.0.5** (frontend, backend) — fixes moderate ReDoS vulnerability.
+
+### 🔧 Maintenance
+
+- Dismissed false positive Dependabot alerts #71 (Streamlit) and #62 (requests) — Python packages not present in Node.js dependency tree.
+- Merged Dependabot PRs: #129 (vitest backend), #130 (jsdom root), #133 (eslint frontend).
+- Closed incompatible major version PRs: #127 (TypeScript 6 — breaking changes), #134 (Vite 8 — `@tailwindcss/vite` peer dep mismatch), #136 (lucide-react 0→1 — major version jump).
+
 ## [2.8.3] - 2026-03-25
 
 ### 🔒 Security
