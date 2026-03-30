@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.5] - 2026-03-30
+
+### 🔒 Security
+
+- **Pin `path-to-regexp` to 8.4.0** (backend) via npm override — fixes DoS via sequential optional groups (high, #75) and ReDoS via multiple wildcards (medium, #74). Vulnerability introduced transitively via `express@5 → router@2.2.0`.
+
 ## [2.8.4] - 2026-03-26
 
 ### 🔒 Security
