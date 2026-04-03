@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.6] - 2026-04-03
+
+### 🔧 Maintenance
+
+- Dependency updates: `axios` 1.14.0 (backend + frontend — clean release post supply-chain incident), `recharts` 3.8.1, `zod-to-json-schema` 3.25.2, `express-validator` 7.3.2.
+- Dev dependency updates: `vitest` group (backend), `eslint` group (frontend), `@playwright/test` 1.59.1, `@types/jsdom` 28.0.1.
+- Closed Vite 8.0.3 PR (#143) — `@tailwindcss/vite` does not yet support Vite 8.
+
 ## [2.8.5] - 2026-03-30
 
 ### 🔒 Security
