@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.7] - 2026-04-06
+
+### 🔒 Security
+
+- **Pin `lodash` to 4.18.1** (backend) via npm override — fixes Code Injection via `_.template` (high, #77) and Prototype Pollution via `_.unset`/`_.omit` (moderate, #76).
+- **Pin `defu` to 6.1.6** (backend) via npm override — fixes high severity vulnerability introduced transitively via `prisma → @prisma/config → c12`.
+- Dismissed alert #79 (tornado/pip) — Python package, not present in this Node.js project.
+
 ## [2.8.6] - 2026-04-03
 
 ### 🔧 Maintenance
