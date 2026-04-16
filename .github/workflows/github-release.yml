@@ -177,7 +177,7 @@ jobs:
           printf '%s' "$MSG" > /tmp/release_notes.md
 
       - name: Create GitHub Release
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           TAG:          ${{ steps.meta.outputs.tag }}
           SEMVER:       ${{ steps.meta.outputs.semver }}
