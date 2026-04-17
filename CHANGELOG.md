@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.8] - 2026-04-17
+
+### 🔒 Security
+
+- **Pin `protobufjs` to ^7.5.5** (backend) via npm override — fixes critical arbitrary code execution vulnerability (Dependabot alert #105) introduced transitively via `@google/genai`.
+- **Pin `follow-redirects` to ^1.16.0** (backend + frontend) via npm overrides — fixes auth header leak to cross-domain redirect targets (Dependabot alerts #100, #101).
+- Dismissed alert #99 (pillow/pip) — `requirements.txt` removed from project, no Python components present.
+
 ## [2.8.7] - 2026-04-06
 
 ### 🔒 Security
