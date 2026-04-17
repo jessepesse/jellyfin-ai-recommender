@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.9] - 2026-04-17
+
+### 🔒 Security
+
+- **Update `hono` to 4.12.14** (backend override) — fixes path traversal, middleware bypass, cookie validation, JSX HTML injection (Dependabot alerts #90–94, #102).
+- **Update `@hono/node-server` to 1.19.13** (backend override) — fixes middleware bypass via repeated slashes in serveStatic (#89).
+- **Update `vite` to 7.3.2** (frontend) — fixes `server.fs.deny` bypass, arbitrary file read via WebSocket, path traversal in optimized deps (alerts #80–88).
+
 ## [2.8.8] - 2026-04-17
 
 ### 🔒 Security
