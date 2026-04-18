@@ -3,7 +3,7 @@
  * Filters out already watched/watchlisted/blocked/requested content
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { TrendingUp, Film, Tv, RefreshCw, AlertCircle } from 'lucide-react';
 import MediaCard from './MediaCard';
 import SkeletonCard from './SkeletonCard';
@@ -30,17 +30,35 @@ interface TrendingResponse {
     tvShows: TrendingItem[];
 }
 
+const mapToJellyfinItem = (item: TrendingItem): JellyfinItem => {
+    const title = item.title || item.name || 'Unknown';
+    const releaseDate = item.releaseDate || item.firstAirDate;
+    const posterUrl = item.posterPath ? `https://image.tmdb.org/t/p/w500${item.posterPath}` : null;
+    const backdropUrl = item.backdropPath ? `https://image.tmdb.org/t/p/w780${item.backdropPath}` : null;
+    return {
+        Id: `tmdb-${item.id}`,
+        Name: title,
+        Type: item.mediaType === 'movie' ? 'Movie' : 'Series',
+        mediaType: item.mediaType,
+        tmdbId: item.id,
+        title,
+        posterUrl,
+        overview: item.overview,
+        releaseYear: releaseDate ? releaseDate.substring(0, 4) : 'Unknown',
+        voteAverage: item.voteAverage || 0,
+        backdropUrl,
+        genres: item.genres,
+        UserData: { Played: false, UnplayedItemCount: 1, PlaybackPositionTicks: 0, IsFavorite: false },
+    } as JellyfinItem;
+};
+
 const TrendingPage: React.FC = () => {
     const [data, setData] = useState<TrendingResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<'all' | 'movies' | 'tv'>('all');
 
-    useEffect(() => {
-        loadTrending();
-    }, []);
-
-    const loadTrending = async () => {
+    const loadTrending = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -57,39 +75,14 @@ const TrendingPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    // Map trending item to JellyfinItem for MediaCard
-    const mapToJellyfinItem = (item: TrendingItem): JellyfinItem => {
-        const title = item.title || item.name || 'Unknown';
-        const releaseDate = item.releaseDate || item.firstAirDate;
-        const posterUrl = item.posterPath
-            ? `https://image.tmdb.org/t/p/w500${item.posterPath}`
-            : null;
-        const backdropUrl = item.backdropPath
-            ? `https://image.tmdb.org/t/p/w780${item.backdropPath}`
-            : null;
+    useEffect(() => {
+        loadTrending();
+    }, [loadTrending]);
 
-        return {
-            Id: `tmdb-${item.id}`,
-            Name: title,
-            Type: item.mediaType === 'movie' ? 'Movie' : 'Series',
-            mediaType: item.mediaType,
-            tmdbId: item.id,
-            title: title,
-            posterUrl: posterUrl,
-            overview: item.overview,
-            releaseYear: releaseDate ? releaseDate.substring(0, 4) : 'Unknown',
-            voteAverage: item.voteAverage || 0,
-            backdropUrl: backdropUrl,
-            genres: item.genres,
-            UserData: { Played: false, UnplayedItemCount: 1, PlaybackPositionTicks: 0, IsFavorite: false },
-        } as JellyfinItem;
-    };
-
-    // Remove item from local state after action
-    const handleRemove = (tmdbId?: number) => {
-        if (!tmdbId || !data) return;
+    const handleRemove = useCallback((tmdbId?: number) => {
+        if (!tmdbId) return;
         setData(prev => {
             if (!prev) return prev;
             return {
@@ -98,7 +91,7 @@ const TrendingPage: React.FC = () => {
                 tvShows: prev.tvShows.filter(t => t.id !== tmdbId),
             };
         });
-    };
+    }, []);
 
     if (loading) {
         return (
@@ -189,7 +182,7 @@ const TrendingPage: React.FC = () => {
                             <MediaCard
                                 key={item.id}
                                 item={mapToJellyfinItem(item)}
-                                onRemove={() => handleRemove(item.id)}
+                                onRemove={handleRemove}
                             />
                         ))}
                     </div>
