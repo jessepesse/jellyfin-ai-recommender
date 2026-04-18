@@ -33,7 +33,7 @@ const MOODS = [
   { id: 'visual', label: 'Visual / Epic 🎨' },
 ];
 const YEAR_MIN = 1900;
-const YEAR_MAX = 2026;
+const YEAR_MAX = new Date().getFullYear();
 const YEAR_STEP = 1;
 const YEAR_TICKS_MOBILE = [1900, 1950, 2000, YEAR_MAX];
 const YEAR_TICKS_DESKTOP = Array.from({ length: Math.floor((YEAR_MAX - YEAR_MIN) / 10) + 1 }, (_, i) => YEAR_MIN + i * 10).concat(YEAR_MAX).filter((v, i, a) => a.indexOf(v) === i);
@@ -105,7 +105,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
       initialLoadDoneRef.current = true;
       handleGetRecommendations(false);
     }
-  }, [currentView]);
+  }, [currentView, handleGetRecommendations]);
 
   return (
     <div className="flex-1 p-4 md:p-8 overflow-y-auto flex flex-col h-full pb-30">

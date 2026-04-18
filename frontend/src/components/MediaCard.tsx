@@ -20,13 +20,9 @@ interface AugmentedItem extends JellyfinItem {
 }
 
 const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'default' }) => {
-  // Backend guarantees `posterUrl` and `title` when using Strict Verification
   const imgSrc = item.posterUrl || '';
   const titleText = item.title || 'Unknown Title';
   const rawItem = item as AugmentedItem;
-
-  // Debug logging to help diagnose rendering issues
-  console.log('[MediaCard] Rendering:', { title: titleText, posterUrl: item.posterUrl, imgSrc });
 
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
@@ -39,7 +35,18 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
   };
 
   // Normalize media type once for all handlers ('movie' | 'tv')
-  const currentMediaType = ((item.mediaType || rawItem.media_type || 'movie') as string).toLowerCase().includes('tv') ? 'tv' : 'movie';
+  const currentMediaType: 'movie' | 'tv' = (item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase().includes('tv') ? 'tv' : 'movie';
+
+  const buildItemPayload = () => ({
+    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
+    title: item.title ?? rawItem.name ?? 'Unknown Title',
+    mediaType: currentMediaType,
+    posterUrl: item.posterUrl ?? null,
+    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
+    overview: item.overview ?? '',
+    voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
+    backdropUrl: item.backdropUrl ?? '',
+  });
   const tmdbLink = `https://www.themoviedb.org/${currentMediaType}/${item.tmdbId}`;
 
   return (
@@ -138,21 +145,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 <button aria-label="Add to Watchlist" title="Add to Watchlist" onClick={async (e) => {
                   e.stopPropagation();
                   const id = Number(item.tmdbId);
-                  // Build strict payload item to avoid missing fields
-                  const payloadItem = {
-                    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
-                    title: item.title ?? rawItem.name ?? 'Unknown Title',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
-                    posterUrl: item.posterUrl ?? null,
-                    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
-                    // Rich metadata
-                    overview: item.overview ?? '',
-                    voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                    backdropUrl: item.backdropUrl ?? '',
-                  };
                   try {
-                    const actionPromise = variant === 'blocked' ? unblockItem(id, 'watchlist') : postActionWatchlist(payloadItem);
+                    const actionPromise = variant === 'blocked' ? unblockItem(id, 'watchlist') : postActionWatchlist(buildItemPayload());
                     await actionPromise;
                     if (typeof onRemove === 'function') onRemove(id);
                     try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
@@ -166,21 +160,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 <button aria-label="Remove from Watchlist" title="Remove from Watchlist" onClick={(e) => {
                   e.stopPropagation();
                   const id = Number(item.tmdbId);
-                  // Optimistically remove from UI
                   if (typeof onRemove === 'function') onRemove(id as number);
-                  const payloadItemRem = {
-                    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
-                    title: item.title ?? rawItem.name ?? 'Unknown Title',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
-                    posterUrl: item.posterUrl ?? null,
-                    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
-                    // Rich metadata
-                    overview: item.overview ?? '',
-                    voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                    backdropUrl: item.backdropUrl ?? '',
-                  };
-                  postRemoveFromWatchlist(payloadItemRem)
+                  postRemoveFromWatchlist(buildItemPayload())
                     .then(() => {
                       try { window.dispatchEvent(new CustomEvent('watchlist:changed', { detail: { tmdbId: id } })); } catch { /* ignore */ }
                     })
@@ -196,23 +177,11 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
               <button aria-label="Mark Watched" title="Mark Watched" onClick={async (e) => {
                 e.stopPropagation();
                 const id = Number(item.tmdbId);
-                const payloadItemWatched = {
-                  tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
-                  title: item.title ?? rawItem.name ?? 'Unknown Title',
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
-                  posterUrl: item.posterUrl ?? null,
-                  releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
-                  // Rich metadata
-                  overview: item.overview ?? '',
-                  voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                  backdropUrl: item.backdropUrl ?? '',
-                };
                 try {
                   if (variant === 'blocked') {
                     await unblockItem(id, 'watched');
                   } else {
-                    await postActionWatched(payloadItemWatched);
+                    await postActionWatched(buildItemPayload());
                   }
                   if (typeof onRemove === 'function') onRemove(id);
                 } catch {
@@ -237,20 +206,8 @@ const MediaCard: React.FC<Props> = ({ item, onClick, onRemove, variant = 'defaul
                 <button aria-label="Block (Do not recommend)" title="Block (Do not recommend)" onClick={async (e) => {
                   e.stopPropagation();
                   const id = Number(item.tmdbId);
-                  const payloadItemBlock = {
-                    tmdbId: item.tmdbId ?? rawItem.tmdb_id ?? null,
-                    title: item.title ?? rawItem.name ?? 'Unknown Title',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    mediaType: ((item.mediaType || rawItem.media_type || 'movie').toString().toLowerCase() as any),
-                    posterUrl: item.posterUrl ?? null,
-                    releaseYear: item.releaseYear ?? (rawItem.releaseDate ? String(rawItem.releaseDate).substring(0, 4) : null),
-                    // Rich metadata
-                    overview: item.overview ?? '',
-                    voteAverage: item.voteAverage ? Number(item.voteAverage) : 0,
-                    backdropUrl: item.backdropUrl ?? '',
-                  };
                   try {
-                    await postActionBlock(payloadItemBlock);
+                    await postActionBlock(buildItemPayload());
                     if (typeof onRemove === 'function') onRemove(id);
                   } catch {
                     showError('Failed to block item');
