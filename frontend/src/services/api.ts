@@ -10,7 +10,9 @@ const apiClient = axios.create({
 });
 
 // Response interceptor: session expiry is handled server-side.
-// A 401 here means the session is genuinely expired or invalid — redirect to login.
+// A 401 means the session is genuinely expired or invalid — clear storage and signal
+// AuthContext to reset state. Using a custom event avoids a hard reload, which would
+// cause a reload-loop when protected endpoints (e.g. /system/setup-defaults) return 401.
 apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -19,8 +21,8 @@ apiClient.interceptors.response.use(
             localStorage.removeItem('jellyfin_user');
             localStorage.removeItem('jellyfin_server');
             localStorage.removeItem('jellyfin_isAdmin');
-            sessionStorage.removeItem('jellyfin_password'); // legacy cleanup
-            window.location.reload();
+            sessionStorage.removeItem('jellyfin_password');
+            window.dispatchEvent(new CustomEvent('auth:logout'));
         }
         return Promise.reject(error);
     }

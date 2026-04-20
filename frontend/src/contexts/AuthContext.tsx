@@ -62,6 +62,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
   }, [isAuthenticated]);
 
+  // Listen for 401 events dispatched by the apiClient interceptor.
+  // Clears auth state without a hard reload, avoiding reload-loops on protected endpoints.
+  useEffect(() => {
+    const handleForceLogout = () => {
+      setUser(null);
+      setToken(null);
+      setIsAuthenticated(false);
+      setServerUrl(null);
+    };
+    window.addEventListener('auth:logout', handleForceLogout);
+    return () => window.removeEventListener('auth:logout', handleForceLogout);
+  }, []);
+
   const logout = async () => {
     try {
       const storedToken = localStorage.getItem('jellyfin_token');
