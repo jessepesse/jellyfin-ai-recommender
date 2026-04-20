@@ -6,6 +6,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.10] - 2026-04-20
+
+### 🐛 Bug Fixes
+
+- **`SettingsView`**: Replace `EventSource` `useState` with `useRef` — fixes memory leak on unmount and stale closure bug where errors during synchronous import would leave the SSE connection open.
+
+### 🚀 Improvements
+
+- **`TrendingPage`**: Memoize `loadTrending` and `handleRemove` callbacks with `useCallback`; move `mapToJellyfinItem` outside component to avoid re-creation on every render.
+- **`Dashboard`**: `YEAR_MAX` now computed dynamically (`new Date().getFullYear()`) instead of hardcoded; fixed `useEffect` dependency array.
+
+### 🔧 Maintenance
+
+- **`MediaCard`**: Removed debug `console.log` fired on every render; replaced `as any` type cast with proper `'movie' | 'tv'` union; deduplicated payload construction into single `buildItemPayload()` helper.
+- **`SettingsContext`**: Removed unused context file and its `SettingsProvider` wrapper from `main.tsx` (dead code).
+
 ## [2.8.9] - 2026-04-17
 
 ### 🔒 Security
