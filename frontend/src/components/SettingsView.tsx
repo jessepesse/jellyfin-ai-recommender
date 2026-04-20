@@ -39,7 +39,7 @@ const SettingsView: React.FC = () => {
   const [exportError, setExportError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-  const [eventSource, setEventSource] = useState<EventSource | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const [userStats, setUserStats] = useState<UserStatisticsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
@@ -153,7 +153,7 @@ const SettingsView: React.FC = () => {
             errors: progress.errors,
           });
           es.close();
-          setEventSource(null);
+          eventSourceRef.current = null;
         }
       } catch (e) {
         console.error('Failed to parse progress:', e);
@@ -163,20 +163,18 @@ const SettingsView: React.FC = () => {
     es.onerror = () => {
       console.error('SSE connection error');
       es.close();
-      setEventSource(null);
+      eventSourceRef.current = null;
     };
 
-    setEventSource(es);
+    eventSourceRef.current = es;
   };
 
   // Cleanup SSE on unmount
   useEffect(() => {
     return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
+      eventSourceRef.current?.close();
     };
-  }, [eventSource]);
+  }, []);
 
   const onImport = async () => {
     if (!fileContent) {
@@ -211,19 +209,15 @@ const SettingsView: React.FC = () => {
         // Small import completed synchronously
         setResult(res.summary ?? res);
         setLoading(false);
-        if (eventSource) {
-          eventSource.close();
-          setEventSource(null);
-        }
+        eventSourceRef.current?.close();
+        eventSourceRef.current = null;
       }
     } catch (e: unknown) {
       const err = e as { message?: string };
       setError(String(err?.message || e));
       setLoading(false);
-      if (eventSource) {
-        eventSource.close();
-        setEventSource(null);
-      }
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
     }
   };
 
