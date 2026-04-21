@@ -35,7 +35,7 @@ class EnrichmentQueue {
 }
 
 const enrichmentQueue = new EnrichmentQueue(3);
-const imageBackfillQueue = new EnrichmentQueue(2);
+const imageBackfillQueue = new EnrichmentQueue(5);
 
 function parseTmdbId(item: MediaItemInput | null | undefined): number | null {
   const raw = item?.tmdbId ?? item?.tmdb_id ?? item?.media_id ?? item?.id ?? null;

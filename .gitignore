@@ -308,3 +308,6 @@ frontend/build/
 # package-lock.json
 # pnpm-lock.yaml
 # yarn.lock
+
+# Trakt export tool (local use only, contains credentials)
+trakt-export/
