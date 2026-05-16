@@ -25,7 +25,7 @@
     "@jellyfin-ai/types": "file:../shared",
     "@prisma/adapter-better-sqlite3": "7.7.0",
     "@prisma/client": "7.7.0",
-    "axios": "^1.13.2",
+    "axios": "^1.16.1",
     "better-sqlite3": "^12.6.2",
     "body-parser": "^2.2.2",
     "cors": "^2.8.6",
@@ -69,7 +69,7 @@
     "lodash.isequal": "npm:lodash@^4.18.1",
     "lodash": "^4.18.1",
     "minimatch": "^10.2.4",
-    "hono": "^4.12.14",
+    "hono": "^4.12.19",
     "@hono/node-server": "^1.19.13",
     "rollup": "^4.59.0",
     "effect": "^3.20.0",
@@ -77,10 +77,14 @@
     "brace-expansion": "^5.0.5",
     "defu": "^6.1.6",
     "path-to-regexp": "^8.4.0",
-    "protobufjs": "^7.5.5",
+    "protobufjs": "^7.5.6",
     "follow-redirects": "^1.16.0",
     "anymatch": {
       "picomatch": "^2.3.2"
-    }
+    },
+    "@protobufjs/utf8": "^1.1.1",
+    "fast-uri": "^3.1.2",
+    "postcss": "^8.5.14",
+    "ip-address": "^10.2.0"
   }
 }

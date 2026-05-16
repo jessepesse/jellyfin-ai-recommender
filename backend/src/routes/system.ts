@@ -132,7 +132,8 @@ proxyRouter.get('/image', async (req, res) => {
             timeout: 10000,
         });
 
-        const contentType = response.headers['content-type'] || 'image/jpeg';
+        const contentTypeHeader = response.headers['content-type'];
+        const contentType = typeof contentTypeHeader === 'string' ? contentTypeHeader : 'image/jpeg';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400');
         res.send(response.data);
