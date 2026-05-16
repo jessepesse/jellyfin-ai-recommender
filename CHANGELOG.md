@@ -6,6 +6,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.11] - 2026-05-16
+
+### 🐛 Bug Fixes
+
+- **Frontend auth handling**: Replace hard page reload on API `401` responses with an `auth:logout` event so React auth state is cleared cleanly.
+- **Frontend dependency alignment**: Fix `react-dom` version mismatch.
+
+### 🔒 Security
+
+- **Update `axios` to 1.16.1** (backend + frontend) — resolves multiple Dependabot alerts affecting earlier 1.x releases.
+- **Pin transitive vulnerable packages via npm overrides**:
+  - `postcss` to `^8.5.14` (backend + frontend)
+  - `hono` to `^4.12.19` (backend)
+  - `protobufjs` to `^7.5.6` and `@protobufjs/utf8` to `^1.1.1` (backend)
+  - `fast-uri` to `^3.1.2` (root + backend)
+  - `ip-address` to `^10.2.0` (backend)
+
+### 🔧 Maintenance
+
+- Remove stale ESLint disable directive from `Login.test.tsx`.
+- Add local worktree ignore entries and tune metadata backfill queue concurrency.
+- Update image proxy response header handling for the newer Axios header typings.
+
 ## [2.8.10] - 2026-04-20
 
 ### 🐛 Bug Fixes
