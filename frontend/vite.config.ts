@@ -14,17 +14,31 @@ export default defineConfig({
     tailwindcss(),
   ],
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          // React core — changes rarely, long cache TTL
-          'vendor-react': ['react', 'react-dom', 'react-is'],
-          // Recharts + its D3 internals — largest dependency
-          'vendor-charts': ['recharts'],
-          // Icon library
-          'vendor-icons': ['lucide-react'],
-          // Utility libs
-          'vendor-utils': ['axios', 'date-fns'],
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor-react',
+              test: /node_modules[\\/](react|react-dom|react-is)[\\/]/,
+              priority: 40,
+            },
+            {
+              name: 'vendor-charts',
+              test: /node_modules[\\/](recharts|d3-|victory-vendor|internmap)[\\/]/,
+              priority: 30,
+            },
+            {
+              name: 'vendor-icons',
+              test: /node_modules[\\/]lucide-react[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'vendor-utils',
+              test: /node_modules[\\/](axios|date-fns)[\\/]/,
+              priority: 10,
+            },
+          ],
         },
       },
     },

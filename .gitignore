@@ -311,3 +311,6 @@ frontend/build/
 
 # Trakt export tool (local use only, contains credentials)
 trakt-export/
+
+# Local Claude/Codex worktrees
+.claude/worktrees/
