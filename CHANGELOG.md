@@ -6,6 +6,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.12] - 2026-05-16
+
+### 🔧 Maintenance
+
+- **Frontend build tooling**: Migrate frontend from Vite 7 to Vite 8.
+- **React plugin compatibility**: Update `@vitejs/plugin-react` to `^5.2.0`, which supports Vite 8 without the larger plugin v6 migration.
+- **Rolldown chunking**: Replace removed `rollupOptions.output.manualChunks` object config with Vite 8 `rolldownOptions.output.codeSplitting.groups`.
+- **Local development hygiene**: Ignore local Claude/Codex worktrees via `.gitignore`.
+
+### ✅ Validation
+
+- Frontend lint, unit tests, audit, and production build pass locally.
+- Frontend production Docker image builds and serves Vite 8 assets.
+- Docker development compose stack starts successfully; backend health, Vite dev server, and Vite `/api` proxy respond correctly.
+- Playwright smoke test confirms the Docker-served frontend renders the login screen without page errors.
+
 ## [2.8.11] - 2026-05-16
 
 ### 🐛 Bug Fixes
