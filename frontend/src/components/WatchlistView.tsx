@@ -77,16 +77,16 @@ const WatchlistView: React.FC = () => {
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h2 className="text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400">
+        <h2 className="text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 sm:text-3xl md:text-4xl">
           My Watchlist
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center gap-3 sm:w-auto">
           <label htmlFor="watchlist-sort" className="hidden sm:block text-sm text-slate-400 mr-2">Sort</label>
           <select
             id="watchlist-sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortType)}
-            className="bg-slate-800/80 backdrop-blur-sm border border-white/10 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+            className="w-full bg-slate-800/80 backdrop-blur-sm border border-white/10 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition sm:w-auto"
             aria-label="Sort watchlist"
           >
             <option value="added-newest">Recently Added</option>

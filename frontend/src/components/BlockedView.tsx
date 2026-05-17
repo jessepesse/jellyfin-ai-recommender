@@ -123,14 +123,14 @@ const BlockedView: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 p-6">
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 p-4 md:p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="mb-8">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h1 className="text-4xl font-bold text-white flex items-center gap-3">
-                                <Ban className="w-8 h-8 text-red-400" />
+                            <h1 className="text-2xl font-bold text-white flex items-center gap-3 sm:text-3xl md:text-4xl">
+                                <Ban className="w-6 h-6 text-red-400 md:w-8 md:h-8" />
                                 Blocked Content
                             </h1>
                             <p className="text-slate-400 mt-2">

@@ -280,7 +280,7 @@ const SettingsView: React.FC = () => {
 
   return (
     <div>
-      <h2 className="text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-8">
+      <h2 className="text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-6 sm:text-3xl md:text-4xl md:mb-8">
         Settings
       </h2>
 
@@ -321,11 +321,11 @@ const SettingsView: React.FC = () => {
             />
           </div>
         ) : (
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 flex items-center justify-between border border-slate-700/50">
-            <div className="flex items-center gap-4">
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 sm:p-6 flex items-center justify-between gap-3 border border-slate-700/50">
+            <div className="min-w-0 flex items-center gap-3 sm:gap-4">
               <FileJson className="w-10 h-10 text-cyan-400" />
-              <div>
-                <p className="text-slate-200 font-medium">{selectedFile.name}</p>
+              <div className="min-w-0">
+                <p className="truncate text-slate-200 font-medium">{selectedFile.name}</p>
                 <p className="text-sm text-slate-500">{formatFileSize(selectedFile.size)}</p>
               </div>
             </div>
@@ -339,8 +339,9 @@ const SettingsView: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center gap-3 mt-6">
+        <div className="flex flex-col gap-3 mt-6 sm:flex-row sm:items-center">
           <HeroButton
+            className="w-full sm:w-auto"
             onClick={onImport}
             disabled={loading || !selectedFile || !fileContent || importProgress?.active}
           >
@@ -354,6 +355,7 @@ const SettingsView: React.FC = () => {
           {selectedFile && !loading && (
             <HeroButton
               variant="secondary"
+              className="w-full sm:w-auto"
               onClick={handleClearFile}
             >
               Clear
@@ -389,7 +391,7 @@ const SettingsView: React.FC = () => {
                   <span className="text-slate-300 truncate">{importProgress.currentItem}</span>
                 </div>
               )}
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
                 <span className="text-green-400">✓ {importProgress.imported} imported</span>
                 <span className="text-yellow-400">⊘ {importProgress.skipped} skipped</span>
                 {importProgress.errors > 0 && (
@@ -412,7 +414,7 @@ const SettingsView: React.FC = () => {
               ✓ Import Complete
             </div>
             <div className="text-sm text-slate-400 space-y-1">
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
                 <span>Total: {result.total}</span>
                 <span className="text-green-400">Imported: {result.imported}</span>
                 <span className="text-yellow-400">Skipped: {result.skipped}</span>
@@ -437,6 +439,7 @@ const SettingsView: React.FC = () => {
         </p>
 
         <HeroButton
+          className="w-full sm:w-auto"
           onClick={handleExport}
           disabled={exportLoading}
         >
@@ -503,7 +506,7 @@ const SettingsView: React.FC = () => {
               <div className="text-green-400 text-sm">{passwordSuccess}</div>
             )}
 
-            <HeroButton type="submit" disabled={passwordLoading || !newPassword}>
+            <HeroButton className="w-full sm:w-auto" type="submit" disabled={passwordLoading || !newPassword}>
               {passwordLoading ? 'Updating...' : 'Update Password'}
             </HeroButton>
           </form>

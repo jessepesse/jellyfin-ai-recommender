@@ -110,9 +110,9 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
   return (
     <div className="flex-1 p-4 md:p-8 overflow-y-auto flex flex-col h-full pb-30">
       <div className="flex-grow">
-        <header className="mb-8 flex items-center justify-between">
+        <header className="mb-6 flex items-center justify-between md:mb-8">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400">
+            <h1 className="text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 sm:text-3xl md:text-4xl">
               Jellyfin AI Recommender
             </h1>
             <p className="text-sm text-slate-500 mt-1">Personalized recommendations for your library</p>
@@ -196,7 +196,7 @@ const Dashboard: React.FC<Props> = ({ currentView = 'recommendations' }) => {
                 </div>
 
                 <div className="flex justify-center pt-2 pb-10">
-                  <HeroButton onClick={() => handleGetRecommendations(true)} disabled={isLoading}>
+                  <HeroButton className="w-full sm:w-auto" onClick={() => handleGetRecommendations(true)} disabled={isLoading}>
                     {isLoading ? 'Getting Recommendations...' : '✨ Get Recommendations'}
                   </HeroButton>
                 </div>

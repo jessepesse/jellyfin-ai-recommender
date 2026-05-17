@@ -17,7 +17,7 @@ const HeroButton: React.FC<Props> = ({
   className = '',
   type = 'button'
 }) => {
-  const baseStyles = 'px-8 py-3 rounded-full font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed';
+  const baseStyles = 'inline-flex items-center justify-center px-6 py-3 sm:px-8 rounded-full font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed';
   
   const variantStyles = variant === 'primary'
     ? 'relative z-10 bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 text-white shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 hover:scale-105 active:scale-95'

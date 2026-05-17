@@ -48,14 +48,14 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
 
   return (
     <>
-      <aside className="w-80 bg-[#080810] h-[100dvh] flex flex-col border-r border-white/5" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <aside className="w-[min(20rem,calc(100vw-2rem))] bg-[#080810] h-[100dvh] flex flex-col border-r border-white/5" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto p-6">
           <nav>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
                 <img src="/assets/logo.png" alt="Jellyfin AI" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(34,211,238,0.3)]" />
-                <div className="text-lg font-semibold text-white">Jellyfin AI</div>
+                <div className="truncate text-lg font-semibold text-white">Jellyfin AI</div>
               </div>
               {/* Mobile/Tablet close button (hidden on large desktops) */}
               <button className="lg:hidden p-1 text-slate-300 hover:text-white" onClick={() => onClose && onClose()} aria-label="Close menu">
@@ -67,7 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ active, onNavigate, onClose }) => {
                 <li key={item.id}>
                   <button
                     onClick={() => onNavigate(item.id)}
-                    className={`w-full text-left px-6 py-2.5 rounded-xl flex items-center justify-start transition-all duration-300 ${active === item.id ? 'relative z-20 bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-lg shadow-cyan-500/30 scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
+                    className={`w-full text-left px-4 sm:px-6 py-2.5 rounded-xl flex items-center justify-start transition-all duration-300 ${active === item.id ? 'relative z-20 bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-lg shadow-cyan-500/30 sm:scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
                   >
                     {item.label}
                   </button>

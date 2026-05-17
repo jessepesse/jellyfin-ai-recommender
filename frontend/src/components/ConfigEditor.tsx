@@ -12,7 +12,7 @@ const ConfigEditor: React.FC = () => {
     geminiApiKey: '',
     aiProvider: 'google' as 'google' | 'openrouter',
     openrouterApiKey: '',
-    aiModel: 'gemini-3.1-flash-lite-preview',
+    aiModel: 'gemini-3.1-flash-lite',
   });
 
   const [loading, setLoading] = useState(true);
@@ -23,6 +23,8 @@ const ConfigEditor: React.FC = () => {
     valid: boolean;
     message?: string;
   }
+
+  type VerifyResponse = Record<string, { ok?: boolean; valid?: boolean; message?: string }>;
 
   const [verifyResults, setVerifyResults] = useState<Record<string, VerifyResult> | null>(null);
 
@@ -43,7 +45,7 @@ const ConfigEditor: React.FC = () => {
           geminiApiKey: response.config.geminiApiKey || '',
           aiProvider: (response.config.aiProvider as 'google' | 'openrouter') || 'google',
           openrouterApiKey: response.config.openrouterApiKey || '',
-          aiModel: response.config.aiModel || 'gemini-3.1-flash-lite-preview',
+          aiModel: response.config.aiModel || 'gemini-3.1-flash-lite',
         });
       }
     } catch (error) {
@@ -69,9 +71,22 @@ const ConfigEditor: React.FC = () => {
         openrouterApiKey: config.openrouterApiKey.startsWith('*') ? undefined : config.openrouterApiKey || undefined,
       });
 
-      setVerifyResults(response.results || {});
+      const rawResults = (response.results || response) as VerifyResponse;
+      const normalizedResults = Object.fromEntries(
+        Object.entries(rawResults)
+          .filter(([, result]) => result && typeof result === 'object' && ('ok' in result || 'valid' in result))
+          .map(([service, result]) => [
+            service,
+            {
+              valid: Boolean(result.valid ?? result.ok),
+              message: result.message,
+            },
+          ])
+      ) as Record<string, VerifyResult>;
 
-      const allValid = Object.values(response.results || {}).every((r: unknown) => (r as VerifyResult).valid);
+      setVerifyResults(normalizedResults);
+
+      const allValid = Object.values(normalizedResults).every((r) => r.valid);
       setMessage({
         type: allValid ? 'success' : 'error',
         text: allValid ? 'All connections verified successfully!' : 'Some connections failed. Check details below.',
@@ -234,7 +249,7 @@ const ConfigEditor: React.FC = () => {
           <label className="block text-sm font-medium text-slate-300 mb-3">
             AI Provider
           </label>
-          <div className="flex gap-4 mb-2">
+          <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="radio"
@@ -307,15 +322,21 @@ const ConfigEditor: React.FC = () => {
           <label className="block text-sm font-medium text-slate-300 mb-2">
             AI Model
           </label>
-          <select
+          <input
+            type="text"
             value={config.aiModel}
             onChange={(e) => setConfig({ ...config, aiModel: e.target.value })}
-            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-          >
-            <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite (Default)</option>
-            <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-          </select>
+            list="settings-ai-models"
+            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+            placeholder={config.aiProvider === 'openrouter' ? 'google/gemini-3.1-flash-lite:free' : 'gemini-3.1-flash-lite'}
+          />
+          <datalist id="settings-ai-models">
+            <option value="gemini-3.1-flash-lite" />
+            <option value="google/gemini-3.1-flash-lite:free" />
+          </datalist>
+          <p className="text-xs text-slate-500 mt-1">
+            Use the stable model code. OpenRouter models can include provider prefixes and suffixes.
+          </p>
         </div>
       </div>
 
@@ -343,7 +364,7 @@ const ConfigEditor: React.FC = () => {
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-3 mt-6">
+      <div className="flex flex-col gap-3 mt-6 sm:flex-row">
         <button
           onClick={handleTestConnections}
           disabled={testing || saving}

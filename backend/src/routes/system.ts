@@ -189,7 +189,7 @@ router.get('/setup-defaults', authMiddleware, requireAdmin, async (req, res) => 
             geminiApiKey: maskApiKey(process.env.GEMINI_API_KEY || dbCfg?.geminiApiKey),
             aiProvider: process.env.AI_PROVIDER || dbCfg?.aiProvider || 'google',
             openrouterApiKey: maskApiKey(process.env.OPENROUTER_API_KEY || dbCfg?.openrouterApiKey),
-            aiModel: process.env.AI_MODEL || dbCfg?.aiModel || 'gemini-3.1-flash-lite-preview',
+            aiModel: process.env.AI_MODEL || dbCfg?.aiModel || 'gemini-3.1-flash-lite',
         };
         res.json(defaults);
     } catch (e) {
@@ -408,7 +408,7 @@ router.get('/config-editor', authMiddleware, requireAdmin, async (req, res) => {
             geminiApiKey: maskApiKey(cfg.geminiApiKey),
             aiProvider: cfg.aiProvider || 'google',
             openrouterApiKey: maskApiKey(cfg.openrouterApiKey),
-            aiModel: cfg.aiModel || 'gemini-3.1-flash-lite-preview',
+            aiModel: cfg.aiModel || 'gemini-3.1-flash-lite',
             isConfigured: cfg.isConfigured || false,
         };
 
@@ -438,7 +438,7 @@ router.put('/config-editor', authMiddleware, requireAdmin, validateConfigUpdate,
             jellyfinUrl: payload.jellyfinUrl || null,
             jellyseerrUrl: payload.jellyseerrUrl || null,
             aiProvider: payload.aiProvider || 'google',
-            aiModel: payload.aiModel || 'gemini-3.1-flash-lite-preview',
+            aiModel: payload.aiModel || 'gemini-3.1-flash-lite',
         };
 
         console.log('[ConfigEditor] Saving config. Payload keys:', Object.keys(payload));

@@ -106,7 +106,7 @@ model SystemConfig {
   geminiApiKey     String?
   aiProvider       String  @default("google")  // "google" | "openrouter"
   openrouterApiKey String?
-  aiModel          String  @default("gemini-3-flash-preview")
+  aiModel          String  @default("gemini-3.1-flash-lite")
   isConfigured     Boolean @default(false)
 }
 

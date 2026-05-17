@@ -26,6 +26,18 @@ interface RedemptionAnalysis {
     reasoning: string;
 }
 
+const redemptionAnalysisSchema = {
+    type: 'object',
+    properties: {
+        shouldRecommend: { type: 'boolean' },
+        confidence: { type: 'number', minimum: 0, maximum: 100 },
+        appealText: { type: 'string' },
+        reasoning: { type: 'string' },
+    },
+    required: ['shouldRecommend', 'confidence', 'appealText', 'reasoning'],
+    additionalProperties: false,
+};
+
 export class AdvocateService {
     /**
      * Get current week's redemption candidates from database
@@ -196,10 +208,11 @@ export class AdvocateService {
         const genres = media.genres ? JSON.parse(media.genres) : [];
         const keywords = media.keywords ? JSON.parse(media.keywords) : [];
 
-        const prompt = `
-You are "The Advocate" - a defense attorney for blocked movies/shows.
+        const prompt = `<role>
+You are The Advocate, a careful media recommender evaluating whether a previously blocked movie or show deserves reconsideration.
+</role>
 
-BLOCKED ITEM:
+<blocked_item>
 - Title: "${media.title}"
 - Year: ${media.releaseYear || 'Unknown'}
 - Type: ${media.mediaType}
@@ -207,31 +220,37 @@ BLOCKED ITEM:
 - Keywords: ${keywords.join(', ')}
 - Rating: ${media.voteAverage || 'N/A'}/10
 - Overview: ${media.overview || 'No overview available'}
+</blocked_item>
 
-USER'S CURRENT TASTE PROFILE:
+<user_context>
 Recently watched and loved:
 ${tasteProfile.recentlyLoved.map(m => `- ${m.title} (${m.genres.join(', ')})`).join('\n')}
 
 Current favorite genres: ${tasteProfile.favoriteGenres.join(', ')}
 Current favorite keywords: ${tasteProfile.favoriteKeywords.join(', ')}
+</user_context>
 
-YOUR TASK:
+<task>
 Analyze if this blocked item should be recommended again based on the user's CURRENT taste.
+</task>
 
-Consider:
-1. Does it match their current favorite genres/keywords?
-2. Is it similar to what they recently loved?
-3. Has their taste evolved to appreciate this type of content?
-4. Is it highly rated (>8.0) suggesting they might have misjudged it?
+<decision_criteria>
+- Does it match their current favorite genres or keywords?
+- Is it similar to what they recently loved?
+- Has their taste evolved toward this type of content?
+- Is it highly rated enough to justify a second look?
+</decision_criteria>
 
-Return ONLY valid JSON (no markdown, no code blocks):
+<output_format>
+Return only valid JSON matching this shape:
 {
-  "shouldRecommend": boolean,
-  "confidence": number (0-100),
+  "shouldRecommend": true,
+  "confidence": 75,
   "appealText": "2-3 sentence appeal explaining why they should reconsider",
   "reasoning": "brief explanation of your decision"
 }
-`;
+Do not include markdown or commentary.
+</output_format>`;
 
         // Use Gemini API directly for text generation
         // Use unified AI service
@@ -239,7 +258,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
             const client = await buildClientAndModel();
             console.log(`[Advocate] Analyzing with ${client.provider} (${client.modelName})`);
 
-            const responseText = await generateAIContent(client, prompt, { json: true });
+            const responseText = await generateAIContent(client, prompt, { json: true, jsonSchema: redemptionAnalysisSchema });
 
             // Clean response - remove markdown code blocks if present
             let cleanedResponse = responseText.trim();

@@ -67,7 +67,7 @@ const defaultFormData: SetupFormData = {
   geminiApiKey: '',
   aiProvider: 'google',
   openrouterApiKey: '',
-  aiModel: 'gemini-3.1-flash-lite-preview',
+  aiModel: 'gemini-3.1-flash-lite',
 };
 
 export function useSetupWizard(): UseSetupWizardReturn {
@@ -244,7 +244,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
       }
 
       setRestoreSuccess(true);
-      setError('✅ Backup file loaded! Configuration fields have been pre-filled. You can now test connections and save.');
     } catch (err: unknown) {
       const error = err as { message?: string };
       setError(error?.message || 'Failed to read backup file');

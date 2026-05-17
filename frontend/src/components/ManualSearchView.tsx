@@ -32,7 +32,7 @@ const ManualSearchView: React.FC = () => {
 
   return (
     <div>
-      <h2 className="text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-8">
+      <h2 className="text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-6 sm:text-3xl md:text-4xl md:mb-8">
         Mark as Watched
       </h2>
 

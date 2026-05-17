@@ -103,7 +103,7 @@ const SetupWizard: React.FC = () => {
             {/* AI Provider Section */}
             <div className="mt-4 pt-4 border-t border-slate-700">
               <label className="text-sm font-medium mb-2 block">AI Provider</label>
-              <div className="flex gap-4 mb-4">
+              <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
@@ -165,11 +165,20 @@ const SetupWizard: React.FC = () => {
 
             {/* AI Model Selection */}
             <label className="text-sm">AI Model</label>
-            <select className="p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition" value={formData.aiModel} onChange={e => updateField('aiModel', e.target.value)}>
-              <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite (Default)</option>
-              <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-            </select>
+            <input
+              className="p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition font-mono"
+              value={formData.aiModel}
+              onChange={e => updateField('aiModel', e.target.value)}
+              list="setup-ai-models"
+              placeholder={formData.aiProvider === 'openrouter' ? 'google/gemini-3.1-flash-lite:free' : 'gemini-3.1-flash-lite'}
+            />
+            <datalist id="setup-ai-models">
+              <option value="gemini-3.1-flash-lite" />
+              <option value="google/gemini-3.1-flash-lite:free" />
+            </datalist>
+            <p className="text-xs text-slate-400 -mt-2">
+              Use the stable model code. OpenRouter models can include provider prefixes and suffixes.
+            </p>
           </div>
 
           <div className="mt-6 flex justify-end gap-3">

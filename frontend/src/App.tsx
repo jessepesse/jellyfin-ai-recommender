@@ -69,8 +69,8 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-[#0b0b15] text-white overflow-hidden">
       {/* Top bar with menu button - visible at all sizes */}
       <div className="w-full fixed top-0 left-0 right-0 z-50 bg-[#0b0b15] border-b border-white/5 lg:hidden">
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="text-lg font-semibold">Jellyfin AI Recommender</div>
+        <div className="flex items-center justify-between gap-3 px-4 py-2">
+          <div className="min-w-0 truncate text-base font-semibold sm:text-lg">Jellyfin AI Recommender</div>
           <button
             className="p-2 rounded-md text-slate-400 hover:text-white bg-slate-800/30 hover:bg-slate-800/50 transition cursor-pointer"
             onClick={() => { console.log('Sidebar toggle clicked'); setIsSidebarOpen(true); }}
@@ -92,7 +92,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[60] bg-black/50 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
       <div className={`fixed inset-y-0 left-0 z-[70] transform lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-all duration-300 ease-in-out`}>
-        <div className="w-80">
+        <div className="w-[min(20rem,calc(100vw-2rem))]">
           <Sidebar
             active={currentView}
             onNavigate={(id: AppView) => { setCurrentView(id); setIsSidebarOpen(false); }}

@@ -5,7 +5,7 @@ import { MediaItemInput } from '../types';
 
 // Gemini 2.5+ and 3.0+ models automatically use internal thinking for improved reasoning
 // Thinking dynamically adjusts based on prompt complexity
-const DEFAULT_MODEL = 'gemini-3.1-flash-lite-preview';
+const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 
 // Unified AI Client Bundle that works with both Google AI and OpenRouter
 export interface AIClientBundle {
@@ -18,6 +18,66 @@ export interface AIClientBundle {
   // OpenRouter via OpenAI SDK
   openrouterClient?: OpenAI;
 }
+
+const rankedRecommendationSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      tmdbId: { type: 'number' },
+      title: { type: 'string' },
+      reason: { type: 'string' },
+    },
+    required: ['tmdbId', 'title', 'reason'],
+    additionalProperties: false,
+  },
+};
+
+const tasteAnalysisSchema = {
+  type: 'object',
+  properties: {
+    tasteProfile: { type: 'string' },
+    genres: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 2,
+      maxItems: 4,
+    },
+    keywords: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 4,
+      maxItems: 8,
+    },
+    yearRange: {
+      anyOf: [
+        {
+          type: 'array',
+          items: { type: 'number' },
+          minItems: 2,
+          maxItems: 2,
+        },
+        { type: 'null' },
+      ],
+    },
+    minRating: { type: 'number', minimum: 6, maximum: 8 },
+  },
+  required: ['tasteProfile', 'genres', 'keywords', 'yearRange', 'minRating'],
+  additionalProperties: false,
+};
+
+const selectedTitleSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      tmdbId: { type: 'number' },
+      title: { type: 'string' },
+    },
+    required: ['tmdbId', 'title'],
+    additionalProperties: false,
+  },
+};
 
 // Build AI client based on configured provider
 export async function buildClientAndModel(): Promise<AIClientBundle> {
@@ -97,10 +157,21 @@ export async function generateAIContent(
   options?: { json?: boolean; jsonSchema?: object }
 ): Promise<string> {
   if (client.provider === 'openrouter' && client.openrouterClient) {
+    const responseFormat = options?.jsonSchema
+      ? {
+        type: 'json_schema' as const,
+        json_schema: {
+          name: 'response',
+          schema: options.jsonSchema as { [key: string]: unknown },
+          strict: false,
+        },
+      }
+      : (options?.json ? { type: 'json_object' as const } : undefined);
+
     const response = await client.openrouterClient.chat.completions.create({
       model: client.modelName,
       messages: [{ role: 'user', content: prompt }],
-      response_format: options?.json ? { type: 'json_object' } : undefined,
+      response_format: responseFormat,
       max_tokens: 8000,
     });
     return response.choices[0]?.message?.content || '';
@@ -109,7 +180,7 @@ export async function generateAIContent(
       ...client.modelConfig,
       ...(options?.json ? {
         responseMimeType: 'application/json',
-        responseSchema: options.jsonSchema as any
+        responseJsonSchema: options.jsonSchema
       } : {})
     };
 
@@ -154,12 +225,22 @@ export class GeminiService {
         return line;
       }).filter(Boolean);
 
-      const prompt = `WATCH HISTORY (${type === 'movie' ? 'movies' : 'TV shows'}):
+      const prompt = `<context>
+Watch history type: ${type === 'movie' ? 'movies' : 'TV shows'}
+Watched items:
 ${items.join('\n')}
+</context>
 
-Analyze this ${type} watch history. Generate 3 short, insightful but casual bullet points describing their specific taste (themes, moods, genres). Use the genre and rating data above for accuracy.
+<task>
+Analyze the watch history and describe the user's specific taste in themes, moods, and genres.
+</task>
 
-Return ONLY plain text bullet points, no markdown formatting, no headers. Keep each point under 20 words.`;
+<output_format>
+Return exactly 3 newline-separated bullets.
+Each bullet must start with "- ".
+Keep each bullet under 20 words.
+Do not include a heading or extra commentary.
+</output_format>`;
 
       const text = await generateAIContent(client, prompt);
       return (text || '').trim().substring(0, 2000);
@@ -239,22 +320,37 @@ Return ONLY plain text bullet points, no markdown formatting, no headers. Keep e
         blockedContext = `\nBLOCKED ITEMS (user rejected these):\n${blockedList}\n`;
       }
 
-      // Gemini 3 optimized: data first, task middle, constraints last
-      const prompt = `USER CONTEXT:
+      const prompt = `<context>
+User context:
 ${contextLines.length > 0 ? contextLines.join('\n') : 'No specific preferences provided.'}
 ${blockedContext}
-CANDIDATES (${candidates.length} titles):
+</context>
+
+<candidates count="${candidates.length}">
 ${candidateList}
+</candidates>
 
-Select the ${limit} best matches for this user from the candidates above. For each pick, provide a short reason why it fits.
+<task>
+Select the ${limit} best matches for this user from the candidate list.
+Use only the facts provided in the user context and candidates.
+For each selected title, provide a short reason why it fits.
+</task>
 
-Return ONLY a JSON array: [{"tmdbId": 123, "title": "Name", "reason": "Why it fits"}, ...]
-Do NOT include titles not in the candidate list.${blockedContext ? ' Avoid titles similar in theme/genre to the blocked items.' : ''} Output must be valid JSON, no markdown.`;
+<constraints>
+- Do not include titles outside the candidate list.
+${blockedContext ? '- Avoid titles similar in theme or genre to the blocked items.\n' : ''}- Prefer strong taste matches over generic popularity.
+</constraints>
+
+<output_format>
+Return only valid JSON matching this shape:
+[{"tmdbId": 123, "title": "Name", "reason": "Why it fits"}]
+Do not include markdown or commentary.
+</output_format>`;
 
       // Debug: log prompt size and first candidate
       console.debug(`[AI Ranking] Prompt length: ${prompt.length} chars, first candidate: ${candidates[0]?.title}`);
 
-      const responseText = await generateAIContent(client, prompt, { json: true });
+      const responseText = await generateAIContent(client, prompt, { json: true, jsonSchema: rankedRecommendationSchema });
       console.debug(`[AI Ranking] Raw response length: ${responseText.length} chars`);
 
       // Try parsing directly first
@@ -331,23 +427,34 @@ Do NOT include titles not in the candidate list.${blockedContext ? ' Avoid title
         `- "${item.title}" (${item.year || 'N/A'}) [${item.genres.join(', ')}] ${item.rating ? `★${item.rating.toFixed(1)}` : ''}`
       ).join('\n');
 
-      // Gemini 3 optimized: data first, task middle, constraints last
-      const prompt = `WATCH HISTORY (${mediaType === 'movie' ? 'movies' : 'TV shows'}, ${watchHistory.length} items):
+      const prompt = `<context>
+Watch history type: ${mediaType === 'movie' ? 'movies' : 'TV shows'}
+Total items: ${watchHistory.length}
+Watched items:
 ${historyList}
+</context>
 
-Analyze this watch history and identify preferences. Return a JSON object with these fields:
-- tasteProfile: One engaging sentence describing their taste
-- genres: 2-4 standard genre names (Action, Comedy, Drama, Thriller, Horror, Romance, Sci-Fi, Fantasy, Documentary, Crime, Mystery, Animation)
-- keywords: 4-8 simple thematic keywords for TMDB search
-- yearRange: [startYear, endYear] if era preference exists, otherwise null
-- minRating: Minimum rating threshold (6.0-8.0)
+<task>
+Analyze this watch history and identify preferences for TMDB discovery.
+</task>
 
-Use ONLY simple TMDB-compatible keywords like "heist", "dystopia", "noir", "revenge", "time travel", "serial killer". Do NOT use complex phrases like "prestige drama" or "character study".
-Return ONLY valid JSON, no markdown.`;
+<constraints>
+- genres: 2-4 standard genre names only, such as Action, Comedy, Drama, Thriller, Horror, Romance, Sci-Fi, Fantasy, Documentary, Crime, Mystery, Animation.
+- keywords: 4-8 simple TMDB-compatible keywords, such as "heist", "dystopia", "noir", "revenge", "time travel", "serial killer".
+- Do not use broad editorial phrases such as "prestige drama" or "character study" as keywords.
+- yearRange must be [startYear, endYear] only when a clear era preference exists; otherwise null.
+- minRating must be between 6.0 and 8.0.
+</constraints>
+
+<output_format>
+Return only valid JSON with these fields:
+{"tasteProfile":"One engaging sentence","genres":["Drama"],"keywords":["noir"],"yearRange":null,"minRating":6.5}
+Do not include markdown or commentary.
+</output_format>`;
 
       console.debug(`[AI Taste] Analyzing ${watchHistory.length} ${mediaType} items`);
 
-      const responseText = await generateAIContent(client, prompt, { json: true });
+      const responseText = await generateAIContent(client, prompt, { json: true, jsonSchema: tasteAnalysisSchema });
       console.debug(`[AI Taste] Response length: ${responseText.length} chars`);
 
       // Try to parse JSON - handle markdown code blocks
@@ -451,21 +558,35 @@ Return ONLY valid JSON, no markdown.`;
         `${i + 1}. [ID:${c.tmdbId}] "${c.title}" [${c.genres.join(', ')}] ★${c.voteAverage?.toFixed(1) || 'N/A'}\n   ${(c.overview || '').substring(0, 80)}...`
       ).join('\n');
 
-      // Gemini 3 optimized: data first, task middle, constraints last
-      const prompt = `USER TASTE:
+      const prompt = `<context>
+User taste:
 "${userTaste.tasteProfile}"
 Preferred genres: ${userTaste.genres.join(', ')}
 Thematic interests: ${userTaste.keywords.join(', ')}
+</context>
 
-CANDIDATE POOL (${candidates.length} titles):
+<candidates count="${candidates.length}">
 ${candidateList}
+</candidates>
 
-Select the ${limit} best matches for this user. For each, provide a 1-sentence reason why it fits their taste. Prioritize quality (★7.0+), genre match, and a mix of classics and newer releases.
+<task>
+Select the ${limit} best matches for this user.
+For each title, provide a one-sentence reason why it fits their taste.
+</task>
 
-Return ONLY a valid JSON array: [{"tmdbId": 123, "title": "Example", "reason": "Why it fits"}, ...]
-Do NOT include titles not in the candidate pool. IMPORTANT: Ensure genre diversity — no single genre should dominate more than 30% of your picks. Output must be valid JSON, no markdown.`;
+<constraints>
+- Do not include titles outside the candidate pool.
+- Prioritize quality, genre match, and a mix of classics and newer releases.
+- Ensure genre diversity; no single genre should dominate more than 30% of picks.
+</constraints>
 
-      const responseText = await generateAIContent(client, prompt, { json: true });
+<output_format>
+Return only valid JSON matching this shape:
+[{"tmdbId": 123, "title": "Example", "reason": "Why it fits"}]
+Do not include markdown or commentary.
+</output_format>`;
+
+      const responseText = await generateAIContent(client, prompt, { json: true, jsonSchema: rankedRecommendationSchema });
       console.debug(`[Curator] Response length: ${responseText.length} chars`);
 
       // Parse JSON
@@ -539,19 +660,32 @@ Do NOT include titles not in the candidate pool. IMPORTANT: Ensure genre diversi
         ).join('\n');
       }
 
-      // Gemini 3 optimized: data first, task middle, constraints last
-      const prompt = `${tasteProfile ? `USER TASTE PROFILE:\n${tasteProfile}\n\n` : ''}BLOCKED ITEMS (user rejected these):
+      const prompt = `<context>
+${tasteProfile ? `User taste profile:\n${tasteProfile}\n\n` : ''}Blocked items the user rejected:
 ${blocklistContext}
+</context>
 
-CURATOR'S PICKS (${filtered.length} candidates):
+<candidates count="${filtered.length}">
 ${picksList}
+</candidates>
 
-From these candidates, select the TOP ${limit} that best match the user's taste profile. Prefer picks with compelling curator reasoning and high quality.
+<task>
+Select the top ${limit} titles that best match the user's taste profile.
+</task>
 
-Return ONLY a valid JSON array: [{"tmdbId": 123, "title": "Example"}, ...]
-Do NOT select titles similar in theme/genre to the blocked items above. Output must be valid JSON, no markdown.`;
+<constraints>
+- Do not include titles outside the candidate list.
+- Do not select titles similar in theme or genre to the blocked items.
+- Prefer picks with compelling curator reasoning and high quality.
+</constraints>
 
-      const responseText = await generateAIContent(client, prompt, { json: true });
+<output_format>
+Return only valid JSON matching this shape:
+[{"tmdbId": 123, "title": "Example"}]
+Do not include markdown or commentary.
+</output_format>`;
+
+      const responseText = await generateAIContent(client, prompt, { json: true, jsonSchema: selectedTitleSchema });
       console.debug(`[Critic] Response length: ${responseText.length} chars`);
       console.debug(`[Critic] Raw response: ${responseText.substring(0, 300)}`);
 

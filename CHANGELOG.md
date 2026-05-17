@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2.8.13] - 2026-05-17
+
+### 🐛 Bug Fixes
+
+- **Gemini model configuration**: Replace stale `gemini-3.1-flash-lite-preview` defaults with the stable `gemini-3.1-flash-lite` model code.
+- **Settings verification UI**: Normalize connection test responses so Settings shows backend `ok` results correctly.
+- **Setup restore feedback**: Keep successful backup restore feedback out of the error state.
+
+### 🚀 Improvements
+
+- **Gemini structured output**: Use `responseJsonSchema` with explicit JSON schemas for Gemini recommendation, taste analysis, and redemption prompts.
+- **Prompt structure**: Rework AI prompts into clear context/task/constraints/output sections for Gemini 3 style prompting.
+- **Mobile UX**: Improve drawer width, mobile headings, search layout, settings actions, watchlist sorting, and CTA sizing on narrow screens.
+- **AI model input UX**: Replace stale preview dropdown choices with a model-code input and stable suggestions for Google AI and OpenRouter.
+
 ## [2.8.12] - 2026-05-16
 
 ### 🔧 Maintenance
